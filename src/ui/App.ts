@@ -1,59 +1,154 @@
-// Root layout component — creates the three-panel grid layout
+// Root layout component — full application layout assembly
 
+import { LoginScreen } from "./LoginScreen.js";
 import { SpaceStrip } from "./SpaceStrip.js";
 import { RoomList } from "./RoomList.js";
+import { RoomHeader } from "./RoomHeader.js";
 import { Timeline } from "./Timeline.js";
+import { ReplyPreview } from "./ReplyPreview.js";
 import { Input } from "./Input.js";
+import { StatusBar } from "./StatusBar.js";
+import { CommandBar } from "./CommandBar.js";
+import { ThreadView } from "./ThreadView.js";
+import { MemberList } from "./MemberList.js";
+import { EmojiPicker } from "./EmojiPicker.js";
+import { GifPicker } from "./GifPicker.js";
+import { StickerPicker } from "./StickerPicker.js";
+import { Verification } from "./Verification.js";
+import { ShortcodePreview } from "./ShortcodePreview.js";
+
+// ── AppComponents ─────────────────────────────────────────────────────────────
 
 export interface AppComponents {
+  // Pre-auth
+  loginScreen: LoginScreen;
+
+  // Navigation
   spaceStrip: SpaceStrip;
   roomList: RoomList;
+
+  // Main panel
+  roomHeader: RoomHeader;
   timeline: Timeline;
+  replyPreview: ReplyPreview;
   input: Input;
+
+  // Sidebars
+  threadView: ThreadView;
+  memberList: MemberList;
+
+  // Overlays
+  emojiPicker: EmojiPicker;
+  gifPicker: GifPicker;
+  stickerPicker: StickerPicker;
+  verification: Verification;
+  shortcodePreview: ShortcodePreview;
+  commandBar: CommandBar;
+
+  // Status
+  statusBar: StatusBar;
+
+  // Layout roots (for show/hide)
+  mainLayout: HTMLElement;
 }
 
 /**
- * Renders the root Quark layout into the given container element.
- * Returns references to the major UI components for wiring up by main.ts.
+ * Mount the full Quark UI into the given container.
+ * Shows the login screen initially; call showMainLayout() after login.
  */
 export function mountApp(container: HTMLElement): AppComponents {
-  // Clear any existing content
   container.innerHTML = "";
 
-  // ── Create top-level grid ───────────────────────────────────────────────
-  const layout = document.createElement("div");
-  layout.className = "quark-layout";
+  // ── Instantiate all components ───────────────────────────────────────────
 
-  // ── Space strip (column 1) ──────────────────────────────────────────────
+  const loginScreen = new LoginScreen();
   const spaceStrip = new SpaceStrip();
-  layout.appendChild(spaceStrip.getElement());
-
-  // ── Room list (column 2) ────────────────────────────────────────────────
   const roomList = new RoomList();
-  layout.appendChild(roomList.getElement());
-
-  // ── Main panel (column 3) ───────────────────────────────────────────────
-  const mainPanel = document.createElement("div");
-  mainPanel.className = "main-panel";
-
-  // Room header
-  const mainHeader = document.createElement("div");
-  mainHeader.className = "main-panel__header";
-  mainHeader.textContent = "Quark";
-  mainPanel.appendChild(mainHeader);
-
-  // Timeline
+  const roomHeader = new RoomHeader();
   const timeline = new Timeline();
-  mainPanel.appendChild(timeline.getElement());
-
-  // Input bar
+  const replyPreview = new ReplyPreview();
   const input = new Input();
-  mainPanel.appendChild(input.getElement());
+  const statusBar = new StatusBar();
+  const commandBar = new CommandBar();
+  const threadView = new ThreadView();
+  const memberList = new MemberList();
+  const emojiPicker = new EmojiPicker();
+  const gifPicker = new GifPicker();
+  const stickerPicker = new StickerPicker();
+  const verification = new Verification();
+  const shortcodePreview = new ShortcodePreview();
 
-  layout.appendChild(mainPanel);
+  // ── Login screen ─────────────────────────────────────────────────────────
+  container.appendChild(loginScreen.getElement());
 
-  // ── Mount ───────────────────────────────────────────────────────────────
-  container.appendChild(layout);
+  // ── Main layout (hidden until login succeeds) ─────────────────────────────
+  const mainLayout = document.createElement("div");
+  mainLayout.className = "quark-layout";
+  mainLayout.style.display = "none";
 
-  return { spaceStrip, roomList, timeline, input };
+  // Column 1: Space strip
+  mainLayout.appendChild(spaceStrip.getElement());
+
+  // Column 2: Room list
+  mainLayout.appendChild(roomList.getElement());
+
+  // Column 3: Content area (room header + timeline + reply preview + input)
+  const contentArea = document.createElement("div");
+  contentArea.className = "content-area";
+
+  contentArea.appendChild(roomHeader.getElement());
+  contentArea.appendChild(timeline.getElement());
+  contentArea.appendChild(replyPreview.getElement());
+
+  // Shortcode preview sits above input bar
+  contentArea.appendChild(shortcodePreview.getElement());
+  contentArea.appendChild(commandBar.getElement());
+  contentArea.appendChild(input.getElement());
+
+  mainLayout.appendChild(contentArea);
+
+  // Column 4: Thread view sidebar (hidden by default)
+  mainLayout.appendChild(threadView.getElement());
+
+  // Column 5: Member list sidebar (hidden by default)
+  mainLayout.appendChild(memberList.getElement());
+
+  container.appendChild(mainLayout);
+
+  // ── Status bar (outside grid, at very bottom) ────────────────────────────
+  container.appendChild(statusBar.getElement());
+
+  // ── Overlays (appended to body so they float above everything) ───────────
+  document.body.appendChild(emojiPicker.getElement());
+  document.body.appendChild(gifPicker.getElement());
+  document.body.appendChild(stickerPicker.getElement());
+  document.body.appendChild(verification.getElement());
+
+  return {
+    loginScreen,
+    spaceStrip,
+    roomList,
+    roomHeader,
+    timeline,
+    replyPreview,
+    input,
+    statusBar,
+    commandBar,
+    threadView,
+    memberList,
+    emojiPicker,
+    gifPicker,
+    stickerPicker,
+    verification,
+    shortcodePreview,
+    mainLayout,
+  };
+}
+
+/**
+ * Transition from login screen to main app layout.
+ */
+export function showMainLayout(components: AppComponents): void {
+  components.loginScreen.hide();
+  components.mainLayout.style.display = "";
 }

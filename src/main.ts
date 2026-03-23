@@ -1,91 +1,59 @@
-// Quark entry point
+// Quark entry point — clean bootstrap wiring everything together
 // Note: base.css and vars.css are referenced via <link> tags in index.html
 
 import { mountApp } from "./ui/App.js";
-import { modeManager, Mode } from "./vim/mode.js";
-import { keymapManager } from "./vim/keybindings.js";
+import { AppState } from "./app/state.js";
+import { setComponents, login, selectRoom, selectSpace } from "./app/actions.js";
+import { setupKeyboard } from "./app/keyboard.js";
+import { startSync } from "./app/sync.js";
+import { showError } from "./ui/NotificationToast.js";
 
-// ── Bootstrap ───────────────────────────────────────────────────────────────
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 const appEl = document.getElementById("app");
 if (!appEl) {
   throw new Error("Fatal: #app element not found in DOM");
 }
 
-const { input } = mountApp(appEl);
+// Mount all UI components into the DOM
+const components = mountApp(appEl);
 
-// ── Register default keybindings ─────────────────────────────────────────────
+// Register components with the action dispatcher
+setComponents(components);
 
-keymapManager.nmap("i", "mode-insert");
-keymapManager.nmap(":", "mode-command");
-keymapManager.nmap("v", "mode-visual");
-keymapManager.nmap("j", "nav-down");
-keymapManager.nmap("k", "nav-up");
-keymapManager.nmap("gg", "jump-top");
-keymapManager.nmap("G", "jump-bottom");
-keymapManager.nmap("r", "reply");
-keymapManager.nmap("e", "react");
-keymapManager.nmap("dd", "redact");
-keymapManager.nmap("E", "edit");
+// ── Login screen wiring ───────────────────────────────────────────────────────
 
-// ── Sync input bar with mode manager ─────────────────────────────────────────
+components.loginScreen.onLogin(async (homeserver, username, password) => {
+  await login(homeserver, username, password);
 
-modeManager.on((_from, to) => {
-  input.setMode(to);
+  // On successful login, set up keyboard handler and start sync
+  if (AppState.get("loggedIn")) {
+    setupKeyboard(components);
+    void startSync(components);
+  }
 });
 
-// ── Global keyboard event delegation ─────────────────────────────────────────
+// ── Room list wiring ──────────────────────────────────────────────────────────
 
-document.addEventListener("keydown", (e) => {
-  const mode = modeManager.current;
-
-  // Escape always returns to Normal
-  if (e.key === "Escape") {
-    modeManager.transition(Mode.Normal);
-    keymapManager.resetSequence();
-    return;
-  }
-
-  // In Insert or Command mode, let the browser handle text input
-  if (mode === Mode.Insert || mode === Mode.Command) {
-    return;
-  }
-
-  // Normal / Visual — resolve key through keymapManager
-  const result = keymapManager.resolveKey(e.key, "global");
-
-  if (result.kind === "action") {
-    e.preventDefault();
-    dispatchAction(result.action);
-  } else if (result.kind === "partial") {
-    // Awaiting more keys — suppress default to avoid side effects
-    e.preventDefault();
-  }
-  // "none" — pass through (e.g. Tab for focus management)
+components.roomList.onSelect((roomId) => {
+  void selectRoom(roomId);
 });
 
-// ── Action dispatcher ─────────────────────────────────────────────────────────
+// ── Space strip wiring ────────────────────────────────────────────────────────
 
-function dispatchAction(action: string): void {
-  switch (action) {
-    case "mode-insert":
-      modeManager.transition(Mode.Insert);
-      input.focus();
-      break;
+components.spaceStrip.onSelect((spaceId) => {
+  void selectSpace(spaceId);
+});
 
-    case "mode-command":
-      modeManager.transition(Mode.Command);
-      input.focus();
-      break;
+// ── Global error handler ──────────────────────────────────────────────────────
 
-    case "mode-visual":
-      modeManager.transition(Mode.Visual);
-      break;
+window.addEventListener("unhandledrejection", (e) => {
+  const msg = e.reason instanceof Error ? e.reason.message : String(e.reason);
+  showError(`Unhandled error: ${msg}`);
+  console.error("Unhandled promise rejection:", e.reason);
+});
 
-    // Navigation and other actions will be wired to actual components as they
-    // are implemented. For now, emit a custom event for extensibility.
-    default:
-      document.dispatchEvent(new CustomEvent("quark:action", { detail: { action } }));
-      break;
-  }
-}
+window.addEventListener("error", (e) => {
+  showError(`Runtime error: ${e.message}`);
+  console.error("Runtime error:", e.error);
+});
