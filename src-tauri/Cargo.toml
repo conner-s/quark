@@ -1,0 +1,39 @@
+[package]
+name = "quark"
+version = "0.1.0"
+edition = "2021"
+description = "A CLI-styled Matrix client"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+matrix-sdk = { version = "0.9", features = ["e2e-encryption", "sqlite"] }
+toml = "0.8"
+directories = "6"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+reqwest = { version = "0.12", features = ["json"] }
+mime = "0.3"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[lib]
+name = "quark_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "quark"
+path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
