@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tracing::info;
 
+use crate::media_cache::MediaCache;
+
 /// Result of a media download — base64-encoded bytes + mime type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaDownload {
@@ -67,7 +69,10 @@ pub async fn upload_media(
     Ok(mxc_url)
 }
 
-/// Download media from an mxc:// URL.
+/// Download media from an mxc:// URL, consulting the disk cache first.
+///
+/// If `cache` is `Some`, a cache hit returns the stored bytes without hitting
+/// the network. On a cache miss the bytes are fetched and then stored.
 pub async fn download_media(
     client: &Client,
     mxc_url: &str,
@@ -75,8 +80,51 @@ pub async fn download_media(
     thumbnail_width: Option<u32>,
     thumbnail_height: Option<u32>,
 ) -> Result<MediaDownload, String> {
-    let mxc_uri = <&MxcUri>::try_from(mxc_url).map_err(|e| format!("Invalid mxc URI: {e}"))?;
+    download_media_with_cache(client, mxc_url, allow_thumbnail, thumbnail_width, thumbnail_height, None).await
+}
 
+/// Like `download_media` but with an optional cache.
+pub async fn download_media_with_cache(
+    client: &Client,
+    mxc_url: &str,
+    allow_thumbnail: bool,
+    thumbnail_width: Option<u32>,
+    thumbnail_height: Option<u32>,
+    cache: Option<&MediaCache>,
+) -> Result<MediaDownload, String> {
+    // Build a cache key that includes thumbnail dimensions so full and thumbnail
+    // variants are stored independently.
+    let cache_key = if allow_thumbnail {
+        let w = thumbnail_width.unwrap_or(320);
+        let h = thumbnail_height.unwrap_or(240);
+        format!("{mxc_url}?thumb={w}x{h}")
+    } else {
+        mxc_url.to_string()
+    };
+
+    // Cache hit: read file from disk and return base64-encoded bytes.
+    if let Some(cache) = cache {
+        if let Some(cached) = cache.get(&cache_key) {
+            match std::fs::read(&cached.path) {
+                Ok(bytes) => {
+                    info!(url = %mxc_url, "Media cache hit");
+                    return Ok(MediaDownload {
+                        data_base64: to_base64(&bytes),
+                        mime_type: cached.mime_type,
+                        filename: None,
+                    });
+                }
+                Err(e) => {
+                    // Stale index entry; fall through to re-download.
+                    tracing::warn!("Cache file missing, re-downloading: {e}");
+                    let _ = cache.remove(&cache_key);
+                }
+            }
+        }
+    }
+
+    // Cache miss (or no cache): fetch from the homeserver.
+    let mxc_uri = <&MxcUri>::try_from(mxc_url).map_err(|e| format!("Invalid mxc URI: {e}"))?;
     let source = MediaSource::Plain(mxc_uri.to_owned());
 
     let format = if allow_thumbnail {
@@ -98,8 +146,17 @@ pub async fn download_media(
         .await
         .map_err(|e| format!("Failed to download media: {e}"))?;
 
-    let data_base64 = to_base64(&bytes);
+    // Store in cache (best-effort; errors are logged but not propagated).
+    if let Some(cache) = cache {
+        let mime_type = "application/octet-stream";
+        if let Err(e) = cache.put(&cache_key, &bytes, mime_type) {
+            tracing::warn!("Failed to cache media {mxc_url}: {e}");
+        } else {
+            info!(url = %mxc_url, "Media cached");
+        }
+    }
 
+    let data_base64 = to_base64(&bytes);
     Ok(MediaDownload {
         data_base64,
         mime_type: "application/octet-stream".to_string(),

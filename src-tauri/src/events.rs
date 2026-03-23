@@ -17,10 +17,15 @@ use matrix_sdk::{
     Client, Room,
 };
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
+use std::sync::Mutex;
+use tauri::{Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
 use tracing::{error, warn};
 
-use crate::matrix::{rooms::RoomInfo, timeline::TimelineEvent};
+use crate::{
+    matrix::{rooms::RoomInfo, timeline::TimelineEvent},
+    notifications::NotificationConfig,
+};
 
 // ─── Event Name Constants ─────────────────────────────────────────────────────
 
@@ -103,6 +108,73 @@ pub fn setup_sync_event_handlers(client: &Client, app_handle: &tauri::AppHandle)
             if let SyncRoomMessageEvent::Original(original_ev) = ev {
                 let room_id = room.room_id().to_string();
                 if let Some(timeline_event) = convert_room_message_event(original_ev) {
+                    // ── OS notification (if window not focused and config permits) ──
+                    let should_send_os_notification = {
+                        // Check notification config from managed state.
+                        let emit_notification = if let Some(config_state) =
+                            app.try_state::<Mutex<NotificationConfig>>()
+                        {
+                            if let Ok(config) = config_state.lock() {
+                                crate::notifications::should_notify(&config, &room_id)
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        };
+
+                        // Check if the sender is the current user — skip self-messages.
+                        let is_own_message = app
+                            .try_state::<crate::matrix::client::MatrixState>()
+                            .and_then(|s| {
+                                s.0.lock().ok().and_then(|g: std::sync::MutexGuard<Option<matrix_sdk::Client>>| g.as_ref().cloned())
+                            })
+                            .map(|client: matrix_sdk::Client| {
+                                client
+                                    .user_id()
+                                    .map(|uid| uid.to_string() == timeline_event.sender)
+                                    .unwrap_or(false)
+                            })
+                            .unwrap_or(false);
+
+                        // Check if the window is focused.
+                        let window_focused = app
+                            .get_webview_window("main")
+                            .and_then(|w: tauri::WebviewWindow| w.is_focused().ok())
+                            .unwrap_or(false);
+
+                        emit_notification && !is_own_message && !window_focused
+                    };
+
+                    if should_send_os_notification {
+                        // Fetch config again for formatting.
+                        if let Some(config_state) =
+                            app.try_state::<Mutex<NotificationConfig>>()
+                        {
+                            if let Ok(config) = config_state.lock() {
+                                let room_name = room
+                                    .name()
+                                    .unwrap_or_else(|| room_id.clone());
+                                let (title, body) =
+                                    crate::notifications::format_notification(
+                                        &timeline_event.sender,
+                                        &timeline_event.body,
+                                        &room_name,
+                                        &config,
+                                    );
+                                if let Err(e) = app
+                                    .notification()
+                                    .builder()
+                                    .title(&title)
+                                    .body(&body)
+                                    .show()
+                                {
+                                    error!("Failed to send OS notification: {}", e);
+                                }
+                            }
+                        }
+                    }
+
                     let payload = SyncNewMessage {
                         room_id: room_id.clone(),
                         event: timeline_event,

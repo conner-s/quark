@@ -15,9 +15,13 @@ use crate::{
         threads::ThreadRoot,
         timeline::TimelineEvent,
     },
+    media_cache::CacheStats,
+    notifications::NotificationConfig,
+    CacheState,
 };
 use matrix_sdk::Client;
 use std::path::Path;
+use std::sync::Mutex;
 use tauri::{AppHandle, State};
 
 /// Helper: clone the client out of the state so it doesn't hold the lock across awaits.
@@ -236,13 +240,22 @@ pub async fn get_sticker_packs(
 #[tauri::command]
 pub async fn download_media(
     state: State<'_, MatrixState>,
+    cache_state: State<'_, CacheState>,
     mxc_url: String,
     thumbnail: bool,
     thumbnail_width: Option<u32>,
     thumbnail_height: Option<u32>,
 ) -> Result<MediaDownload, String> {
     let client = get_client(&state)?;
-    crate::matrix::media::download_media(&client, &mxc_url, thumbnail, thumbnail_width, thumbnail_height).await
+    crate::matrix::media::download_media_with_cache(
+        &client,
+        &mxc_url,
+        thumbnail,
+        thumbnail_width,
+        thumbnail_height,
+        Some(&cache_state.0),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -355,4 +368,90 @@ pub async fn load_theme(theme_path: String) -> Result<Theme, String> {
 #[tauri::command]
 pub async fn parse_quarkrc(content: String) -> Result<ParsedRc, String> {
     Ok(crate::config::quarkrc::parse_quarkrc(&content))
+}
+
+// ─── Cache Management Commands ────────────────────────────────────────────────
+
+/// Return aggregate statistics about the on-disk media cache.
+#[tauri::command]
+pub async fn get_cache_stats(
+    cache_state: State<'_, CacheState>,
+) -> Result<CacheStats, String> {
+    Ok(cache_state.0.stats())
+}
+
+/// Wipe all entries from the media cache.
+#[tauri::command]
+pub async fn clear_media_cache(
+    cache_state: State<'_, CacheState>,
+) -> Result<(), String> {
+    cache_state.0.clear()
+}
+
+/// Update the maximum cache size. Evicts LRU entries if the current size exceeds the new limit.
+#[tauri::command]
+pub async fn set_cache_size_limit(
+    cache_state: State<'_, CacheState>,
+    size_mb: u64,
+) -> Result<(), String> {
+    cache_state.0.set_max_size_mb(size_mb)
+}
+
+// ─── Notification Commands ────────────────────────────────────────────────────
+
+/// Return the current notification configuration.
+#[tauri::command]
+pub async fn get_notification_config(
+    config_state: State<'_, Mutex<NotificationConfig>>,
+) -> Result<NotificationConfig, String> {
+    let guard = config_state.lock().map_err(|_| "Notification config lock poisoned")?;
+    Ok(guard.clone())
+}
+
+/// Replace the current notification configuration.
+#[tauri::command]
+pub async fn set_notification_config(
+    config_state: State<'_, Mutex<NotificationConfig>>,
+    config: NotificationConfig,
+) -> Result<(), String> {
+    let mut guard = config_state.lock().map_err(|_| "Notification config lock poisoned")?;
+    *guard = config;
+    Ok(())
+}
+
+/// Add a room to the mute list so notifications from it are suppressed.
+#[tauri::command]
+pub async fn mute_room(
+    config_state: State<'_, Mutex<NotificationConfig>>,
+    room_id: String,
+) -> Result<(), String> {
+    let mut guard = config_state.lock().map_err(|_| "Notification config lock poisoned")?;
+    if !guard.mute_rooms.contains(&room_id) {
+        guard.mute_rooms.push(room_id);
+    }
+    Ok(())
+}
+
+/// Remove a room from the mute list.
+#[tauri::command]
+pub async fn unmute_room(
+    config_state: State<'_, Mutex<NotificationConfig>>,
+    room_id: String,
+) -> Result<(), String> {
+    let mut guard = config_state.lock().map_err(|_| "Notification config lock poisoned")?;
+    guard.mute_rooms.retain(|r| r != &room_id);
+    Ok(())
+}
+
+/// Send a test OS notification to verify the system is working.
+#[tauri::command]
+pub async fn test_notification(app_handle: AppHandle) -> Result<(), String> {
+    use tauri_plugin_notification::NotificationExt;
+    app_handle
+        .notification()
+        .builder()
+        .title("Quark")
+        .body("Notifications are working!")
+        .show()
+        .map_err(|e| format!("Failed to send test notification: {e}"))
 }
