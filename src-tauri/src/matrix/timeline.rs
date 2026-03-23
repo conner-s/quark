@@ -338,3 +338,139 @@ pub async fn redact_message(
     info!(original = %event_id, redaction = %redact_event_id, "Message redacted");
     Ok(redact_event_id)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+
+    fn make_text_event(event_id: &str, sender: &str, body: &str) -> TimelineEvent {
+        TimelineEvent {
+            event_id: event_id.to_string(),
+            sender: sender.to_string(),
+            body: body.to_string(),
+            formatted_body: None,
+            timestamp: 1_700_000_000_000,
+            msg_type: "m.text".to_string(),
+            is_edit: false,
+            relates_to_event_id: None,
+            in_reply_to: None,
+            thread_root: None,
+            media_url: None,
+            media_mimetype: None,
+            media_width: None,
+            media_height: None,
+        }
+    }
+
+    // --- TimelineEvent serialization ---
+
+    #[test]
+    fn test_timeline_event_text_roundtrip() {
+        let ev = make_text_event("$ev1:example.com", "@alice:example.com", "Hello, world!");
+        let json = serde_json::to_string(&ev).expect("serialize");
+        let back: TimelineEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.event_id, "$ev1:example.com");
+        assert_eq!(back.sender, "@alice:example.com");
+        assert_eq!(back.body, "Hello, world!");
+        assert_eq!(back.msg_type, "m.text");
+        assert_eq!(back.timestamp, 1_700_000_000_000);
+        assert!(!back.is_edit);
+        assert!(back.formatted_body.is_none());
+        assert!(back.media_url.is_none());
+    }
+
+    #[test]
+    fn test_timeline_event_with_formatted_body() {
+        let ev = TimelineEvent {
+            formatted_body: Some("<b>Hello</b>".to_string()),
+            ..make_text_event("$ev2:example.com", "@bob:example.com", "Hello")
+        };
+        let json = serde_json::to_string(&ev).expect("serialize");
+        let back: TimelineEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.formatted_body.as_deref(), Some("<b>Hello</b>"));
+    }
+
+    #[test]
+    fn test_timeline_event_image_message() {
+        let ev = TimelineEvent {
+            msg_type: "m.image".to_string(),
+            body: "photo.png".to_string(),
+            media_url: Some("mxc://example.com/photo".to_string()),
+            media_mimetype: Some("image/png".to_string()),
+            media_width: Some(1920),
+            media_height: Some(1080),
+            ..make_text_event("$ev3:example.com", "@alice:example.com", "photo.png")
+        };
+        let json = serde_json::to_string(&ev).expect("serialize");
+        let back: TimelineEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.msg_type, "m.image");
+        assert_eq!(back.media_url.as_deref(), Some("mxc://example.com/photo"));
+        assert_eq!(back.media_mimetype.as_deref(), Some("image/png"));
+        assert_eq!(back.media_width, Some(1920));
+        assert_eq!(back.media_height, Some(1080));
+    }
+
+    #[test]
+    fn test_timeline_event_edit_flag() {
+        let ev = TimelineEvent {
+            is_edit: true,
+            relates_to_event_id: Some("$original:example.com".to_string()),
+            ..make_text_event("$edit:example.com", "@alice:example.com", "* edited")
+        };
+        let json = serde_json::to_string(&ev).expect("serialize");
+        let back: TimelineEvent = serde_json::from_str(&json).expect("deserialize");
+        assert!(back.is_edit);
+        assert_eq!(back.relates_to_event_id.as_deref(), Some("$original:example.com"));
+    }
+
+    #[test]
+    fn test_timeline_event_reply() {
+        let ev = TimelineEvent {
+            in_reply_to: Some("$parent:example.com".to_string()),
+            ..make_text_event("$reply:example.com", "@bob:example.com", "Me too!")
+        };
+        let json = serde_json::to_string(&ev).expect("serialize");
+        let back: TimelineEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.in_reply_to.as_deref(), Some("$parent:example.com"));
+        assert!(back.thread_root.is_none());
+    }
+
+    #[test]
+    fn test_timeline_event_thread() {
+        let ev = TimelineEvent {
+            thread_root: Some("$thread:example.com".to_string()),
+            in_reply_to: Some("$prev:example.com".to_string()),
+            ..make_text_event("$threaded:example.com", "@carol:example.com", "Thread reply")
+        };
+        let json = serde_json::to_string(&ev).expect("serialize");
+        let back: TimelineEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.thread_root.as_deref(), Some("$thread:example.com"));
+        assert_eq!(back.in_reply_to.as_deref(), Some("$prev:example.com"));
+    }
+
+    #[test]
+    fn test_timeline_event_json_has_expected_keys() {
+        let ev = make_text_event("$ev:example.com", "@alice:example.com", "hi");
+        let json = serde_json::to_string(&ev).expect("serialize");
+        let val: serde_json::Value = serde_json::from_str(&json).expect("parse json");
+        for key in &[
+            "event_id", "sender", "body", "formatted_body", "timestamp",
+            "msg_type", "is_edit", "relates_to_event_id", "in_reply_to",
+            "thread_root", "media_url", "media_mimetype", "media_width", "media_height",
+        ] {
+            assert!(val.get(key).is_some(), "Missing key: {}", key);
+        }
+    }
+
+    #[test]
+    fn test_timeline_event_zero_timestamp() {
+        let ev = TimelineEvent {
+            timestamp: 0,
+            ..make_text_event("$ev:example.com", "@alice:example.com", "old message")
+        };
+        let json = serde_json::to_string(&ev).expect("serialize");
+        let back: TimelineEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.timestamp, 0);
+    }
+}

@@ -197,3 +197,212 @@ pub fn resolve_shortcode(packs: &[EmojiPack], shortcode: &str) -> Option<String>
     }
     None
 }
+
+/// Filter emojis from a pack to only those usable as emoticons.
+pub fn emoticons(pack: &EmojiPack) -> Vec<&EmojiEntry> {
+    pack.emojis
+        .iter()
+        .filter(|e| e.usage.iter().any(|u| u == "emoticon"))
+        .collect()
+}
+
+/// Filter emojis from a pack to only those usable as stickers.
+pub fn stickers(pack: &EmojiPack) -> Vec<&EmojiEntry> {
+    pack.emojis
+        .iter()
+        .filter(|e| e.usage.iter().any(|u| u == "sticker"))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+
+    fn make_entry(shortcode: &str, url: &str, usage: Vec<&str>) -> EmojiEntry {
+        EmojiEntry {
+            shortcode: shortcode.to_string(),
+            url: url.to_string(),
+            body: None,
+            usage: usage.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    fn make_pack(pack_id: &str, source: &str, emojis: Vec<EmojiEntry>) -> EmojiPack {
+        EmojiPack {
+            pack_id: pack_id.to_string(),
+            display_name: Some("Test Pack".to_string()),
+            avatar_url: None,
+            source: source.to_string(),
+            room_id: None,
+            emojis,
+        }
+    }
+
+    // --- Serialization roundtrip ---
+
+    #[test]
+    fn test_emoji_entry_serialization_roundtrip() {
+        let entry = EmojiEntry {
+            shortcode: "wave".to_string(),
+            url: "mxc://example.com/wave".to_string(),
+            body: Some("Waving hand".to_string()),
+            usage: vec!["emoticon".to_string()],
+        };
+        let json = serde_json::to_string(&entry).expect("serialize");
+        let back: EmojiEntry = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.shortcode, "wave");
+        assert_eq!(back.url, "mxc://example.com/wave");
+        assert_eq!(back.body.as_deref(), Some("Waving hand"));
+        assert_eq!(back.usage, vec!["emoticon"]);
+    }
+
+    #[test]
+    fn test_emoji_entry_no_body_serializes_null() {
+        let entry = make_entry("tada", "mxc://example.com/tada", vec!["sticker"]);
+        let json = serde_json::to_string(&entry).expect("serialize");
+        assert!(json.contains("\"body\":null"));
+    }
+
+    #[test]
+    fn test_emoji_pack_serialization_roundtrip() {
+        let pack = EmojiPack {
+            pack_id: "pack_001".to_string(),
+            display_name: Some("Blob Pack".to_string()),
+            avatar_url: Some("mxc://example.com/avatar".to_string()),
+            source: "room".to_string(),
+            room_id: Some("!abc:example.com".to_string()),
+            emojis: vec![make_entry("blobhug", "mxc://example.com/blobhug", vec!["emoticon"])],
+        };
+        let json = serde_json::to_string(&pack).expect("serialize");
+        let back: EmojiPack = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.pack_id, "pack_001");
+        assert_eq!(back.display_name.as_deref(), Some("Blob Pack"));
+        assert_eq!(back.source, "room");
+        assert_eq!(back.emojis.len(), 1);
+        assert_eq!(back.emojis[0].shortcode, "blobhug");
+    }
+
+    #[test]
+    fn test_emoji_pack_optional_fields_can_be_none() {
+        let pack = EmojiPack {
+            pack_id: "minimal".to_string(),
+            display_name: None,
+            avatar_url: None,
+            source: "user".to_string(),
+            room_id: None,
+            emojis: vec![],
+        };
+        let json = serde_json::to_string(&pack).expect("serialize");
+        let back: EmojiPack = serde_json::from_str(&json).expect("deserialize");
+        assert!(back.display_name.is_none());
+        assert!(back.avatar_url.is_none());
+        assert!(back.room_id.is_none());
+        assert!(back.emojis.is_empty());
+    }
+
+    // --- Usage type filtering ---
+
+    #[test]
+    fn test_emoticons_filter() {
+        let pack = make_pack("p", "room", vec![
+            make_entry("wave", "mxc://a/wave", vec!["emoticon"]),
+            make_entry("blob", "mxc://a/blob", vec!["sticker"]),
+            make_entry("both", "mxc://a/both", vec!["emoticon", "sticker"]),
+        ]);
+        let result = emoticons(&pack);
+        let shortcodes: Vec<&str> = result.iter().map(|e| e.shortcode.as_str()).collect();
+        assert!(shortcodes.contains(&"wave"));
+        assert!(shortcodes.contains(&"both"));
+        assert!(!shortcodes.contains(&"blob"));
+    }
+
+    #[test]
+    fn test_stickers_filter() {
+        let pack = make_pack("p", "room", vec![
+            make_entry("wave", "mxc://a/wave", vec!["emoticon"]),
+            make_entry("blob", "mxc://a/blob", vec!["sticker"]),
+            make_entry("both", "mxc://a/both", vec!["emoticon", "sticker"]),
+        ]);
+        let result = stickers(&pack);
+        let shortcodes: Vec<&str> = result.iter().map(|e| e.shortcode.as_str()).collect();
+        assert!(shortcodes.contains(&"blob"));
+        assert!(shortcodes.contains(&"both"));
+        assert!(!shortcodes.contains(&"wave"));
+    }
+
+    #[test]
+    fn test_emoticon_only_pack_has_no_stickers() {
+        let pack = make_pack("p", "user", vec![
+            make_entry("a", "mxc://x/a", vec!["emoticon"]),
+            make_entry("b", "mxc://x/b", vec!["emoticon"]),
+        ]);
+        assert!(stickers(&pack).is_empty());
+        assert_eq!(emoticons(&pack).len(), 2);
+    }
+
+    #[test]
+    fn test_sticker_only_pack_has_no_emoticons() {
+        let pack = make_pack("p", "user", vec![
+            make_entry("s1", "mxc://x/s1", vec!["sticker"]),
+        ]);
+        assert!(emoticons(&pack).is_empty());
+        assert_eq!(stickers(&pack).len(), 1);
+    }
+
+    // --- resolve_shortcode ---
+
+    #[test]
+    fn test_resolve_shortcode_found() {
+        let pack = make_pack("p", "room", vec![
+            make_entry("wave", "mxc://example.com/wave", vec!["emoticon"]),
+            make_entry("tada", "mxc://example.com/tada", vec!["sticker"]),
+        ]);
+        assert_eq!(
+            resolve_shortcode(&[pack], "wave"),
+            Some("mxc://example.com/wave".to_string())
+        );
+    }
+
+    #[test]
+    fn test_resolve_shortcode_not_found() {
+        let pack = make_pack("p", "room", vec![
+            make_entry("wave", "mxc://example.com/wave", vec!["emoticon"]),
+        ]);
+        assert_eq!(resolve_shortcode(&[pack], "nonexistent"), None);
+    }
+
+    #[test]
+    fn test_resolve_shortcode_first_match_wins() {
+        let pack1 = make_pack("p1", "room", vec![
+            make_entry("wave", "mxc://example.com/wave1", vec!["emoticon"]),
+        ]);
+        let pack2 = make_pack("p2", "user", vec![
+            make_entry("wave", "mxc://example.com/wave2", vec!["emoticon"]),
+        ]);
+        // First pack's URL should be returned
+        assert_eq!(
+            resolve_shortcode(&[pack1, pack2], "wave"),
+            Some("mxc://example.com/wave1".to_string())
+        );
+    }
+
+    #[test]
+    fn test_resolve_shortcode_empty_packs() {
+        assert_eq!(resolve_shortcode(&[], "wave"), None);
+    }
+
+    #[test]
+    fn test_resolve_shortcode_searches_multiple_packs() {
+        let pack1 = make_pack("p1", "room", vec![
+            make_entry("smile", "mxc://example.com/smile", vec!["emoticon"]),
+        ]);
+        let pack2 = make_pack("p2", "user", vec![
+            make_entry("cry", "mxc://example.com/cry", vec!["emoticon"]),
+        ]);
+        assert_eq!(
+            resolve_shortcode(&[pack1, pack2], "cry"),
+            Some("mxc://example.com/cry".to_string())
+        );
+    }
+}

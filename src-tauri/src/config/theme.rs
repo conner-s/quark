@@ -427,4 +427,226 @@ visual_indicator = "VIS"
         let theme = parse_theme(&toml).unwrap();
         assert_eq!(theme.borders.style, BorderStyle::Double);
     }
+
+    // --- All BorderStyle variants deserialize ---
+
+    #[test]
+    fn test_border_style_rounded() {
+        let toml = PHOSPHOR_TOML.replace(r#"style = "single""#, r#"style = "rounded""#);
+        let theme = parse_theme(&toml).unwrap();
+        assert_eq!(theme.borders.style, BorderStyle::Rounded);
+    }
+
+    #[test]
+    fn test_border_style_ascii() {
+        let toml = PHOSPHOR_TOML.replace(r#"style = "single""#, r#"style = "ascii""#);
+        let theme = parse_theme(&toml).unwrap();
+        assert_eq!(theme.borders.style, BorderStyle::Ascii);
+    }
+
+    #[test]
+    fn test_border_style_none() {
+        let toml = PHOSPHOR_TOML.replace(r#"style = "single""#, r#"style = "none""#);
+        let theme = parse_theme(&toml).unwrap();
+        assert_eq!(theme.borders.style, BorderStyle::None);
+    }
+
+    // --- Invalid hex colors ---
+
+    #[test]
+    fn test_hex_color_missing_hash() {
+        assert!(!is_valid_hex_color("ff3333"));
+        assert!(!is_valid_hex_color("00ff41"));
+    }
+
+    #[test]
+    fn test_hex_color_wrong_length() {
+        assert!(!is_valid_hex_color("#12345")); // 5 hex digits
+        assert!(!is_valid_hex_color("#1234567")); // 7 hex digits
+        assert!(!is_valid_hex_color("#")); // empty hex part
+    }
+
+    #[test]
+    fn test_hex_color_invalid_characters() {
+        assert!(!is_valid_hex_color("#gg1234"));
+        assert!(!is_valid_hex_color("#xyz000"));
+        assert!(!is_valid_hex_color("#00ff4g"));
+    }
+
+    #[test]
+    fn test_hex_color_short_form_valid() {
+        assert!(is_valid_hex_color("#abc"));
+        assert!(is_valid_hex_color("#000"));
+        assert!(is_valid_hex_color("#fff"));
+    }
+
+    #[test]
+    fn test_hex_color_with_alpha_valid() {
+        assert!(is_valid_hex_color("#00ff4180"));
+        assert!(is_valid_hex_color("#00000000"));
+        assert!(is_valid_hex_color("#ffffffff"));
+    }
+
+    // --- Validation catches out-of-range font_size ---
+
+    #[test]
+    fn test_font_size_too_small_triggers_error() {
+        let mut theme = default_theme();
+        theme.typography.font_size = 4; // below min of 6
+        let errors = validate_theme(&theme);
+        assert!(
+            errors.iter().any(|e| e.field == "typography.font_size"),
+            "Should flag font_size < 6"
+        );
+    }
+
+    #[test]
+    fn test_font_size_too_large_triggers_error() {
+        let mut theme = default_theme();
+        theme.typography.font_size = 100; // above max of 72
+        let errors = validate_theme(&theme);
+        assert!(
+            errors.iter().any(|e| e.field == "typography.font_size"),
+            "Should flag font_size > 72"
+        );
+    }
+
+    #[test]
+    fn test_font_size_boundary_values_are_valid() {
+        let mut theme = default_theme();
+        theme.typography.font_size = 6;
+        assert!(validate_theme(&theme).is_empty());
+        theme.typography.font_size = 72;
+        assert!(validate_theme(&theme).is_empty());
+    }
+
+    // --- Validation catches out-of-range emoji size ---
+
+    #[test]
+    fn test_emoji_size_too_small_triggers_error() {
+        let mut theme = default_theme();
+        theme.emoji.size = 4; // below min of 8
+        let errors = validate_theme(&theme);
+        assert!(
+            errors.iter().any(|e| e.field == "emoji.size"),
+            "Should flag emoji.size < 8"
+        );
+    }
+
+    #[test]
+    fn test_emoji_size_too_large_triggers_error() {
+        let mut theme = default_theme();
+        theme.emoji.size = 512; // above max of 256
+        let errors = validate_theme(&theme);
+        assert!(
+            errors.iter().any(|e| e.field == "emoji.size"),
+            "Should flag emoji.size > 256"
+        );
+    }
+
+    #[test]
+    fn test_emoji_size_boundary_values_are_valid() {
+        let mut theme = default_theme();
+        theme.emoji.size = 8;
+        assert!(validate_theme(&theme).is_empty());
+        theme.emoji.size = 256;
+        assert!(validate_theme(&theme).is_empty());
+    }
+
+    // --- Missing required sections fail to parse ---
+
+    #[test]
+    fn test_missing_meta_section_fails() {
+        let toml = r##"
+[colors]
+background = "#0a0a0a"
+foreground = "#b0b0b0"
+"##;
+        assert!(parse_theme(toml).is_err());
+    }
+
+    #[test]
+    fn test_missing_colors_section_fails() {
+        let toml = r#"
+[meta]
+name = "Test"
+"#;
+        assert!(parse_theme(toml).is_err());
+    }
+
+    #[test]
+    fn test_empty_toml_fails() {
+        assert!(parse_theme("").is_err());
+    }
+
+    // --- Default values ---
+
+    #[test]
+    fn test_default_theme_name_is_phosphor() {
+        let theme = default_theme();
+        assert_eq!(theme.meta.name, "Phosphor");
+    }
+
+    #[test]
+    fn test_default_theme_has_author() {
+        let theme = default_theme();
+        assert!(theme.meta.author.is_some());
+    }
+
+    #[test]
+    fn test_default_theme_font_size_in_range() {
+        let theme = default_theme();
+        assert!(theme.typography.font_size >= 6);
+        assert!(theme.typography.font_size <= 72);
+    }
+
+    #[test]
+    fn test_default_theme_emoji_size_in_range() {
+        let theme = default_theme();
+        assert!(theme.emoji.size >= 8);
+        assert!(theme.emoji.size <= 256);
+    }
+
+    #[test]
+    fn test_default_theme_border_style_is_single() {
+        let theme = default_theme();
+        assert_eq!(theme.borders.style, BorderStyle::Single);
+    }
+
+    #[test]
+    fn test_default_theme_prompt_has_all_indicators() {
+        let theme = default_theme();
+        assert!(!theme.prompt.symbol.is_empty());
+        assert!(!theme.prompt.normal_indicator.is_empty());
+        assert!(!theme.prompt.insert_indicator.is_empty());
+        assert!(!theme.prompt.command_indicator.is_empty());
+        assert!(!theme.prompt.visual_indicator.is_empty());
+    }
+
+    // --- validate_theme reports correct field names ---
+
+    #[test]
+    fn test_validation_reports_correct_field_for_bad_accent_primary() {
+        let mut theme = default_theme();
+        theme.colors.accent.primary = "notacolor".to_string();
+        let errors = validate_theme(&theme);
+        assert!(errors.iter().any(|e| e.field == "colors.accent.primary"));
+    }
+
+    #[test]
+    fn test_validation_reports_correct_field_for_bad_roomlist_unread() {
+        let mut theme = default_theme();
+        theme.colors.roomlist.unread = "bad".to_string();
+        let errors = validate_theme(&theme);
+        assert!(errors.iter().any(|e| e.field == "colors.roomlist.unread"));
+    }
+
+    #[test]
+    fn test_validation_error_message_contains_invalid_value() {
+        let mut theme = default_theme();
+        theme.colors.background = "notacolor".to_string();
+        let errors = validate_theme(&theme);
+        let bg_error = errors.iter().find(|e| e.field == "colors.background").unwrap();
+        assert!(bg_error.message.contains("notacolor"));
+    }
 }

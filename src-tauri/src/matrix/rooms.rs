@@ -101,6 +101,7 @@ pub struct CreateRoomOptions {
 }
 
 /// Create a new room.
+#[allow(dead_code)]
 pub async fn create_room(
     client: &Client,
     options: CreateRoomOptions,
@@ -162,4 +163,138 @@ pub async fn create_room(
 
     info!(room_id = %room_id, "Created room");
     Ok(room_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+
+    fn make_room_info(
+        room_id: &str,
+        name: Option<&str>,
+        is_direct: bool,
+        is_encrypted: bool,
+    ) -> RoomInfo {
+        RoomInfo {
+            room_id: room_id.to_string(),
+            name: name.map(str::to_string),
+            topic: None,
+            avatar_url: None,
+            unread_count: 0,
+            notification_count: 0,
+            is_direct,
+            is_encrypted,
+            member_count: 2,
+        }
+    }
+
+    // --- RoomInfo serialization ---
+
+    #[test]
+    fn test_room_info_serialization_roundtrip() {
+        let info = RoomInfo {
+            room_id: "!abc:example.com".to_string(),
+            name: Some("General".to_string()),
+            topic: Some("Welcome!".to_string()),
+            avatar_url: Some("mxc://example.com/avatar".to_string()),
+            unread_count: 5,
+            notification_count: 2,
+            is_direct: false,
+            is_encrypted: true,
+            member_count: 42,
+        };
+        let json = serde_json::to_string(&info).expect("serialize");
+        let back: RoomInfo = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.room_id, "!abc:example.com");
+        assert_eq!(back.name.as_deref(), Some("General"));
+        assert_eq!(back.topic.as_deref(), Some("Welcome!"));
+        assert_eq!(back.unread_count, 5);
+        assert_eq!(back.notification_count, 2);
+        assert!(back.is_encrypted);
+        assert!(!back.is_direct);
+        assert_eq!(back.member_count, 42);
+    }
+
+    #[test]
+    fn test_room_info_optional_fields_can_be_none() {
+        let info = make_room_info("!xyz:example.com", None, false, false);
+        let json = serde_json::to_string(&info).expect("serialize");
+        let back: RoomInfo = serde_json::from_str(&json).expect("deserialize");
+        assert!(back.name.is_none());
+        assert!(back.topic.is_none());
+        assert!(back.avatar_url.is_none());
+    }
+
+    #[test]
+    fn test_room_info_zero_counts() {
+        let info = make_room_info("!zero:example.com", Some("Empty"), false, false);
+        let json = serde_json::to_string(&info).expect("serialize");
+        let back: RoomInfo = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.unread_count, 0);
+        assert_eq!(back.notification_count, 0);
+    }
+
+    #[test]
+    fn test_room_info_direct_and_encrypted_flags() {
+        let info = make_room_info("!dm:example.com", Some("Alice"), true, true);
+        let json = serde_json::to_string(&info).expect("serialize");
+        let back: RoomInfo = serde_json::from_str(&json).expect("deserialize");
+        assert!(back.is_direct);
+        assert!(back.is_encrypted);
+    }
+
+    #[test]
+    fn test_room_info_json_has_expected_keys() {
+        let info = make_room_info("!test:example.com", Some("Test"), false, false);
+        let json = serde_json::to_string(&info).expect("serialize");
+        let val: serde_json::Value = serde_json::from_str(&json).expect("parse json");
+        assert!(val.get("room_id").is_some());
+        assert!(val.get("name").is_some());
+        assert!(val.get("unread_count").is_some());
+        assert!(val.get("notification_count").is_some());
+        assert!(val.get("is_direct").is_some());
+        assert!(val.get("is_encrypted").is_some());
+        assert!(val.get("member_count").is_some());
+    }
+
+    // --- CreateRoomOptions serialization ---
+
+    #[test]
+    fn test_create_room_options_roundtrip() {
+        let opts = CreateRoomOptions {
+            name: Some("My Room".to_string()),
+            topic: Some("A topic".to_string()),
+            alias: Some("#myroom:example.com".to_string()),
+            is_public: true,
+            is_direct: false,
+            invite: vec!["@alice:example.com".to_string()],
+            enable_encryption: true,
+        };
+        let json = serde_json::to_string(&opts).expect("serialize");
+        let back: CreateRoomOptions = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.name.as_deref(), Some("My Room"));
+        assert!(back.is_public);
+        assert!(back.enable_encryption);
+        assert_eq!(back.invite.len(), 1);
+        assert_eq!(back.invite[0], "@alice:example.com");
+    }
+
+    #[test]
+    fn test_create_room_options_empty_invite_list() {
+        let opts = CreateRoomOptions {
+            name: None,
+            topic: None,
+            alias: None,
+            is_public: false,
+            is_direct: true,
+            invite: vec![],
+            enable_encryption: false,
+        };
+        let json = serde_json::to_string(&opts).expect("serialize");
+        let back: CreateRoomOptions = serde_json::from_str(&json).expect("deserialize");
+        assert!(back.invite.is_empty());
+        assert!(back.is_direct);
+        assert!(!back.enable_encryption);
+    }
 }

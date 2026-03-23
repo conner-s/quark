@@ -690,4 +690,293 @@ set gif_rating=pg
         let rc = parse_quarkrc("nmap j");
         assert_eq!(rc.errors.len(), 1);
     }
+
+    // --- Edge cases: blank / whitespace lines ---
+
+    #[test]
+    fn test_blank_lines_are_skipped() {
+        let rc = parse_quarkrc("\n\n\nnmap j nav-left\n\n");
+        assert_eq!(rc.errors.len(), 0);
+        assert_eq!(rc.directives.len(), 1);
+    }
+
+    #[test]
+    fn test_only_whitespace_lines_produce_no_directives() {
+        let rc = parse_quarkrc("   \n\t\n  \n");
+        assert!(rc.directives.is_empty());
+        assert!(rc.errors.is_empty());
+    }
+
+    #[test]
+    fn test_multiple_spaces_between_key_and_action() {
+        let rc = parse_quarkrc("nmap gg    jump-top");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Map(m) if m.key == "gg" && m.action == "jump-top"
+        ));
+    }
+
+    // --- Inline comments with quoted values ---
+
+    #[test]
+    fn test_inline_comment_stripped_from_set() {
+        let rc = parse_quarkrc(r#"set scrolloff=5 " scroll buffer"#);
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Set(s) if s.name == "scrolloff" && s.value == OptionValue::Integer(5)
+        ));
+    }
+
+    #[test]
+    fn test_let_with_space_value_preserves_quotes() {
+        // let directive keeps the raw rest to support quoted spaces
+        let rc = parse_quarkrc(r#"let mapleader = " ""#);
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Let(b) if b.value == " "
+        ));
+    }
+
+    #[test]
+    fn test_let_with_single_quoted_value() {
+        let rc = parse_quarkrc("let myvar = 'hello'");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Let(b) if b.value == "hello"
+        ));
+    }
+
+    // --- autocmd: recognized but produces no directive ---
+
+    #[test]
+    fn test_autocmd_is_silently_ignored() {
+        let rc = parse_quarkrc("autocmd BufEnter * nmap j nav-left");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(rc.directives.is_empty());
+    }
+
+    #[test]
+    fn test_autocmd_bare_is_silently_ignored() {
+        let rc = parse_quarkrc("autocmd");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(rc.directives.is_empty());
+    }
+
+    // --- noremap variants for all map types ---
+
+    #[test]
+    fn test_inoremap() {
+        let rc = parse_quarkrc("inoremap <Esc> mode-normal");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Map(m) if m.map_type == MapType::Insert && m.noremap && m.key == "<Esc>"
+        ));
+    }
+
+    #[test]
+    fn test_tnoremap() {
+        let rc = parse_quarkrc("tnoremap k scroll-down");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Map(m) if m.map_type == MapType::Timeline && m.noremap
+        ));
+    }
+
+    #[test]
+    fn test_rnoremap() {
+        let rc = parse_quarkrc("rnoremap k room-next");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Map(m) if m.map_type == MapType::RoomList && m.noremap
+        ));
+    }
+
+    #[test]
+    fn test_pnoremap() {
+        let rc = parse_quarkrc("pnoremap j picker-left");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Map(m) if m.map_type == MapType::Picker && m.noremap
+        ));
+    }
+
+    #[test]
+    fn test_cnoremap() {
+        let rc = parse_quarkrc("cnoremap <Tab> complete");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Map(m) if m.map_type == MapType::Command && m.noremap
+        ));
+    }
+
+    #[test]
+    fn test_vnoremap() {
+        let rc = parse_quarkrc("vnoremap d yank-delete");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Map(m) if m.map_type == MapType::Visual && m.noremap
+        ));
+    }
+
+    // --- regular (non-noremap) map variants ---
+
+    #[test]
+    fn test_imap() {
+        let rc = parse_quarkrc("imap jk mode-normal");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Map(m) if m.map_type == MapType::Insert && !m.noremap
+        ));
+    }
+
+    #[test]
+    fn test_cmap() {
+        let rc = parse_quarkrc("cmap <Up> history-prev");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Map(m) if m.map_type == MapType::Command && !m.noremap
+        ));
+    }
+
+    #[test]
+    fn test_vmap() {
+        let rc = parse_quarkrc("vmap y yank");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Map(m) if m.map_type == MapType::Visual && !m.noremap
+        ));
+    }
+
+    // --- Error handling for malformed lines ---
+
+    #[test]
+    fn test_set_without_name_is_error() {
+        let rc = parse_quarkrc("set");
+        assert_eq!(rc.errors.len(), 1);
+        assert!(rc.errors[0].message.contains("'set' requires"));
+    }
+
+    #[test]
+    fn test_source_without_path_is_error() {
+        let rc = parse_quarkrc("source");
+        assert_eq!(rc.errors.len(), 1);
+        assert!(rc.errors[0].message.contains("'source' requires"));
+    }
+
+    #[test]
+    fn test_colorscheme_without_name_is_error() {
+        let rc = parse_quarkrc("colorscheme");
+        assert_eq!(rc.errors.len(), 1);
+        assert!(rc.errors[0].message.contains("'colorscheme' requires"));
+    }
+
+    #[test]
+    fn test_unmap_without_key_is_error() {
+        let rc = parse_quarkrc("nunmap");
+        assert_eq!(rc.errors.len(), 1);
+    }
+
+    #[test]
+    fn test_let_without_equals_is_error() {
+        let rc = parse_quarkrc("let myvar");
+        assert_eq!(rc.errors.len(), 1);
+        assert!(rc.errors[0].message.contains("'let' requires"));
+    }
+
+    #[test]
+    fn test_error_includes_line_number() {
+        let rc = parse_quarkrc("nmap j nav-left\nnotacommand foo\nset x=1");
+        assert_eq!(rc.errors.len(), 1);
+        assert_eq!(rc.errors[0].line_number, 2);
+    }
+
+    #[test]
+    fn test_error_includes_original_line() {
+        let rc = parse_quarkrc("notacommand foo bar");
+        assert_eq!(rc.errors.len(), 1);
+        assert_eq!(rc.errors[0].line.trim(), "notacommand foo bar");
+    }
+
+    #[test]
+    fn test_multiple_errors_are_all_collected() {
+        let rc = parse_quarkrc("bad1 x\nbad2 y\nbad3 z");
+        assert_eq!(rc.errors.len(), 3);
+    }
+
+    // --- set boolean toggle (no =) ---
+
+    #[test]
+    fn test_set_bare_name_is_bool_true() {
+        let rc = parse_quarkrc("set myoption");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Set(s) if s.name == "myoption" && s.value == OptionValue::Bool(true)
+        ));
+    }
+
+    #[test]
+    fn test_set_false_value() {
+        let rc = parse_quarkrc("set myoption=false");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Set(s) if s.value == OptionValue::Bool(false)
+        ));
+    }
+
+    #[test]
+    fn test_set_negative_integer() {
+        let rc = parse_quarkrc("set offset=-3");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Set(s) if s.value == OptionValue::Integer(-3)
+        ));
+    }
+
+    // --- collect_let_bindings ---
+
+    #[test]
+    fn test_collect_let_bindings() {
+        let rc = parse_quarkrc("let mapleader = \" \"\nlet x = hello");
+        let bindings = collect_let_bindings(&rc.directives);
+        assert_eq!(bindings.get("mapleader"), Some(&" ".to_string()));
+        assert_eq!(bindings.get("x"), Some(&"hello".to_string()));
+    }
+
+    // --- unmap all types ---
+
+    #[test]
+    fn test_iunmap() {
+        let rc = parse_quarkrc("iunmap jk");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Unmap(u) if u.map_type == MapType::Insert && u.key == "jk"
+        ));
+    }
+
+    #[test]
+    fn test_tunmap() {
+        let rc = parse_quarkrc("tunmap k");
+        assert_eq!(rc.errors.len(), 0);
+        assert!(matches!(
+            &rc.directives[0],
+            RcDirective::Unmap(u) if u.map_type == MapType::Timeline
+        ));
+    }
 }
