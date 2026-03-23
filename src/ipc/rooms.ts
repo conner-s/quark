@@ -1,6 +1,6 @@
 // Room IPC calls
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke.js";
 import type { RoomInfo, CreateRoomOptions } from "./types.js";
 
 export type { RoomInfo, CreateRoomOptions };

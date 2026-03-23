@@ -1,6 +1,6 @@
 // Crypto / verification IPC calls
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke.js";
 import type { VerificationStatus } from "./types.js";
 
 export type { VerificationStatus };

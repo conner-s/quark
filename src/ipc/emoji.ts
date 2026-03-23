@@ -1,6 +1,6 @@
 // Emoji and sticker IPC calls
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke.js";
 import type { EmojiPack, EmojiEntry } from "./types.js";
 
 export type { EmojiPack, EmojiEntry };

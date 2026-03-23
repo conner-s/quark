@@ -1,6 +1,6 @@
 // Media IPC calls
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke.js";
 import type { MediaDownload } from "./types.js";
 
 export type { MediaDownload };

@@ -1,6 +1,6 @@
 // GIF search IPC calls
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke.js";
 import type { GifResult } from "./types.js";
 
 export type { GifResult };

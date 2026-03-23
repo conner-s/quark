@@ -1,6 +1,6 @@
 // Config IPC calls
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke.js";
 import type { Theme } from "../theme/loader.js";
 import type { ParsedRc } from "./types.js";
 

@@ -1,6 +1,6 @@
 // Reaction IPC calls
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke.js";
 import type { ReactionGroup } from "./types.js";
 
 export type { ReactionGroup };

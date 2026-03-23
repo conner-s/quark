@@ -1,6 +1,6 @@
 // Space IPC calls
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke.js";
 import type { SpaceChild, RoomInfo } from "./types.js";
 
 export type { SpaceChild };
