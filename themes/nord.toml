@@ -1,0 +1,65 @@
+[meta]
+name = "Nord"
+author = "quark"
+version = "1.0"
+
+[colors]
+background = "#2e3440"
+foreground = "#d8dee9"
+cursor = "#88c0d0"
+selection_bg = "#3b4252"
+selection_fg = "#eceff4"
+border = "#3b4252"
+
+[colors.accent]
+primary = "#88c0d0"
+secondary = "#81a1c1"
+error = "#bf616a"
+warning = "#ebcb8b"
+success = "#a3be8c"
+link = "#5e81ac"
+
+[colors.messages]
+own = "#a3be8c"
+other = "#d8dee9"
+system = "#4c566a"
+timestamp = "#434c5e"
+mention_bg = "#3b3f4e"
+mention_fg = "#ebcb8b"
+reply_border = "#4c566a"
+thread_indicator = "#81a1c1"
+
+[colors.roomlist]
+active_bg = "#3b4252"
+active_fg = "#88c0d0"
+unread = "#eceff4"
+mention_badge = "#bf616a"
+muted = "#4c566a"
+
+[colors.reactions]
+background = "#3b4252"
+border = "#434c5e"
+own_bg = "#3a4a3a"
+count = "#4c566a"
+
+[typography]
+font_family = "JetBrains Mono, Fira Code, monospace"
+font_size = 14
+line_height = 1.5
+message_spacing = 4
+
+[borders]
+style = "single"
+room_list_width = "25%"
+
+[emoji]
+size = 32
+sticker_max_size = 256
+reaction_size = 20
+
+[prompt]
+symbol = ":>"
+normal_indicator = "NOR"
+insert_indicator = "INS"
+command_indicator = "CMD"
+visual_indicator = "VIS"
