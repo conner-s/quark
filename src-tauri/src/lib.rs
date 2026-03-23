@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod config;
+pub mod events;
 pub mod gif;
 pub mod matrix;
 
@@ -24,6 +25,7 @@ pub fn run() {
             commands::login,
             commands::logout,
             commands::restore_session,
+            commands::start_sync,
             // Rooms
             commands::get_rooms,
             commands::join_room,
@@ -58,8 +60,7 @@ pub fn run() {
             commands::load_theme,
             commands::parse_quarkrc,
         ])
-        .setup(|app| {
-            let _app_handle = app.handle().clone();
+        .setup(|_app| {
             Ok(())
         })
         .run(tauri::generate_context!())

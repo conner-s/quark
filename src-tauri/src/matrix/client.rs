@@ -94,7 +94,15 @@ pub async fn restore_session_from_info(
 }
 
 /// Start a background sync task. Returns immediately; sync runs in background.
-pub async fn start_sync(client: Client) {
+///
+/// If an `app_handle` is provided, sync event handlers are registered before
+/// the sync loop starts so the frontend receives push notifications for new
+/// messages, typing indicators, and other sync events.
+pub async fn start_sync(client: Client, app_handle: Option<tauri::AppHandle>) {
+    if let Some(ref handle) = app_handle {
+        crate::events::setup_sync_event_handlers(&client, handle);
+    }
+
     tokio::spawn(async move {
         let filter = FilterDefinition::default();
         let sync_settings = SyncSettings::default().filter(filter.into());

@@ -18,7 +18,7 @@ use crate::{
 };
 use matrix_sdk::Client;
 use std::path::Path;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 /// Helper: clone the client out of the state so it doesn't hold the lock across awaits.
 fn get_client(state: &State<'_, MatrixState>) -> Result<Client, String> {
@@ -31,6 +31,7 @@ fn get_client(state: &State<'_, MatrixState>) -> Result<Client, String> {
 #[tauri::command]
 pub async fn login(
     state: State<'_, MatrixState>,
+    app_handle: AppHandle,
     homeserver_url: String,
     username: String,
     password: String,
@@ -46,13 +47,14 @@ pub async fn login(
         *guard = Some(client.clone());
     }
 
-    crate::matrix::client::start_sync(client).await;
+    crate::matrix::client::start_sync(client, Some(app_handle)).await;
     Ok(session)
 }
 
 #[tauri::command]
 pub async fn restore_session(
     state: State<'_, MatrixState>,
+    app_handle: AppHandle,
     homeserver_url: String,
     session: SessionInfo,
     data_dir: String,
@@ -66,7 +68,23 @@ pub async fn restore_session(
         *guard = Some(client.clone());
     }
 
-    crate::matrix::client::start_sync(client).await;
+    crate::matrix::client::start_sync(client, Some(app_handle)).await;
+    Ok(())
+}
+
+/// Start the background sync loop and register push-event handlers.
+///
+/// The frontend should call this command after a successful login or session
+/// restore if it needs to restart sync (e.g., after the app was suspended).
+/// It is safe to call even if sync is already running — the existing sync
+/// task will eventually reconnect on its own; calling this spawns a new one.
+#[tauri::command]
+pub async fn start_sync(
+    state: State<'_, MatrixState>,
+    app_handle: AppHandle,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::client::start_sync(client, Some(app_handle)).await;
     Ok(())
 }
 
