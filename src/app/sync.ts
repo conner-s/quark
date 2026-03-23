@@ -5,6 +5,7 @@ import type { AppComponents } from "../ui/App.js";
 import type { TimelineEvent, RoomInfo } from "../ipc/types.js";
 import { refreshRooms, selectRoom } from "./actions.js";
 import { showToast } from "../ui/NotificationToast.js";
+import { handleIncomingMessage } from "./notifications.js";
 
 // ── Tauri event types ─────────────────────────────────────────────────────────
 
@@ -112,6 +113,18 @@ export async function startSync(components: AppComponents): Promise<() => void> 
           }))
         );
       }
+
+      // Trigger in-app toast when window is focused (OS notification is handled
+      // by the Rust backend when the window is not focused).
+      const roomName =
+        AppState.get("roomListCache").find((r) => r.room_id === payload.room_id)
+          ?.name ?? payload.room_id;
+      handleIncomingMessage(
+        payload.room_id,
+        payload.event.sender,
+        payload.event.body,
+        roomName
+      );
     }
   );
 
