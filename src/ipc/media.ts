@@ -1,0 +1,46 @@
+// Media IPC calls
+
+import { invoke } from "@tauri-apps/api/core";
+import type { MediaDownload } from "./types.js";
+
+export type { MediaDownload };
+
+/**
+ * Download media from an mxc:// URL.
+ * Returns a MediaDownload containing base64-encoded content and MIME type.
+ * Matches the Rust `download_media` command.
+ */
+export async function downloadMedia(mxcUrl: string): Promise<MediaDownload> {
+  return invoke<MediaDownload>("download_media", {
+    mxcUrl,
+    thumbnail: false,
+    thumbnailWidth: null,
+    thumbnailHeight: null,
+  });
+}
+
+/**
+ * Download a thumbnail for an mxc:// URL.
+ * Returns a MediaDownload with the thumbnail's base64 content.
+ * Matches the Rust `download_media` command with thumbnail=true.
+ */
+export async function getThumbnail(
+  mxcUrl: string,
+  width: number,
+  height: number,
+): Promise<MediaDownload> {
+  return invoke<MediaDownload>("download_media", {
+    mxcUrl,
+    thumbnail: true,
+    thumbnailWidth: width,
+    thumbnailHeight: height,
+  });
+}
+
+/**
+ * Upload a file from disk and return its mxc:// URL.
+ * Matches the Rust `upload_media` command.
+ */
+export async function uploadMedia(filePath: string): Promise<string> {
+  return invoke<string>("upload_media", { filePath });
+}

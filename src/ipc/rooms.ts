@@ -1,0 +1,38 @@
+// Room IPC calls
+
+import { invoke } from "@tauri-apps/api/core";
+import type { RoomInfo, CreateRoomOptions } from "./types.js";
+
+export type { RoomInfo, CreateRoomOptions };
+
+/**
+ * Get all joined rooms.
+ * Matches the Rust `get_rooms` command.
+ */
+export async function getRooms(): Promise<RoomInfo[]> {
+  return invoke<RoomInfo[]>("get_rooms");
+}
+
+/**
+ * Join a room by ID or alias. Returns the canonical room ID.
+ * Matches the Rust `join_room` command.
+ */
+export async function joinRoom(roomIdOrAlias: string): Promise<string> {
+  return invoke<string>("join_room", { roomIdOrAlias });
+}
+
+/**
+ * Leave a room by ID.
+ * Matches the Rust `leave_room` command.
+ */
+export async function leaveRoom(roomId: string): Promise<void> {
+  return invoke<void>("leave_room", { roomId });
+}
+
+/**
+ * Create a new room. Returns the new room ID.
+ * Matches the Rust `create_room` command.
+ */
+export async function createRoom(options: CreateRoomOptions): Promise<string> {
+  return invoke<string>("create_room", { options });
+}
