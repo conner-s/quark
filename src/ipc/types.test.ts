@@ -190,12 +190,12 @@ describe("ReactionGroup", () => {
       key: "👍",
       count: 3,
       senders: ["@alice:example.com", "@bob:example.com", "@carol:example.com"],
-      own_reaction: true,
+      own: true,
       own_event_id: "$reaction123:example.com",
     });
     expect(group.key).toBe("👍");
     expect(group.count).toBe(3);
-    expect(group.own_reaction).toBe(true);
+    expect(group.own).toBe(true);
   });
 
   it("accepts a reaction group without own reaction", () => {
@@ -203,7 +203,7 @@ describe("ReactionGroup", () => {
       key: "❤️",
       count: 1,
       senders: ["@bob:example.com"],
-      own_reaction: false,
+      own: false,
       own_event_id: null,
     });
     expect(group.own_event_id).toBeNull();

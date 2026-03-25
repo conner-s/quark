@@ -3,7 +3,7 @@
 
 import { mountApp } from "./ui/App.js";
 import { AppState } from "./app/state.js";
-import { setComponents, login, selectRoom, selectSpace, refreshRooms } from "./app/actions.js";
+import { setComponents, login, logout, attemptSessionRestore, selectRoom, selectSpace, refreshRooms } from "./app/actions.js";
 import { setupKeyboard } from "./app/keyboard.js";
 import { startSync } from "./app/sync.js";
 import { showError } from "./ui/NotificationToast.js";
@@ -40,6 +40,19 @@ if (DEBUG_MODE) {
     const rooms = AppState.get("roomListCache");
     if (rooms.length > 0) {
       await selectRoom(rooms[0].room_id);
+    }
+  });
+}
+
+// ── Session restore ───────────────────────────────────────────────────────────
+// Try to restore a saved session before showing the login form. Only runs in
+// Tauri (the real IPC is needed); skipped in DEBUG_MODE which uses mock data.
+
+if (!DEBUG_MODE) {
+  void attemptSessionRestore(components).then((restored) => {
+    if (restored) {
+      setupKeyboard(components);
+      void startSync(components);
     }
   });
 }

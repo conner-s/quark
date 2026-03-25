@@ -1,9 +1,10 @@
 use matrix_sdk::{
+    room::RoomMemberRole,
     ruma::{
         api::client::room::create_room::v3::Request as CreateRoomRequest,
         RoomId,
     },
-    Client,
+    Client, RoomMemberships,
 };
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -28,7 +29,7 @@ pub async fn get_rooms(client: &Client) -> Result<Vec<RoomInfo>, String> {
     let mut result = Vec::with_capacity(rooms.len());
 
     for room in rooms {
-        let name = room.name();
+        let name = room.compute_display_name().await.ok().map(|n| n.to_string());
         let topic = room.topic();
         let avatar_url = room.avatar_url().map(|url| url.to_string());
         let is_direct = room.is_direct().await.unwrap_or(false);
@@ -86,6 +87,49 @@ pub async fn leave_room(client: &Client, room_id: &str) -> Result<(), String> {
 
     info!(room_id = %room_id, "Left room");
     Ok(())
+}
+
+/// Serializable room member for IPC.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoomMemberInfo {
+    pub user_id: String,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+    /// "admin" | "mod" | "member"
+    pub power_level: String,
+    /// "online" | "unavailable" | "offline" | null
+    pub presence: Option<String>,
+}
+
+/// Get members of a room.
+pub async fn get_room_members(client: &Client, room_id: &str) -> Result<Vec<RoomMemberInfo>, String> {
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    let members = room
+        .members(RoomMemberships::JOIN)
+        .await
+        .map_err(|e| format!("Failed to fetch members: {e}"))?;
+
+    Ok(members
+        .iter()
+        .map(|m| {
+            let power_level = match m.suggested_role_for_power_level() {
+                RoomMemberRole::Administrator => "admin",
+                RoomMemberRole::Moderator => "mod",
+                RoomMemberRole::User => "member",
+            };
+            RoomMemberInfo {
+                user_id: m.user_id().to_string(),
+                display_name: m.display_name().map(str::to_string),
+                avatar_url: m.avatar_url().map(|u| u.to_string()),
+                power_level: power_level.to_string(),
+                presence: None,
+            }
+        })
+        .collect())
 }
 
 /// Options for creating a new room.

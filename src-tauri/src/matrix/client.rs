@@ -6,6 +6,7 @@ use matrix_sdk::{
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
+use tauri::Emitter;
 use tracing::{error, info};
 
 /// Tauri state holding the Matrix client.
@@ -106,14 +107,27 @@ pub async fn start_sync(client: Client, app_handle: Option<tauri::AppHandle>) {
     tokio::spawn(async move {
         let filter = FilterDefinition::default();
         let sync_settings = SyncSettings::default().filter(filter.into());
+        let mut was_connected = false;
 
         loop {
             match client.sync(sync_settings.clone()).await {
                 Ok(_) => {
                     info!("Sync completed");
+                    if !was_connected {
+                        was_connected = true;
+                        if let Some(ref handle) = app_handle {
+                            let _ = handle.emit(crate::events::EVENT_CONNECTED, true);
+                        }
+                    }
                 }
                 Err(e) => {
                     error!("Sync error: {e}");
+                    if was_connected {
+                        was_connected = false;
+                        if let Some(ref handle) = app_handle {
+                            let _ = handle.emit(crate::events::EVENT_CONNECTED, false);
+                        }
+                    }
                     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 }
             }

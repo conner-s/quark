@@ -24,6 +24,7 @@ pub struct ReactionGroup {
     /// List of user IDs who reacted.
     pub senders: Vec<String>,
     /// Whether the local user has reacted with this key.
+    #[serde(rename = "own")]
     pub own_reaction: bool,
     /// Event ID of the local user's reaction (for toggling/removing).
     pub own_event_id: Option<String>,

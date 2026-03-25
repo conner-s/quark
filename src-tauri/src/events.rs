@@ -29,13 +29,14 @@ use crate::{
 
 // ─── Event Name Constants ─────────────────────────────────────────────────────
 
-pub const EVENT_NEW_MESSAGE: &str = "sync:new_message";
-pub const EVENT_ROOM_UPDATE: &str = "sync:room_update";
-pub const EVENT_TYPING: &str = "sync:typing";
-pub const EVENT_READ_RECEIPT: &str = "sync:read_receipt";
-pub const EVENT_PRESENCE: &str = "sync:presence";
-pub const EVENT_VERIFICATION_REQUEST: &str = "sync:verification_request";
-pub const EVENT_UNREAD_COUNT: &str = "sync:unread_count";
+pub const EVENT_NEW_MESSAGE: &str = "quark://sync/message";
+pub const EVENT_ROOM_UPDATE: &str = "quark://sync/rooms";
+pub const EVENT_TYPING: &str = "quark://sync/typing";
+pub const EVENT_READ_RECEIPT: &str = "quark://sync/read_receipt";
+pub const EVENT_PRESENCE: &str = "quark://sync/presence";
+pub const EVENT_VERIFICATION_REQUEST: &str = "quark://sync/verification_request";
+pub const EVENT_UNREAD_COUNT: &str = "quark://sync/unread_count";
+pub const EVENT_CONNECTED: &str = "quark://sync/connected";
 
 // ─── Event Payload Structs ────────────────────────────────────────────────────
 
@@ -410,6 +411,7 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
         media_mimetype,
         media_width,
         media_height,
+        reactions: vec![],
     })
 }
 
@@ -453,6 +455,7 @@ mod tests {
             media_mimetype: None,
             media_width: None,
             media_height: None,
+            reactions: vec![],
         }
     }
 
@@ -597,12 +600,13 @@ mod tests {
 
     #[test]
     fn test_event_name_constants() {
-        assert_eq!(EVENT_NEW_MESSAGE, "sync:new_message");
-        assert_eq!(EVENT_ROOM_UPDATE, "sync:room_update");
-        assert_eq!(EVENT_TYPING, "sync:typing");
-        assert_eq!(EVENT_READ_RECEIPT, "sync:read_receipt");
-        assert_eq!(EVENT_PRESENCE, "sync:presence");
-        assert_eq!(EVENT_VERIFICATION_REQUEST, "sync:verification_request");
-        assert_eq!(EVENT_UNREAD_COUNT, "sync:unread_count");
+        assert_eq!(EVENT_NEW_MESSAGE, "quark://sync/message");
+        assert_eq!(EVENT_ROOM_UPDATE, "quark://sync/rooms");
+        assert_eq!(EVENT_TYPING, "quark://sync/typing");
+        assert_eq!(EVENT_READ_RECEIPT, "quark://sync/read_receipt");
+        assert_eq!(EVENT_PRESENCE, "quark://sync/presence");
+        assert_eq!(EVENT_VERIFICATION_REQUEST, "quark://sync/verification_request");
+        assert_eq!(EVENT_UNREAD_COUNT, "quark://sync/unread_count");
+        assert_eq!(EVENT_CONNECTED, "quark://sync/connected");
     }
 }

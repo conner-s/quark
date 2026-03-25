@@ -14,7 +14,10 @@ use matrix_sdk::{
     Client,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tracing::info;
+
+use crate::matrix::reactions::ReactionGroup;
 
 /// Serializable timeline event for IPC.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,9 +37,14 @@ pub struct TimelineEvent {
     pub media_mimetype: Option<String>,
     pub media_width: Option<u64>,
     pub media_height: Option<u64>,
+    /// Aggregated reactions from the same fetch batch.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<ReactionGroup>,
 }
 
 /// Fetch recent timeline events for a room.
+/// Also aggregates any reaction events found in the same batch and attaches
+/// them to their target messages so the frontend can display them immediately.
 pub async fn get_timeline(
     client: &Client,
     room_id: &str,
@@ -56,13 +64,58 @@ pub async fn get_timeline(
         .await
         .map_err(|e| format!("Failed to fetch timeline: {e}"))?;
 
-    let mut events = Vec::new();
+    let own_user_id = client.user_id().map(|u| u.to_string()).unwrap_or_default();
+
+    let mut events: Vec<TimelineEvent> = Vec::new();
+    // target_event_id -> Vec<(key, sender_id, reaction_event_id)>
+    let mut reaction_raw: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
 
     for timeline_event in messages.chunk {
         if let Ok(deserialized) = timeline_event.raw().deserialize() {
-            if let Some(ev) = convert_sync_timeline_event(deserialized) {
-                events.push(ev);
+            match deserialized {
+                AnySyncTimelineEvent::MessageLike(
+                    AnySyncMessageLikeEvent::RoomMessage(SyncMessageLikeEvent::Original(ev)),
+                ) => {
+                    events.push(convert_sync_room_message(ev));
+                }
+                AnySyncTimelineEvent::MessageLike(
+                    AnySyncMessageLikeEvent::Reaction(SyncMessageLikeEvent::Original(ev)),
+                ) => {
+                    let target = ev.content.relates_to.event_id.to_string();
+                    let key = ev.content.relates_to.key.clone();
+                    let sender = ev.sender.to_string();
+                    let rev_id = ev.event_id.to_string();
+                    reaction_raw.entry(target).or_default().push((key, sender, rev_id));
+                }
+                _ => {}
             }
+        }
+    }
+
+    // Aggregate and attach reactions to their target messages
+    for ev in &mut events {
+        if let Some(rxns) = reaction_raw.get(&ev.event_id) {
+            let mut agg: HashMap<String, (u64, Vec<String>, bool, Option<String>)> =
+                HashMap::new();
+            for (key, sender, rev_id) in rxns {
+                let e = agg.entry(key.clone()).or_insert((0, Vec::new(), false, None));
+                e.0 += 1;
+                e.1.push(sender.clone());
+                if sender == &own_user_id {
+                    e.2 = true;
+                    e.3 = Some(rev_id.clone());
+                }
+            }
+            ev.reactions = agg
+                .into_iter()
+                .map(|(key, (count, senders, own_reaction, own_event_id))| ReactionGroup {
+                    key,
+                    count,
+                    senders,
+                    own_reaction,
+                    own_event_id,
+                })
+                .collect();
         }
     }
 
@@ -113,6 +166,7 @@ fn convert_sync_room_message(ev: OriginalSyncRoomMessageEvent) -> TimelineEvent 
         media_mimetype,
         media_width,
         media_height,
+        reactions: vec![],
     }
 }
 
@@ -416,6 +470,7 @@ mod tests {
             media_mimetype: None,
             media_width: None,
             media_height: None,
+            reactions: vec![],
         }
     }
 

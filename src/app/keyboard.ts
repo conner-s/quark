@@ -21,6 +21,7 @@ import { AppState } from "./state.js";
 import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
 import { filterShortcodes, type ShortcodeEntry } from "../ui/ShortcodePreview.js";
 import { getEmojiPacks } from "../ipc/emoji.js";
+import { getThumbnail } from "../ipc/media.js";
 
 // ── Default keybindings ───────────────────────────────────────────────────────
 
@@ -163,11 +164,22 @@ async function refreshCustomEmoji(): Promise<void> {
     _customEmoji = [];
     for (const pack of packs) {
       for (const entry of pack.emojis) {
+        const idx = _customEmoji.length;
         _customEmoji.push({
           key: `:${entry.shortcode}:`,
           shortcode: entry.shortcode,
-          imageUrl: entry.url,
+          imageUrl: entry.url, // may be mxc://, replaced below if so
         });
+        if (entry.url.startsWith("mxc://")) {
+          getThumbnail(entry.url, 32, 32).then((dl) => {
+            if (_customEmoji[idx]) {
+              _customEmoji[idx] = {
+                ..._customEmoji[idx],
+                imageUrl: `data:${dl.mime_type};base64,${dl.data_base64}`,
+              };
+            }
+          }).catch(() => { /* non-critical */ });
+        }
       }
     }
   } catch {

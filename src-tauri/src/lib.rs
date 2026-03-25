@@ -47,6 +47,7 @@ pub fn run() {
             commands::start_sync,
             // Rooms
             commands::get_rooms,
+            commands::get_room_members,
             commands::join_room,
             commands::leave_room,
             commands::create_room,

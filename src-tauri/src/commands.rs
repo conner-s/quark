@@ -10,7 +10,7 @@ use crate::{
         emoji::EmojiPack,
         media::MediaDownload,
         reactions::ReactionGroup,
-        rooms::{CreateRoomOptions, RoomInfo},
+        rooms::{CreateRoomOptions, RoomInfo, RoomMemberInfo},
         spaces::SpaceChild,
         threads::ThreadRoot,
         timeline::TimelineEvent,
@@ -115,6 +115,15 @@ pub async fn logout(state: State<'_, MatrixState>) -> Result<(), String> {
 pub async fn get_rooms(state: State<'_, MatrixState>) -> Result<Vec<RoomInfo>, String> {
     let client = get_client(&state)?;
     crate::matrix::rooms::get_rooms(&client).await
+}
+
+#[tauri::command]
+pub async fn get_room_members(
+    state: State<'_, MatrixState>,
+    room_id: String,
+) -> Result<Vec<RoomMemberInfo>, String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::get_room_members(&client, &room_id).await
 }
 
 #[tauri::command]

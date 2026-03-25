@@ -68,7 +68,7 @@ export interface TimelineEvent {
   media_mimetype: string | null;
   media_width: number | null;
   media_height: number | null;
-  reactions?: { key: string; count: number; own: boolean }[];
+  reactions?: ReactionGroup[];
 }
 
 // ─── Reactions ────────────────────────────────────────────────────────────────
@@ -78,7 +78,8 @@ export interface ReactionGroup {
   key: string;
   count: number;
   senders: string[];
-  own_reaction: boolean;
+  /** Serialized as "own" by the Rust backend (serde rename). */
+  own: boolean;
   own_event_id: string | null;
 }
 
