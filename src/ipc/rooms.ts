@@ -1,9 +1,9 @@
 // Room IPC calls
 
 import { invoke } from "./invoke.js";
-import type { RoomInfo, CreateRoomOptions } from "./types.js";
+import type { RoomInfo, CreateRoomOptions, RoomMember } from "./types.js";
 
-export type { RoomInfo, CreateRoomOptions };
+export type { RoomInfo, CreateRoomOptions, RoomMember };
 
 /**
  * Get all joined rooms.
@@ -35,4 +35,12 @@ export async function leaveRoom(roomId: string): Promise<void> {
  */
 export async function createRoom(options: CreateRoomOptions): Promise<string> {
   return invoke<string>("create_room", { options });
+}
+
+/**
+ * Get the member list for a room.
+ * Matches the Rust `get_room_members` command.
+ */
+export async function getRoomMembers(roomId: string): Promise<RoomMember[]> {
+  return invoke<RoomMember[]>("get_room_members", { roomId });
 }

@@ -10,18 +10,19 @@ use matrix::client::MatrixState;
 use media_cache::MediaCache;
 use notifications::NotificationConfig;
 use std::sync::{Arc, Mutex};
+use tauri::Manager;
 
 /// Tauri managed state for the media cache.
 pub struct CacheState(pub Arc<MediaCache>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
                 .add_directive("quark=debug".parse().unwrap()),
         )
-        .init();
+        .try_init();
 
     // Default to a 200 MB cache. The user can change it at runtime via the
     // set_cache_size_limit command.
@@ -77,6 +78,7 @@ pub fn run() {
             commands::get_thread_timeline,
             // GIF
             commands::search_gifs,
+            commands::send_gif,
             // Config
             commands::load_theme,
             commands::parse_quarkrc,
@@ -87,9 +89,16 @@ pub fn run() {
             commands::unmute_room,
             commands::test_notification,
         ])
-        .setup(|_app| {
+        .setup(|app| {
+            eprintln!("[quark] setup callback running...");
+            let _window = app.get_webview_window("main")
+                .expect("no main window found");
+            eprintln!("[quark] main window acquired");
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .unwrap_or_else(|e| {
+            eprintln!("[quark] FATAL: {e}");
+            std::process::exit(1);
+        });
 }

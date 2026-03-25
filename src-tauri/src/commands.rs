@@ -22,7 +22,7 @@ use crate::{
 use matrix_sdk::Client;
 use std::path::Path;
 use std::sync::Mutex;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 /// Helper: clone the client out of the state so it doesn't hold the lock across awaits.
 fn get_client(state: &State<'_, MatrixState>) -> Result<Client, String> {
@@ -39,9 +39,9 @@ pub async fn login(
     homeserver_url: String,
     username: String,
     password: String,
-    data_dir: String,
 ) -> Result<SessionInfo, String> {
-    let data_path = std::path::PathBuf::from(&data_dir);
+    let data_path = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Could not resolve app data dir: {e}"))?;
 
     let client = crate::matrix::client::build_client(&homeserver_url, data_path).await?;
     let session = crate::matrix::client::login_with_password(&client, &username, &password).await?;
@@ -61,9 +61,9 @@ pub async fn restore_session(
     app_handle: AppHandle,
     homeserver_url: String,
     session: SessionInfo,
-    data_dir: String,
 ) -> Result<(), String> {
-    let data_path = std::path::PathBuf::from(&data_dir);
+    let data_path = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Could not resolve app data dir: {e}"))?;
     let client = crate::matrix::client::build_client(&homeserver_url, data_path).await?;
     crate::matrix::client::restore_session_from_info(&client, &session).await?;
 
@@ -162,9 +162,10 @@ pub async fn send_message(
     room_id: String,
     body: String,
     formatted_body: Option<String>,
+    in_reply_to: Option<String>,
 ) -> Result<String, String> {
     let client = get_client(&state)?;
-    crate::matrix::timeline::send_message(&client, &room_id, &body, formatted_body.as_deref()).await
+    crate::matrix::timeline::send_message(&client, &room_id, &body, formatted_body.as_deref(), in_reply_to.as_deref()).await
 }
 
 #[tauri::command]
@@ -346,6 +347,59 @@ pub async fn search_gifs(
         }
         other => Err(format!("Unknown GIF provider: '{}'", other)),
     }
+}
+
+/// Download a GIF from an external URL, upload it to the homeserver, and send
+/// it as an `m.image` event. This avoids leaking external URLs to recipients.
+#[tauri::command]
+pub async fn send_gif(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    gif_url: String,
+    title: String,
+    width: u32,
+    height: u32,
+) -> Result<String, String> {
+    let client = get_client(&state)?;
+
+    // Download GIF bytes from the external URL.
+    let http = reqwest::Client::new();
+    let response = http
+        .get(&gif_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to download GIF: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("GIF download failed: HTTP {}", response.status()));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read GIF bytes: {e}"))?
+        .to_vec();
+
+    // Upload to the homeserver and get an mxc:// URL.
+    let mxc_url = crate::matrix::media::upload_media(
+        &client,
+        bytes,
+        "image/gif",
+        Some(&format!("{title}.gif")),
+    )
+    .await?;
+
+    // Send as m.image event.
+    crate::matrix::timeline::send_image(
+        &client,
+        &room_id,
+        &title,
+        &mxc_url,
+        "image/gif",
+        Some(width as u64),
+        Some(height as u64),
+    )
+    .await
 }
 
 // ─── Config Commands ──────────────────────────────────────────────────────────

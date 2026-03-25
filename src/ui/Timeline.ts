@@ -2,7 +2,43 @@
 
 import { createReactionBar, type ReactionGroup } from "./Reactions.js";
 
+// ── Avatar generation ─────────────────────────────────────────────────────────
+
+const AVATAR_COLORS = [
+  "#00ff41", "#00aaff", "#ff4466", "#ffaa00",
+  "#aa44ff", "#00ffcc", "#ff6600", "#44ccff",
+];
+
+function senderColor(sender: string): string {
+  let h = 0;
+  for (let i = 0; i < sender.length; i++) h = (h * 31 + sender.charCodeAt(i)) & 0xffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+function buildAvatarElement(sender: string, avatarUrl?: string): HTMLElement {
+  if (avatarUrl) {
+    const img = document.createElement("img");
+    img.className = "message-group__avatar";
+    img.src = avatarUrl;
+    img.alt = "";
+    img.setAttribute("aria-hidden", "true");
+    return img;
+  }
+  const color = senderColor(sender);
+  const initial = (sender.startsWith("@") ? sender[1] : sender[0]).toUpperCase();
+  const el = document.createElement("span");
+  el.className = "message-group__avatar-fallback";
+  el.textContent = initial;
+  el.style.color = color;
+  el.style.border = `1px solid ${color}`;
+  el.style.opacity = "0.85";
+  el.setAttribute("aria-hidden", "true");
+  return el;
+}
+
 export interface ReplyPreviewData {
+  /** Matrix event ID of the message being replied to */
+  eventId: string;
   senderName: string;
   body: string;
 }
@@ -10,6 +46,8 @@ export interface ReplyPreviewData {
 export interface MessageData {
   id: string;
   senderName: string;
+  /** URL for the sender's avatar image (mxc:// resolved to https://) */
+  senderAvatarUrl?: string;
   /** If true the sender is the local user */
   isOwn?: boolean;
   /** ISO 8601 timestamp string */
@@ -41,6 +79,10 @@ function formatTimestamp(isoString: string): string {
   }
 }
 
+/**
+ * Build the inner content of a single message (body, media, reactions) —
+ * does NOT include the sender/timestamp header (that lives on the group).
+ */
 function buildMessageElement(msg: MessageData): HTMLElement {
   const row = document.createElement("div");
   row.className = "message";
@@ -54,23 +96,54 @@ function buildMessageElement(msg: MessageData): HTMLElement {
 
   // ── Reply preview ──────────────────────────────────────────────────────
   if (msg.replyTo) {
+    const replyTo = msg.replyTo;
+
     const reply = document.createElement("div");
     reply.className = "reply-preview";
+    reply.setAttribute("role", "button");
+    reply.setAttribute("tabindex", "0");
+    reply.setAttribute("aria-label", `Reply to ${replyTo.senderName}: ${replyTo.body}`);
+    reply.title = "Jump to original message";
+
+    // Reply icon — clicking jumps to the original
+    const icon = document.createElement("span");
+    icon.className = "reply-preview__icon";
+    icon.textContent = "↩";
+    icon.setAttribute("aria-hidden", "true");
+    reply.appendChild(icon);
 
     const sender = document.createElement("span");
     sender.className = "reply-preview__sender";
-    sender.textContent = `<${msg.replyTo.senderName}>`;
+    // Strip @user:server.org → just the local part for display
+    const localPart = replyTo.senderName.startsWith("@")
+      ? replyTo.senderName.slice(1).split(":")[0]
+      : replyTo.senderName;
+    sender.textContent = localPart;
     reply.appendChild(sender);
 
     const body = document.createElement("span");
     body.className = "reply-preview__body";
-    body.textContent = msg.replyTo.body;
+    body.textContent = replyTo.body;
     reply.appendChild(body);
+
+    // Click / Enter → bubble a jump event up to the Timeline element
+    const jump = () => {
+      reply.dispatchEvent(
+        new CustomEvent("quark:jump-to-message", {
+          bubbles: true,
+          detail: { eventId: replyTo.eventId },
+        })
+      );
+    };
+    reply.addEventListener("click", jump);
+    reply.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jump(); }
+    });
 
     row.appendChild(reply);
   }
 
-  // ── Header (sender + timestamp) ────────────────────────────────────────
+  // ── Header (sender + timestamp) — only for ungrouped/system messages ──
   if (msg.type !== "system") {
     const header = document.createElement("div");
     header.className = "message__header";
@@ -130,11 +203,109 @@ function buildMessageElement(msg: MessageData): HTMLElement {
   return row;
 }
 
+/**
+ * Build a grouped wrapper for consecutive messages from the same sender.
+ * CSS-bordered box with the sender label positioned as an inline legend
+ * on the top border.
+ */
+function buildMessageGroup(msgs: MessageData[]): HTMLElement {
+  const first = msgs[0];
+  const group = document.createElement("div");
+  group.className = "message-group";
+
+  // ── Inline label (positioned on the top border via CSS) ────────────────
+  const label = document.createElement("div");
+  label.className = "message-group__header";
+
+  const sender = document.createElement("span");
+  sender.className = "message-group__sender" + (first.isOwn ? " message-group__sender--own" : "");
+  sender.textContent = first.senderName;
+  label.appendChild(sender);
+
+  const ts = document.createElement("span");
+  ts.className = "message-group__timestamp";
+  ts.textContent = formatTimestamp(first.timestamp);
+  ts.setAttribute("title", first.timestamp);
+  label.appendChild(ts);
+
+  group.appendChild(label);
+
+  // ── Messages (body only, no per-message header) ────────────────────────
+  for (const msg of msgs) {
+    const el = buildMessageElement(msg);
+    // Hide the per-message header since the group label covers it
+    const msgHeader = el.querySelector(".message__header");
+    if (msgHeader) (msgHeader as HTMLElement).style.display = "none";
+    group.appendChild(el);
+  }
+
+  // ── Wrapper: avatar to the left, box to the right ─────────────────────
+  const wrapper = document.createElement("div");
+  wrapper.className = "message-group-wrapper";
+
+  const avatar = buildAvatarElement(first.senderName, first.senderAvatarUrl);
+  wrapper.appendChild(avatar);
+  wrapper.appendChild(group);
+
+  return wrapper;
+}
+
+/** Check whether a message can be grouped (non-system text-like message). */
+function isGroupable(msg: MessageData): boolean {
+  return msg.type !== "system";
+}
+
+/**
+ * Group consecutive messages from the same sender into arrays.
+ * System messages, sender changes, and reply messages break the group —
+ * replies always start their own bubble so the reply preview is visually
+ * attached to the message that uses it.
+ */
+function groupMessages(msgs: MessageData[]): (MessageData | MessageData[])[] {
+  const result: (MessageData | MessageData[])[] = [];
+  let currentGroup: MessageData[] = [];
+
+  for (const msg of msgs) {
+    if (!isGroupable(msg)) {
+      // Flush any pending group
+      if (currentGroup.length > 0) {
+        result.push(currentGroup);
+        currentGroup = [];
+      }
+      result.push(msg); // ungrouped system message
+    } else if (
+      currentGroup.length > 0 &&
+      currentGroup[0].senderName === msg.senderName &&
+      !msg.replyTo // replies always start a fresh group
+    ) {
+      currentGroup.push(msg);
+    } else {
+      // Different sender, reply message, or first message — flush previous group
+      if (currentGroup.length > 0) {
+        result.push(currentGroup);
+      }
+      currentGroup = [msg];
+    }
+  }
+
+  if (currentGroup.length > 0) {
+    result.push(currentGroup);
+  }
+
+  return result;
+}
+
 export class Timeline {
   private _el: HTMLElement;
   private _listEl: HTMLElement;
   /** Whether the user has scrolled up away from the bottom */
   private _scrolledUp = false;
+  /** Track messages for grouping on append */
+  private _messages: MessageData[] = [];
+  /** Index of the currently selected (highlighted) message, or -1 for none */
+  private _selectedIndex = -1;
+  /** The last element appended via appendMessageHidden, pending reveal */
+  private _lastHiddenEl: HTMLElement | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -148,8 +319,13 @@ export class Timeline {
     // Track whether the user has scrolled away from the bottom
     this._el.addEventListener("scroll", () => {
       const { scrollTop, scrollHeight, clientHeight } = this._el;
-      // Consider "at bottom" if within 40px
       this._scrolledUp = scrollHeight - scrollTop - clientHeight > 40;
+    });
+
+    // Reply preview "jump to original" — fired by reply-preview clicks
+    this._listEl.addEventListener("quark:jump-to-message", (e: Event) => {
+      const { eventId } = (e as CustomEvent<{ eventId: string }>).detail;
+      this.scrollToMessage(eventId);
     });
   }
 
@@ -159,16 +335,49 @@ export class Timeline {
 
   /** Replace the entire message list */
   setMessages(msgs: MessageData[]): void {
-    this._listEl.innerHTML = "";
-    for (const msg of msgs) {
-      this._listEl.appendChild(buildMessageElement(msg));
-    }
+    this._messages = [...msgs];
+    this._renderAll();
     this._scrollToBottom();
   }
 
   /** Append a single message, scrolling to bottom if not scrolled up */
-  appendMessage(msg: MessageData): void {
-    this._listEl.appendChild(buildMessageElement(msg));
+  appendMessage(msg: MessageData, opts?: { animate?: boolean }): void {
+    this._messages.push(msg);
+    const animate = opts?.animate ?? false;
+
+    // Check if this message can be merged into the last group on screen
+    const lastWrapper = this._listEl.lastElementChild;
+    if (
+      lastWrapper &&
+      lastWrapper.classList.contains("message-group-wrapper") &&
+      isGroupable(msg)
+    ) {
+      // Check sender of the existing group
+      const innerGroup = lastWrapper.querySelector<HTMLElement>(".message-group");
+      const groupSender = innerGroup?.querySelector(".message-group__sender");
+      if (groupSender && groupSender.textContent === msg.senderName && !msg.replyTo) {
+        // Append into existing group (replies always start a new group)
+        const el = buildMessageElement(msg);
+        const msgHeader = el.querySelector(".message__header");
+        if (msgHeader) (msgHeader as HTMLElement).style.display = "none";
+        if (animate) el.classList.add("message--entering");
+        innerGroup!.appendChild(el);
+        if (!this._scrolledUp) this._scrollToBottom();
+        return;
+      }
+    }
+
+    // Otherwise, render as a new group or ungrouped element
+    if (isGroupable(msg)) {
+      const wrapper = buildMessageGroup([msg]);
+      if (animate) wrapper.classList.add("message-group-wrapper--entering");
+      this._listEl.appendChild(wrapper);
+    } else {
+      const el = buildMessageElement(msg);
+      el.classList.add("message--ungrouped");
+      this._listEl.appendChild(el);
+    }
+
     if (!this._scrolledUp) {
       this._scrollToBottom();
     }
@@ -179,10 +388,245 @@ export class Timeline {
     this._scrollToBottom();
   }
 
+  /** The event ID of the currently selected message, or null. */
+  get selectedMessageId(): string | null {
+    if (this._selectedIndex < 0 || this._selectedIndex >= this._messages.length) return null;
+    return this._messages[this._selectedIndex].id;
+  }
+
+  /** Move selection down by one message. Enters selection at the bottom if nothing selected. */
+  selectNext(): void {
+    if (this._messages.length === 0) return;
+    if (this._selectedIndex < 0) {
+      this._setSelected(this._messages.length - 1);
+    } else if (this._selectedIndex < this._messages.length - 1) {
+      this._setSelected(this._selectedIndex + 1);
+    }
+  }
+
+  /** Move selection up by one message. Enters selection at the bottom if nothing selected. */
+  selectPrev(): void {
+    if (this._messages.length === 0) return;
+    if (this._selectedIndex < 0) {
+      this._setSelected(this._messages.length - 1);
+    } else if (this._selectedIndex > 0) {
+      this._setSelected(this._selectedIndex - 1);
+    }
+  }
+
+  /** Jump selection to the first message. */
+  selectFirst(): void {
+    if (this._messages.length === 0) return;
+    this._setSelected(0);
+  }
+
+  /** Jump selection to the last message. */
+  selectLast(): void {
+    if (this._messages.length === 0) return;
+    this._setSelected(this._messages.length - 1);
+  }
+
+  /** Clear the current selection. */
+  clearSelection(): void {
+    this._setSelected(-1);
+  }
+
+  /**
+   * Append a message to the timeline but keep it invisible (opacity: 0).
+   * Call showLastHiddenMessage() to reveal it with an animation.
+   * Used for the send animation: message lands silently, then the flying
+   * clone arrives and this method reveals it at that moment.
+   */
+  appendMessageHidden(msg: MessageData): void {
+    this._messages.push(msg);
+
+    const lastWrapper = this._listEl.lastElementChild;
+    if (
+      lastWrapper &&
+      lastWrapper.classList.contains("message-group-wrapper") &&
+      isGroupable(msg)
+    ) {
+      const innerGroup = lastWrapper.querySelector<HTMLElement>(".message-group");
+      const groupSender = innerGroup?.querySelector(".message-group__sender");
+      if (groupSender && groupSender.textContent === msg.senderName && !msg.replyTo) {
+        const el = buildMessageElement(msg);
+        const msgHeader = el.querySelector(".message__header");
+        if (msgHeader) (msgHeader as HTMLElement).style.display = "none";
+        el.style.opacity = "0";
+        innerGroup!.appendChild(el);
+        this._lastHiddenEl = el;
+        if (!this._scrolledUp) this._scrollAnimated();
+        return;
+      }
+    }
+
+    if (isGroupable(msg)) {
+      const wrapper = buildMessageGroup([msg]);
+      wrapper.style.opacity = "0";
+      this._listEl.appendChild(wrapper);
+      this._lastHiddenEl = wrapper;
+      if (!this._scrolledUp) this._scrollAnimated();
+    } else {
+      const el = buildMessageElement(msg);
+      el.classList.add("message--ungrouped");
+      el.style.opacity = "0";
+      this._listEl.appendChild(el);
+      this._lastHiddenEl = el;
+      if (!this._scrolledUp) this._scrollAnimated();
+    }
+  }
+
+  /**
+   * Reveal a hidden message element (appended via appendMessageHidden).
+   * Pass the specific element captured at send time to avoid a race where
+   * rapid successive sends overwrite the shared _lastHiddenEl slot.
+   * For a new group: the box appears instantly and only the header fades in.
+   * For a merged message: fades it in.
+   */
+  showLastHiddenMessage(target?: HTMLElement): void {
+    const el = target ?? this._lastHiddenEl;
+    if (!el) return;
+    if (el === this._lastHiddenEl) this._lastHiddenEl = null;
+
+    if (el.classList.contains("message-group-wrapper")) {
+      const header = el.querySelector<HTMLElement>(".message-group__header");
+      const avatar = el.querySelector<HTMLElement>(".message-group__avatar, .message-group__avatar-fallback");
+
+      if (header) header.style.opacity = "0";
+      if (avatar) avatar.style.opacity = "0";
+      el.style.opacity = "";
+
+      requestAnimationFrame(() => {
+        if (header) {
+          header.style.opacity = "";
+          header.classList.add("msg-header--reveal");
+        }
+        if (avatar) {
+          avatar.style.opacity = "";
+          avatar.classList.add("msg-header--reveal");
+        }
+      });
+    } else {
+      el.style.opacity = "";
+    }
+  }
+
+  /** Returns the DOM element for the given message event ID, or null. */
+  getMessageElementById(eventId: string): HTMLElement | null {
+    return this._listEl.querySelector<HTMLElement>(`[data-message-id="${eventId}"]`);
+  }
+
+  /**
+   * Scroll to a message by event ID and briefly highlight it.
+   * No-ops silently if the event ID is not in the rendered timeline.
+   */
+  scrollToMessage(eventId: string): void {
+    const el = this.getMessageElementById(eventId);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.classList.remove("message--highlight"); // reset if re-triggered
+    // Force reflow so re-adding the class actually restarts the animation
+    void el.offsetWidth;
+    el.classList.add("message--highlight");
+    el.addEventListener("animationend", () => el.classList.remove("message--highlight"), { once: true });
+  }
+
+  /** Returns the last message-group-wrapper element, or null. */
+  getLastGroupWrapper(): HTMLElement | null {
+    const last = this._listEl.lastElementChild;
+    return last?.classList.contains("message-group-wrapper") ? (last as HTMLElement) : null;
+  }
+
+  /**
+   * Returns the element that was most recently appended via appendMessageHidden.
+   * For a new group this is the .message-group-wrapper; for a merge it's the
+   * .message inside the existing group. Used by the send animation to aim the
+   * flying clone at the correct target.
+   */
+  getLastHiddenEl(): HTMLElement | null {
+    return this._lastHiddenEl;
+  }
+
   // ── Private ──────────────────────────────────────────────────────────────
+
+  private _setSelected(index: number): void {
+    // Remove previous highlight
+    if (this._selectedIndex >= 0) {
+      const prev = this._getMessageElement(this._selectedIndex);
+      if (prev) {
+        prev.classList.remove("message--selected");
+        const prevGroup = prev.closest<HTMLElement>(".message-group");
+        if (prevGroup) prevGroup.classList.remove("message-group--selected");
+      }
+    }
+
+    this._selectedIndex = index;
+
+    // Apply new highlight
+    if (index >= 0) {
+      const el = this._getMessageElement(index);
+      if (el) {
+        el.classList.add("message--selected");
+        const group = el.closest<HTMLElement>(".message-group");
+        if (group) group.classList.add("message-group--selected");
+        el.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }
+
+  /** Find the DOM element for a message by its index in _messages. */
+  private _getMessageElement(index: number): HTMLElement | null {
+    if (index < 0 || index >= this._messages.length) return null;
+    const id = this._messages[index].id;
+    return this._listEl.querySelector<HTMLElement>(`[data-message-id="${id}"]`);
+  }
+
+  private _renderAll(): void {
+    this._listEl.innerHTML = "";
+    const groups = groupMessages(this._messages);
+    for (const entry of groups) {
+      if (Array.isArray(entry)) {
+        this._listEl.appendChild(buildMessageGroup(entry));
+      } else {
+        // Ungrouped (system) message
+        const el = buildMessageElement(entry);
+        el.classList.add("message--ungrouped");
+        this._listEl.appendChild(el);
+      }
+    }
+  }
 
   private _scrollToBottom(): void {
     this._el.scrollTop = this._el.scrollHeight;
     this._scrolledUp = false;
+  }
+
+  /**
+   * Instant scroll to bottom (so layout is accurate for measurements) with a
+   * visual counter-animation that hides the jump. The transform is deferred to
+   * the next rAF so that callers can still call getBoundingClientRect() on
+   * newly appended elements in the same synchronous execution context and get
+   * accurate positions.
+   */
+  private _scrollAnimated(): void {
+    const prevScrollTop = this._el.scrollTop;
+    this._el.scrollTop = this._el.scrollHeight;
+    this._scrolledUp = false;
+    const delta = this._el.scrollTop - prevScrollTop;
+    if (delta <= 0) return;
+
+    // Defer the visual counter-offset so measurements in the current frame are clean
+    requestAnimationFrame(() => {
+      this._listEl.style.transition = "none";
+      this._listEl.style.transform = `translateY(${delta}px)`;
+      requestAnimationFrame(() => {
+        this._listEl.style.transition = "transform 260ms cubic-bezier(0.25, 0.46, 0.45, 0.94)";
+        this._listEl.style.transform = "translateY(0)";
+      });
+      setTimeout(() => {
+        this._listEl.style.transition = "";
+        this._listEl.style.transform = "";
+      }, 300);
+    });
   }
 }

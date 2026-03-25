@@ -24,8 +24,9 @@ export async function sendMessage(
   roomId: string,
   body: string,
   formattedBody?: string,
+  inReplyTo?: string,
 ): Promise<string> {
-  return invoke<string>("send_message", { roomId, body, formattedBody });
+  return invoke<string>("send_message", { roomId, body, formattedBody, inReplyTo });
 }
 
 /**

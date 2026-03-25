@@ -38,6 +38,17 @@ function createReactionChip(reaction: ReactionGroup): HTMLElement {
     `${reaction.key} reaction, ${reaction.count} ${reaction.count === 1 ? "person" : "people"}${reaction.own ? ", reacted by you" : ""}`
   );
 
+  // Clicking a chip toggles that reaction — dispatch a bubbling event so the
+  // nearest [data-message-id] ancestor can be found by the global listener.
+  chip.addEventListener("click", () => {
+    chip.dispatchEvent(
+      new CustomEvent("quark:chip-react", {
+        bubbles: true,
+        detail: { key: reaction.key },
+      })
+    );
+  });
+
   // Emoji glyph or image
   if (reaction.imageUrl) {
     const img = document.createElement("img");

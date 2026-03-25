@@ -1,7 +1,7 @@
 // Mock IPC layer for browser-only dev mode (no Tauri backend)
 // Provides fake data so the UI renders and can be interacted with
 
-import type { RoomInfo, TimelineEvent, EmojiPack, GifResult } from "./types.js";
+import type { RoomInfo, TimelineEvent, EmojiPack, GifResult, RoomMember } from "./types.js";
 
 export interface CacheStats {
   total_size_bytes: number;
@@ -20,6 +20,28 @@ const MOCK_ROOMS: RoomInfo[] = [
 
 let msgCounter = 100;
 
+// Deterministic SVG avatar per sender (colored initial square)
+const AVATAR_COLORS: Record<string, string> = {
+  "@alice:matrix.org": "#00ff41",
+  "@bob:matrix.org":   "#00aaff",
+  "@carol:matrix.org": "#ff4466",
+  "@dave:matrix.org":  "#ffaa00",
+  "@you:matrix.org":   "#aa44ff",
+};
+
+function mockAvatar(sender: string): string {
+  const color = AVATAR_COLORS[sender] ?? "#888888";
+  const initial = sender.startsWith("@") ? sender[1].toUpperCase() : sender[0].toUpperCase();
+  const svg = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">`,
+    `<rect width="24" height="24" rx="3" fill="${color}" opacity="0.15"/>`,
+    `<rect width="24" height="24" rx="3" fill="none" stroke="${color}" stroke-width="1.2" opacity="0.7"/>`,
+    `<text x="12" y="17" text-anchor="middle" font-family="monospace" font-size="13" font-weight="bold" fill="${color}">${initial}</text>`,
+    `</svg>`,
+  ].join("");
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 function mockEvent(sender: string, body: string, minutesAgo: number): TimelineEvent {
   return {
     event_id: `$evt${msgCounter++}`,
@@ -36,20 +58,63 @@ function mockEvent(sender: string, body: string, minutesAgo: number): TimelineEv
     media_mimetype: null,
     media_width: null,
     media_height: null,
-  };
+    // Non-spec field used by mock layer only — picked up in timelineEventToMessage
+    _mock_avatar_url: mockAvatar(sender),
+  } as TimelineEvent & { _mock_avatar_url: string };
 }
 
+// Build the mock timeline. We capture event IDs from specific events so replies
+// can reference them by ID.
+const _aliceThemeEvent = mockEvent("@alice:matrix.org", "I just pushed the new theme system :partyblob:", 31);
+const _carolQuestionEvent = mockEvent("@carol:matrix.org", "Can we get a catppuccin variant too?", 20);
+
 const MOCK_TIMELINE: TimelineEvent[] = [
-  mockEvent("@alice:matrix.org", "hey everyone, check this out", 30),
-  mockEvent("@alice:matrix.org", "I just pushed the new theme system :partyblob:", 29),
+  // Alice sends three messages in a row — middle one has reactions, tests inline reaction layout
+  mockEvent("@alice:matrix.org", "hey everyone, check this out", 32),
+  { ..._aliceThemeEvent,
+    reactions: [
+      { key: "🎉", count: 4, own: false },
+      { key: "🚀", count: 2, own: true },
+    ] },
+  mockEvent("@alice:matrix.org", "also shipping the notification system today", 30),
+
   mockEvent("@bob:matrix.org", "nice! the phosphor theme looks great", 25),
-  mockEvent("@carol:matrix.org", "Can we get a catppuccin variant too?", 20),
+  // Bob replies to Alice's theme push — tests reply bubble break in a consecutive group
+  { ...mockEvent("@bob:matrix.org", "the vim keybindings feel really natural too", 24),
+    in_reply_to: _aliceThemeEvent.event_id },
+
+  _carolQuestionEvent,
+
+  // Alice again — two messages, second has reactions (tests bottom-corner treatment)
   mockEvent("@alice:matrix.org", "already done — try :theme catppuccin-mocha", 18),
-  mockEvent("@bob:matrix.org", "the vim keybindings feel really natural", 15),
-  mockEvent("@carol:matrix.org", "agreed, dd to redact is *chef's kiss*", 12),
+  { ...mockEvent("@alice:matrix.org", "eight built-in themes total now", 17),
+    reactions: [
+      { key: "👍", count: 3, own: true },
+    ] },
+
+  // Carol replies to her own question — tests same-sender reply bubble break
+  { ...mockEvent("@carol:matrix.org", "actually catppuccin latte too please!", 15),
+    in_reply_to: _carolQuestionEvent.event_id },
+
+  { ...mockEvent("@carol:matrix.org", "agreed, dd to redact is *chef's kiss*", 12),
+    reactions: [
+      { key: "😄", count: 2, own: false },
+      { key: "💯", count: 1, own: false },
+    ] },
+
   mockEvent("@dave:matrix.org", "just joined, this client looks amazing", 8),
   mockEvent("@alice:matrix.org", "welcome! try :help to see available commands", 5),
   mockEvent("@bob:matrix.org", "anyone working on the sticker packs?", 2),
+];
+
+const MOCK_MEMBERS: RoomMember[] = [
+  { user_id: "@alice:matrix.org", display_name: "Alice", avatar_url: null, power_level: "admin", presence: "online" },
+  { user_id: "@bob:matrix.org",   display_name: "Bob",   avatar_url: null, power_level: "mod",   presence: "online" },
+  { user_id: "@carol:matrix.org", display_name: "Carol", avatar_url: null, power_level: "member", presence: "unavailable" },
+  { user_id: "@dave:matrix.org",  display_name: "Dave",  avatar_url: null, power_level: "member", presence: "offline" },
+  { user_id: "@you:matrix.org",   display_name: "you",   avatar_url: null, power_level: "member", presence: "online" },
+  { user_id: "@eve:matrix.org",   display_name: "Eve",   avatar_url: null, power_level: "member", presence: "offline" },
+  { user_id: "@frank:matrix.org", display_name: "Frank", avatar_url: null, power_level: "member", presence: "offline" },
 ];
 
 // Check if we're running inside Tauri
@@ -69,9 +134,13 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return MOCK_ROOMS;
     case "get_timeline":
       return MOCK_TIMELINE;
+    case "get_room_members":
+      return MOCK_MEMBERS;
     case "send_message": {
       const body = args?.body as string ?? "";
-      MOCK_TIMELINE.push(mockEvent("@you:matrix.org", body, 0));
+      const ev = mockEvent("@you:matrix.org", body, 0);
+      if (args?.inReplyTo) ev.in_reply_to = args.inReplyTo as string;
+      MOCK_TIMELINE.push(ev);
       return null;
     }
     case "join_room":
@@ -89,14 +158,65 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     case "get_space_children":
       return MOCK_ROOMS.slice(0, 3);
     case "load_theme":
-      return null;
+      // Return a minimal theme object so :theme commands don't crash in debug mode
+      return {
+        name: (args?.name as string) ?? "mock",
+        colors: {},
+      };
     case "get_cache_stats":
       return { total_size_bytes: 15728640, entry_count: 42, max_size_bytes: 209715200, usage_percent: 7.5 } as CacheStats;
     case "get_emoji_packs":
+      return [
+        {
+          pack_id: "mock-custom",
+          display_name: "Mock Emoji",
+          avatar_url: null,
+          source: "user",
+          room_id: null,
+          emojis: [
+            { shortcode: "partyblob", url: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='28'>🎉</text></svg>", body: "Party blob", usage: ["emoticon"] },
+            { shortcode: "blobcat", url: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='28'>🐱</text></svg>", body: "Blob cat", usage: ["emoticon"] },
+            { shortcode: "blobwave", url: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='28'>👋</text></svg>", body: "Blob wave", usage: ["emoticon"] },
+          ],
+        },
+      ] as EmojiPack[];
     case "get_sticker_packs":
       return [] as EmojiPack[];
-    case "search_gifs":
-      return [] as GifResult[];
+    case "search_gifs": {
+      const query = ((args?.query as string) ?? "").toLowerCase();
+      // Placeholder SVG thumbnails so the grid actually renders in dev mode
+      const makeSvg = (label: string, color: string) =>
+        `data:image/svg+xml,${encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90" viewBox="0 0 160 90">` +
+          `<rect width="160" height="90" fill="${color}" opacity="0.15"/>` +
+          `<rect width="160" height="90" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.6"/>` +
+          `<text x="80" y="50" text-anchor="middle" font-family="monospace" font-size="11" fill="${color}">${label}</text>` +
+          `<text x="80" y="70" text-anchor="middle" font-family="monospace" font-size="9" fill="${color}" opacity="0.6">GIF</text>` +
+          `</svg>`,
+        )}`;
+      const MOCK_GIFS: GifResult[] = [
+        { id: "gif1", title: "Happy Dance", url: "https://example.com/gifs/dance.gif",     preview_url: makeSvg("happy dance", "#00ff41"),  width: 480, height: 270 },
+        { id: "gif2", title: "Thumbs Up",   url: "https://example.com/gifs/thumbsup.gif",  preview_url: makeSvg("thumbs up",   "#00aaff"),  width: 320, height: 240 },
+        { id: "gif3", title: "Cat Typing",  url: "https://example.com/gifs/cattype.gif",   preview_url: makeSvg("cat typing",  "#ff4466"),  width: 480, height: 320 },
+        { id: "gif4", title: "Mind Blown",  url: "https://example.com/gifs/mindblown.gif", preview_url: makeSvg("mind blown",  "#ffaa00"),  width: 400, height: 300 },
+        { id: "gif5", title: "Applause",    url: "https://example.com/gifs/applause.gif",  preview_url: makeSvg("applause",    "#aa44ff"),  width: 480, height: 270 },
+        { id: "gif6", title: "Facepalm",    url: "https://example.com/gifs/facepalm.gif",  preview_url: makeSvg("facepalm",    "#888888"),  width: 360, height: 240 },
+      ];
+      if (query) {
+        return MOCK_GIFS.filter((g) => g.title.toLowerCase().includes(query));
+      }
+      return MOCK_GIFS;
+    }
+    case "send_gif": {
+      const title = (args?.title as string) ?? "GIF";
+      MOCK_TIMELINE.push({
+        ...mockEvent("@you:matrix.org", `[GIF: ${title}]`, 0),
+        msg_type: "m.image",
+        media_url: (args?.gifUrl as string) ?? "",
+        media_mimetype: "image/gif",
+      } as TimelineEvent);
+      return "$mock-gif-event-id";
+    }
     case "get_notification_config":
       return { enabled: true, show_body: true, show_sender: true, mute_rooms: [], quiet_hours: null };
     default:

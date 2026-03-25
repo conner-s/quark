@@ -5,13 +5,22 @@ import { keymapManager } from "../vim/keybindings.js";
 import type { AppComponents } from "../ui/App.js";
 import {
   sendMessage,
+  sendReaction,
   cancelReply,
   openEmojiPicker,
   openGifPicker,
   executeCommand,
   toggleMemberList,
+  startReply,
+  redactMessage,
+  openThread,
+  openQuickReactPicker,
+  setupReactionChipHandler,
 } from "./actions.js";
 import { AppState } from "./state.js";
+import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
+import { filterShortcodes, type ShortcodeEntry } from "../ui/ShortcodePreview.js";
+import { getEmojiPacks } from "../ipc/emoji.js";
 
 // ── Default keybindings ───────────────────────────────────────────────────────
 
@@ -51,7 +60,7 @@ function registerDefaultBindings(): void {
 // ── Action dispatcher ─────────────────────────────────────────────────────────
 
 function dispatchAction(action: string, components: AppComponents): void {
-  const { input, commandBar } = components;
+  const { input, commandBar, timeline } = components;
 
   switch (action) {
     case "mode-insert":
@@ -68,17 +77,59 @@ function dispatchAction(action: string, components: AppComponents): void {
       modeManager.transition(Mode.Visual);
       break;
 
+    // ── Navigation — handled directly on Timeline ───────────────────────
     case "nav-down":
+      timeline.selectNext();
+      break;
+
     case "nav-up":
+      timeline.selectPrev();
+      break;
+
     case "jump-top":
+      timeline.selectFirst();
+      break;
+
     case "jump-bottom":
-    case "reply":
-    case "react":
-    case "redact":
+      timeline.selectLast();
+      break;
+
+    // ── Message actions — operate on the selected message ───────────────
+    case "reply": {
+      const msgId = timeline.selectedMessageId;
+      if (msgId) {
+        const events = AppState.get("currentTimeline");
+        const evt = events.find((e) => e.event_id === msgId);
+        if (evt) {
+          startReply(msgId, evt.sender, evt.body.slice(0, 80));
+          modeManager.transition(Mode.Insert);
+          input.focus();
+        }
+      }
+      break;
+    }
+
+    case "redact": {
+      const msgId = timeline.selectedMessageId;
+      if (msgId) void redactMessage(msgId);
+      break;
+    }
+
+    case "open-thread": {
+      const msgId = timeline.selectedMessageId;
+      if (msgId) void openThread(msgId);
+      break;
+    }
+
+    case "react": {
+      const msgId = timeline.selectedMessageId;
+      if (msgId) openQuickReactPicker(msgId);
+      break;
+    }
+
     case "edit":
-    case "open-thread":
     case "select-room":
-      // Emit custom event for context-specific handlers to consume
+      // Emit custom event for context-specific handlers that need more UI
       document.dispatchEvent(new CustomEvent("quark:action", { detail: { action } }));
       break;
 
@@ -90,6 +141,69 @@ function dispatchAction(action: string, components: AppComponents): void {
       document.dispatchEvent(new CustomEvent("quark:action", { detail: { action } }));
       break;
   }
+}
+
+// ── Shortcode autocomplete ──────────────────────────────────────────────────
+
+/** Cached custom emoji entries from server packs (refreshed per room). */
+let _customEmoji: ShortcodeEntry[] = [];
+let _customEmojiRoomId: string | null = null;
+
+/**
+ * Refresh the custom emoji cache when the room changes.
+ * Falls back silently to an empty list on error.
+ */
+async function refreshCustomEmoji(): Promise<void> {
+  const roomId = AppState.get("currentRoomId");
+  if (roomId === _customEmojiRoomId) return;
+  _customEmojiRoomId = roomId;
+
+  try {
+    const packs = await getEmojiPacks(roomId ?? undefined);
+    _customEmoji = [];
+    for (const pack of packs) {
+      for (const entry of pack.emojis) {
+        _customEmoji.push({
+          key: `:${entry.shortcode}:`,
+          shortcode: entry.shortcode,
+          imageUrl: entry.url,
+        });
+      }
+    }
+  } catch {
+    _customEmoji = [];
+  }
+}
+
+/** All available shortcode entries (built-in + custom). */
+function allShortcodes(): ShortcodeEntry[] {
+  return [..._customEmoji, ...BUILTIN_EMOJI];
+}
+
+/**
+ * Extract the active shortcode query from the input value.
+ * Returns the query text (without the colon) if the cursor is in a `:query` span,
+ * or null if no shortcode is being typed.
+ */
+function extractShortcodeQuery(value: string): string | null {
+  // Find the last unmatched colon
+  const lastColon = value.lastIndexOf(":");
+  if (lastColon < 0) return null;
+
+  const query = value.slice(lastColon + 1);
+  // Must have at least 1 character after the colon and no spaces
+  if (query.length < 1 || /\s/.test(query)) return null;
+  // Don't trigger if the colon is preceded by another colon (already closed like :foo:)
+  // Check that this colon isn't the closing colon of a previous shortcode
+  const beforeColon = value.slice(0, lastColon);
+  const prevColon = beforeColon.lastIndexOf(":");
+  if (prevColon >= 0) {
+    const between = beforeColon.slice(prevColon + 1);
+    // If the text between the two colons has no spaces, the last colon closes a shortcode
+    if (between.length > 0 && !/\s/.test(between)) return null;
+  }
+
+  return query;
 }
 
 // ── Insert mode keyboard handlers ─────────────────────────────────────────────
@@ -120,11 +234,11 @@ function handleInsertKeydown(e: KeyboardEvent, components: AppComponents): void 
   // Enter → send message (or reply)
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
+    shortcodePreview.hide();
     const body = input.getValue().trim();
     if (body) {
       void sendMessage(body);
     }
-    modeManager.transition(Mode.Normal);
     return;
   }
 
@@ -143,11 +257,26 @@ function handleInsertKeydown(e: KeyboardEvent, components: AppComponents): void 
 export function setupKeyboard(components: AppComponents): void {
   registerDefaultBindings();
 
-  const { input, commandBar } = components;
+  // Wire quick react picker → sendReaction
+  components.quickReactPicker.onReact((eventId, key) => {
+    void sendReaction(eventId, key);
+  });
 
-  // Sync mode indicators
+  // Wire reaction chip clicks (bubbling custom events) → sendReaction
+  setupReactionChipHandler();
+
+  const { input, commandBar, shortcodePreview, timeline,
+          emojiPicker, gifPicker, stickerPicker, verification, helpDialog, quickReactPicker } = components;
+
+  // Sync mode indicators + blur/focus on mode change
   modeManager.on((_from, to) => {
     input.setMode(to);
+
+    if (to === Mode.Normal) {
+      // Blur the input so normal-mode keys don't type into the textbox
+      input.blur();
+      shortcodePreview.hide();
+    }
   });
 
   // Command bar wiring
@@ -170,15 +299,63 @@ export function setupKeyboard(components: AppComponents): void {
     AppState.set("threadRootEventId", null);
   });
 
-  // Global keydown
+  // ── Shortcode preview wiring ────────────────────────────────────────────
+  shortcodePreview.onSelect((entry) => {
+    const value = input.getValue();
+    const lastColon = value.lastIndexOf(":");
+    if (lastColon >= 0) {
+      // Replace :query with the emoji
+      const before = value.slice(0, lastColon);
+      const replacement = entry.imageUrl ? `:${entry.shortcode}: ` : `${entry.key} `;
+      input.setValue(before + replacement);
+    }
+    input.focus();
+  });
+
+  input.onInput((value) => {
+    if (modeManager.current !== Mode.Insert) return;
+
+    const query = extractShortcodeQuery(value);
+    if (query) {
+      const all = allShortcodes();
+      const matches = filterShortcodes(all, query);
+      console.debug("[shortcode]", { value, query, allCount: all.length, matchCount: matches.length });
+      if (matches.length > 0) {
+        shortcodePreview.show(matches);
+      } else {
+        shortcodePreview.hide();
+      }
+    } else {
+      shortcodePreview.hide();
+    }
+  });
+
+  // Refresh custom emoji when room changes
+  AppState.on("currentRoomId", () => {
+    void refreshCustomEmoji();
+  });
+
+  // ── Global keydown ──────────────────────────────────────────────────────
   document.addEventListener("keydown", (e) => {
     const mode = modeManager.current;
 
-    // Escape always resets to Normal (if not already) and clears sequences
-    if (e.key === "Escape") {
+    // Modal overlays with their own input (QuickReactPicker, etc.) handle all
+    // their own keys with stopPropagation. The check here is a belt-and-
+    // suspenders guard for the case where focus escapes the overlay element.
+    if (components.quickReactPicker.isVisible()) return;
+
+    // Escape (or Ctrl+[) always resets to Normal (if not already) and clears sequences
+    if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
       modeManager.transition(Mode.Normal);
       keymapManager.resetSequence();
       commandBar.hide();
+      emojiPicker.hide();
+      gifPicker.hide();
+      stickerPicker.hide();
+      verification.hide();
+      helpDialog.hide();
+      quickReactPicker.hide();
+      timeline.clearSelection();
       return;
     }
 
@@ -204,10 +381,20 @@ export function setupKeyboard(components: AppComponents): void {
 
     if (result.kind === "action") {
       e.preventDefault();
+      e.stopPropagation();
       dispatchAction(result.action, components);
     } else if (result.kind === "partial") {
       e.preventDefault();
+      e.stopPropagation();
+    } else {
+      // "none" — in Normal mode, prevent any key from reaching a focused input
+      if (mode === Mode.Normal || mode === Mode.Visual) {
+        // Allow modifier-only keys, function keys, and browser shortcuts through
+        const passthrough = e.key.length > 1 || e.ctrlKey || e.metaKey || e.altKey;
+        if (!passthrough) {
+          e.preventDefault();
+        }
+      }
     }
-    // "none" — pass through
   });
 }

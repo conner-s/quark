@@ -2,13 +2,14 @@ use matrix_sdk::{
     room::MessagesOptions,
     ruma::{
         events::{
+            relation::InReplyTo,
             room::message::{
                 MessageType, OriginalSyncRoomMessageEvent, Relation,
                 RoomMessageEventContent, TextMessageEventContent,
             },
             AnySyncMessageLikeEvent, AnySyncTimelineEvent, SyncMessageLikeEvent,
         },
-        EventId, RoomId, TransactionId, UInt,
+        EventId, OwnedEventId, RoomId, TransactionId, UInt,
     },
     Client,
 };
@@ -246,12 +247,13 @@ fn extract_relations(
     (is_edit, relates_to_event_id, in_reply_to, thread_root)
 }
 
-/// Send a plain text message to a room.
+/// Send a plain text message to a room, optionally as a reply.
 pub async fn send_message(
     client: &Client,
     room_id: &str,
     body: &str,
     formatted_body: Option<&str>,
+    in_reply_to: Option<&str>,
 ) -> Result<String, String> {
     let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
 
@@ -259,11 +261,19 @@ pub async fn send_message(
         .get_room(&room_id)
         .ok_or_else(|| format!("Room {} not found", room_id))?;
 
-    let content = if let Some(formatted) = formatted_body {
+    let mut content = if let Some(formatted) = formatted_body {
         RoomMessageEventContent::text_html(body, formatted)
     } else {
         RoomMessageEventContent::text_plain(body)
     };
+
+    if let Some(reply_event_id) = in_reply_to {
+        let owned_id = OwnedEventId::try_from(reply_event_id)
+            .map_err(|e| format!("Invalid reply event ID: {e}"))?;
+        content.relates_to = Some(Relation::Reply {
+            in_reply_to: InReplyTo::new(owned_id),
+        });
+    }
 
     let response = room
         .send(content)
@@ -312,6 +322,52 @@ pub async fn edit_message(
     let response_event_id = response.event_id.to_string();
     info!(original = %event_id, edit_event = %response_event_id, "Message edited");
     Ok(response_event_id)
+}
+
+/// Send an image (m.image) event to a room.
+pub async fn send_image(
+    client: &Client,
+    room_id: &str,
+    body: &str,
+    mxc_url: &str,
+    mime_type: &str,
+    width: Option<u64>,
+    height: Option<u64>,
+) -> Result<String, String> {
+    use matrix_sdk::ruma::{
+        events::room::{
+            message::ImageMessageEventContent,
+            ImageInfo, MediaSource,
+        },
+        MxcUri,
+    };
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {} not found", room_id))?;
+
+    let mxc_uri = <&MxcUri>::try_from(mxc_url).map_err(|e| format!("Invalid mxc URI: {e}"))?;
+    let source = MediaSource::Plain(mxc_uri.to_owned());
+
+    let mut img_info = ImageInfo::default();
+    img_info.mimetype = Some(mime_type.to_string());
+    img_info.width = width.and_then(|w| UInt::try_from(w).ok());
+    img_info.height = height.and_then(|h| UInt::try_from(h).ok());
+
+    let mut img_content = ImageMessageEventContent::new(body.to_string(), source);
+    img_content.info = Some(Box::new(img_info));
+
+    let msg_content = RoomMessageEventContent::new(MessageType::Image(img_content));
+
+    let response = room
+        .send(msg_content)
+        .await
+        .map_err(|e| format!("Failed to send image: {e}"))?;
+
+    let event_id = response.event_id.to_string();
+    info!(event_id = %event_id, "Image sent");
+    Ok(event_id)
 }
 
 /// Redact (delete) a message.

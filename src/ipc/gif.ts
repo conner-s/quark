@@ -32,3 +32,18 @@ export async function searchGifs(
     rating,
   });
 }
+
+/**
+ * Download a GIF from an external URL, upload it to the homeserver,
+ * and send it as an m.image event in the given room.
+ * Matches the Rust `send_gif` command.
+ */
+export async function sendGif(
+  roomId: string,
+  gifUrl: string,
+  title: string,
+  width: number,
+  height: number,
+): Promise<string> {
+  return invoke<string>("send_gif", { roomId, gifUrl, title, width, height });
+}

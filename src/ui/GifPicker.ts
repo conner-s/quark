@@ -1,14 +1,7 @@
 // GIF search overlay
 
-export interface GifResult {
-  id: string;
-  /** URL to the animated preview thumbnail (low-res) */
-  previewUrl: string;
-  /** URL to the full-size GIF for upload */
-  url: string;
-  /** Alt text / title */
-  title: string;
-}
+import type { GifResult } from "../ipc/types.js";
+export type { GifResult };
 
 type GifSelectCallback = (gif: GifResult) => void;
 type GifSearchCallback = (query: string) => void;
@@ -16,9 +9,10 @@ type GifLoadMoreCallback = () => void;
 
 const GIF_COLS = 3;
 
-/** GIF search overlay with keyboard-navigable grid. */
+/** GIF search popup with keyboard-navigable grid. */
 export class GifPicker {
-  private _el: HTMLElement;
+  private _el: HTMLElement;        // backdrop
+  private _panelEl: HTMLElement;   // floating panel
   private _searchEl: HTMLInputElement;
   private _statusEl: HTMLElement;
   private _gridEl: HTMLElement;
@@ -31,6 +25,7 @@ export class GifPicker {
   private _onLoadMore: GifLoadMoreCallback | null = null;
 
   constructor() {
+    // ── Backdrop ─────────────────────────────────────────────────────────
     this._el = document.createElement("div");
     this._el.className = "gif-picker";
     this._el.setAttribute("role", "dialog");
@@ -38,25 +33,51 @@ export class GifPicker {
     this._el.setAttribute("aria-modal", "true");
     this._el.style.display = "none";
 
+    // Close on backdrop click (outside panel)
+    this._el.addEventListener("click", (e) => {
+      if (e.target === this._el) this.hide();
+    });
+
+    // ── Panel ─────────────────────────────────────────────────────────────
+    this._panelEl = document.createElement("div");
+    this._panelEl.className = "gif-picker__panel";
+    this._el.appendChild(this._panelEl);
+
     // ── Header ───────────────────────────────────────────────────────────
     const header = document.createElement("div");
     header.className = "gif-picker__header";
-    this._el.appendChild(header);
+    this._panelEl.appendChild(header);
 
     const title = document.createElement("span");
     title.className = "gif-picker__title";
     title.textContent = "GIF Search";
     header.appendChild(title);
 
+    const closeHint = document.createElement("span");
+    closeHint.className = "gif-picker__close-hint";
+    closeHint.textContent = "Esc";
+    closeHint.setAttribute("aria-hidden", "true");
+    header.appendChild(closeHint);
+
     // ── Search input ─────────────────────────────────────────────────────
+    const searchWrap = document.createElement("div");
+    searchWrap.className = "gif-picker__search-wrap";
+    this._panelEl.appendChild(searchWrap);
+
+    const searchPrompt = document.createElement("span");
+    searchPrompt.className = "gif-picker__search-prompt";
+    searchPrompt.textContent = "/";
+    searchPrompt.setAttribute("aria-hidden", "true");
+    searchWrap.appendChild(searchPrompt);
+
     this._searchEl = document.createElement("input");
     this._searchEl.type = "text";
     this._searchEl.className = "gif-picker__search";
-    this._searchEl.placeholder = "Search GIFs…";
+    this._searchEl.placeholder = "search GIFs…";
     this._searchEl.setAttribute("aria-label", "Search GIFs");
     this._searchEl.setAttribute("autocomplete", "off");
     this._searchEl.setAttribute("spellcheck", "false");
-    this._el.appendChild(this._searchEl);
+    searchWrap.appendChild(this._searchEl);
 
     this._searchEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
@@ -65,18 +86,18 @@ export class GifPicker {
       }
     });
 
-    // ── Status / hint bar ────────────────────────────────────────────────
-    this._statusEl = document.createElement("div");
-    this._statusEl.className = "gif-picker__status";
-    this._statusEl.textContent = "Type to search · Tab: more results · Enter: send · Esc: close";
-    this._el.appendChild(this._statusEl);
-
     // ── Grid ─────────────────────────────────────────────────────────────
     this._gridEl = document.createElement("div");
     this._gridEl.className = "gif-picker__grid";
     this._gridEl.setAttribute("role", "grid");
     this._gridEl.setAttribute("aria-label", "GIF results");
-    this._el.appendChild(this._gridEl);
+    this._panelEl.appendChild(this._gridEl);
+
+    // ── Status / hint bar ────────────────────────────────────────────────
+    this._statusEl = document.createElement("div");
+    this._statusEl.className = "gif-picker__status";
+    this._statusEl.textContent = "Enter to search · j/k/h/l navigate · Tab more · Esc close";
+    this._panelEl.appendChild(this._statusEl);
 
     // ── Keyboard handling ────────────────────────────────────────────────
     this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
@@ -99,7 +120,7 @@ export class GifPicker {
   }
 
   show(): void {
-    this._el.style.display = "";
+    this._el.style.display = "flex";
     this._searchEl.focus();
   }
 
@@ -127,6 +148,14 @@ export class GifPicker {
   private _renderGrid(): void {
     this._gridEl.innerHTML = "";
 
+    if (this._results.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "gif-picker__empty";
+      empty.textContent = "No results";
+      this._gridEl.appendChild(empty);
+      return;
+    }
+
     for (let i = 0; i < this._results.length; i++) {
       const gif = this._results[i];
       const cell = document.createElement("button");
@@ -139,11 +168,16 @@ export class GifPicker {
       cell.dataset.index = String(i);
 
       const img = document.createElement("img");
-      img.src = gif.previewUrl;
+      img.src = gif.preview_url;
       img.alt = gif.title;
       img.className = "gif-picker__thumbnail";
       img.loading = "lazy";
       cell.appendChild(img);
+
+      const label = document.createElement("span");
+      label.className = "gif-picker__cell-label";
+      label.textContent = gif.title;
+      cell.appendChild(label);
 
       cell.addEventListener("click", () => this._selectIndex(i));
       this._gridEl.appendChild(cell);
@@ -169,13 +203,12 @@ export class GifPicker {
   }
 
   private _handleKeydown(e: KeyboardEvent): void {
-    // Allow normal typing in search box — only intercept non-input keys
+    // Allow normal typing in search box — only intercept Escape
     if (document.activeElement === this._searchEl) {
       if (e.key === "Escape") {
         e.preventDefault();
         this.hide();
       }
-      // Other keys pass through to the search input normally
       return;
     }
 

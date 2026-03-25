@@ -23,6 +23,7 @@ body {
   font-smooth: never;
 }
 
+
 /* ── Selection ───────────────────────────────────────────────────────────── */
 
 ::selection {
@@ -75,6 +76,11 @@ body {
   overflow: hidden;
 }
 
+/* Member list open: add a 4th column */
+.quark-layout--member-list-open {
+  grid-template-columns: var(--space-strip-width) var(--room-list-width) 1fr var(--member-list-width);
+}
+
 /* ── Space strip (leftmost narrow column) ────────────────────────────────── */
 
 .space-strip {
@@ -103,6 +109,8 @@ body {
   user-select: none;
   flex-shrink: 0;
   outline: none;
+  transition: color var(--transition-speed), background-color var(--transition-speed),
+    box-shadow var(--transition-speed);
 }
 
 .space-strip__item:hover {
@@ -118,6 +126,7 @@ body {
 .space-strip__item--active {
   color: var(--accent-primary);
   background-color: var(--roomlist-active-bg);
+  text-shadow: 0 0 var(--glow-radius) var(--glow-color);
 }
 
 .space-strip__item--active::before {
@@ -186,6 +195,8 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   outline: none;
+  transition: color var(--transition-speed), background-color var(--transition-speed),
+    text-shadow var(--transition-speed);
 }
 
 .room-list__item:hover {
@@ -200,14 +211,22 @@ body {
 .room-list__item--active {
   background-color: var(--roomlist-active-bg);
   color: var(--roomlist-active-fg);
+  text-shadow: 0 0 var(--glow-radius) var(--glow-color);
 }
 
 .room-list__item--unread {
   color: var(--roomlist-unread);
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.15);
+  animation: unread-pulse 2s ease-in-out infinite;
 }
 
 .room-list__item--muted {
   color: var(--roomlist-muted);
+}
+
+@keyframes unread-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 .room-list__item-name {
@@ -222,6 +241,124 @@ body {
   color: var(--roomlist-mention-badge);
   flex-shrink: 0;
 }
+
+/* ── Member list sidebar (column 4, toggled via .quark-layout--member-list-open) */
+
+.member-list {
+  grid-column: 4;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--bg);
+  border-left: var(--border-width) solid var(--border-color);
+  min-width: 0;
+}
+
+/* When the layout class is absent the element still exists in the DOM but
+   the grid column doesn't exist, so clip it to zero width. */
+.quark-layout:not(.quark-layout--member-list-open) .member-list {
+  width: 0;
+  overflow: hidden;
+  border: none;
+}
+
+.member-list__header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.member-list__header-title {
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.member-list__count {
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+}
+
+.member-list__scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.member-list__section-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 2px;
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  user-select: none;
+}
+
+.member-list__section-header:hover {
+  color: var(--fg);
+}
+
+.member-list__section-arrow {
+  font-size: calc(var(--font-size) - 3px);
+}
+
+.member-list__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 12px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  outline: none;
+  transition: background-color var(--transition-speed);
+}
+
+.member-list__item:hover {
+  background-color: var(--roomlist-active-bg);
+}
+
+.member-list__item:focus {
+  box-shadow: inset 0 0 0 var(--focus-width) var(--focus-color);
+}
+
+.member-list__item--active {
+  background-color: var(--roomlist-active-bg);
+  color: var(--roomlist-active-fg);
+}
+
+.member-list__presence {
+  font-size: 8px;
+  flex-shrink: 0;
+}
+
+.member-list__presence--online    { color: var(--accent-success); }
+.member-list__presence--unavailable { color: var(--accent-warning); }
+.member-list__presence--offline   { color: var(--roomlist-muted); }
+
+.member-list__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: calc(var(--font-size) - 1px);
+}
+
+.member-list__badge {
+  font-size: calc(var(--font-size) - 3px);
+  flex-shrink: 0;
+}
+
+.member-list__badge--admin { color: var(--accent-error); }
+.member-list__badge--mod   { color: var(--accent-warning); }
 
 /* ── Main panel (timeline + input bar) ───────────────────────────────────── */
 
@@ -243,30 +380,196 @@ body {
   text-overflow: ellipsis;
 }
 
+/* ── Content area (column 3 of the grid) ────────────────────────────────── */
+
+.content-area {
+  grid-column: 3;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--bg);
+  min-height: 0;
+  position: relative;
+}
+
 /* ── Timeline ────────────────────────────────────────────────────────────── */
 
 .timeline {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px 12px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: var(--message-spacing);
+  gap: 12px;
+  min-height: 0;
 }
+
+/* ── Message group (consecutive messages from the same sender) ──────────── */
+/* CSS-bordered box with a fieldset-legend–style inline sender label.       */
+
+.message-group {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 8px;
+  position: relative;
+  margin-top: calc(var(--font-size) * 0.5 + 8px);
+  margin-bottom: calc(var(--font-size) * 1.75);
+  padding-top: calc(var(--font-size) * var(--line-height) * 0.25);
+  transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
+}
+
+.message-group:hover {
+  border-color: color-mix(in srgb, var(--border-color) 70%, var(--accent-primary));
+}
+
+.message-group--selected {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 30%, transparent),
+              inset 0 0 12px color-mix(in srgb, var(--accent-primary) 5%, transparent);
+}
+
+.message-group--selected .message-group__sender {
+  color: var(--accent-primary);
+  text-shadow: 0 0 var(--glow-radius) var(--glow-color);
+}
+
+/* ── Inline sender label (sits on the top border) ───────────────────────── */
+
+.message-group__header {
+  position: absolute;
+  top: -2px;
+  transform: translateY(-50%);
+  left: 1.5ch;
+  right: 1.5ch;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0.6ch;
+  white-space: nowrap;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ── Message group wrapper (avatar + box side by side) ───────────────────── */
+
+.message-group-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.message-group-wrapper .message-group {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Avatar (left of the message box, top-aligned to the border) ─────────── */
+
+.message-group__avatar,
+.message-group__avatar-fallback {
+  width: 24px;
+  height: 24px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  /* Offset down to align with the box's top border, accounting for the
+     space the header label overflows above the border. */
+  margin-top: calc(var(--font-size) * 0.5 + 18px);
+}
+
+.message-group__avatar {
+  object-fit: cover;
+  display: block;
+}
+
+.message-group__avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  /* color and border-color set inline from JS */
+}
+
+.message-group__sender {
+  color: var(--msg-other);
+  flex-shrink: 0;
+  background-color: var(--bg);
+  padding: 0 0.4ch;
+}
+
+.message-group__sender--own {
+  color: var(--msg-own);
+  text-shadow: 0 0 var(--glow-radius) var(--glow-color);
+}
+
+.message-group__timestamp {
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  flex-shrink: 0;
+  margin-left: auto;
+  background-color: var(--bg);
+  padding: 0 0.4ch;
+}
+
+/* ── Individual messages inside a group ─────────────────────────────────── */
 
 .message {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 2px 0;
+  padding: 4px 10px;
   outline: none;
+  position: relative;
+  transition: background-color var(--transition-speed);
+}
+
+/* Dashed separator between messages in the same group */
+.message-group .message + .message {
+  border-top: 1px dashed color-mix(in srgb, var(--border-color) 60%, transparent);
+}
+
+.message-group .message {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.message:hover {
+  background-color: rgba(255, 255, 255, 0.02);
 }
 
 .message:focus {
   background-color: var(--roomlist-active-bg);
-  box-shadow: inset 2px 0 0 var(--focus-color);
+  box-shadow: inset 3px 0 0 var(--focus-color);
   outline: none;
+}
+
+.message--selected {
+  background-color: color-mix(in srgb, var(--accent-primary) 6%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+.message--selected::before {
+  content: "▸";
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--accent-primary);
+  font-size: calc(var(--font-size) - 2px);
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* ── Ungrouped messages (system, standalone) ─────────────────────────────── */
+
+.message--ungrouped {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 8px;
+  padding: 4px 10px;
+}
+
+.message--ungrouped:hover {
+  border-color: color-mix(in srgb, var(--border-color) 70%, var(--accent-primary));
 }
 
 .message__header {
@@ -307,30 +610,135 @@ body {
   color: var(--msg-mention-fg);
 }
 
-/* ── Reply preview ───────────────────────────────────────────────────────── */
+/* ── Reply compose bar (shown above the input bar while composing a reply) ── */
 
-.reply-preview {
+/*
+ * Aligned with the compose box:
+ *   mode indicator left-margin (4px) + mode width (40px) = 44px from content-area left.
+ *   Right margin matches compose box (20px).
+ * Visually mirrors .reply-preview so the in-flight and landed states look consistent.
+ */
+.reply-preview-bar {
   display: flex;
-  gap: 8px;
-  padding: 2px 8px;
-  border-left: 2px solid var(--msg-reply-border);
-  color: var(--msg-system);
+  align-items: center;
+  gap: 6px;
+  /* Align left edge with compose box text (mode indicator 40px + margin 4px = 44px).
+     Right margin matches compose box right margin (20px). */
+  margin: 0 20px 4px 44px;
+  padding: 4px 10px;
+  border-left: 2px solid var(--accent-secondary);
+  border-radius: 0 3px 3px 0;
+  background-color: color-mix(in srgb, var(--accent-secondary) 6%, transparent);
   font-size: calc(var(--font-size) - 1px);
-  margin-bottom: 2px;
+  overflow: hidden;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.reply-preview-bar__indicator {
+  color: var(--accent-secondary);
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.reply-preview-bar__content {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.reply-preview-bar__sender {
+  color: var(--accent-secondary);
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.reply-preview-bar__snippet {
+  color: color-mix(in srgb, var(--fg) 70%, transparent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.reply-preview-bar__close {
+  background: none;
+  border: none;
+  color: var(--msg-system);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 2px);
+  cursor: pointer;
+  padding: 0 0 0 8px;
+  flex-shrink: 0;
+  transition: color var(--transition-speed);
+}
+
+.reply-preview-bar__close:hover,
+.reply-preview-bar__close:focus {
+  color: var(--accent-error);
+  outline: none;
+}
+
+/* ── Reply preview (in-timeline, on received/sent reply messages) ─────────── */
+
+.reply-preview {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 8px;
+  border-left: 2px solid var(--accent-secondary);
+  background-color: color-mix(in srgb, var(--accent-secondary) 6%, transparent);
+  color: var(--fg);
+  font-size: calc(var(--font-size) - 1px);
+  margin-bottom: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 0 3px 3px 0;
+  transition: background-color var(--transition-speed), border-color var(--transition-speed);
+  outline: none;
+  /* Prevent the click from selecting text */
+  user-select: none;
+}
+
+.reply-preview:hover,
+.reply-preview:focus {
+  background-color: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
+  border-color: var(--accent-secondary);
+}
+
+.reply-preview__icon {
+  color: var(--accent-secondary);
+  flex-shrink: 0;
+  font-size: calc(var(--font-size) - 2px);
+  opacity: 0.85;
+}
+
 .reply-preview__sender {
-  color: var(--msg-other);
+  color: var(--accent-secondary);
+  font-weight: bold;
   flex-shrink: 0;
 }
 
 .reply-preview__body {
+  color: color-mix(in srgb, var(--fg) 70%, transparent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── Message highlight (jump-to animation) ───────────────────────────────── */
+
+@keyframes message-highlight-flash {
+  0%   { background-color: color-mix(in srgb, var(--accent-secondary) 18%, transparent); }
+  60%  { background-color: color-mix(in srgb, var(--accent-secondary) 18%, transparent); }
+  100% { background-color: transparent; }
+}
+
+.message--highlight {
+  animation: message-highlight-flash 1.4s ease forwards;
 }
 
 /* ── Image messages ──────────────────────────────────────────────────────── */
@@ -374,22 +782,74 @@ img[data-mx-emoticon] {
   margin-top: 2px;
 }
 
+/* Inside a group: reactions flow inline under each message body.
+   Only the very last message's reactions get the bottom-right corner
+   treatment so a single-message group keeps the classic look. */
+
+/* Mid-group reactions: float absolute to the right, centered on the
+   dashed border below. Chips are ~24px tall so translateY(50%) puts
+   their midpoint exactly on the border line. */
+.message-group .message:not(:last-of-type) .reaction-bar {
+  position: absolute;
+  bottom: 0;
+  right: 10px;
+  transform: translateY(50%);
+  z-index: 2;
+  margin-top: 0;
+}
+
+/* Extra spacing only when a reaction bar is present — sized to fit
+   the chips (≈24px tall) centered on the dashed border. */
+.message-group .message:not(:last-of-type):has(.reaction-bar) {
+  padding-bottom: 14px;
+}
+
+.message-group .message:not(:last-of-type):has(.reaction-bar) + .message {
+  padding-top: 16px;
+}
+
+.message-group .message:last-of-type .reaction-bar {
+  position: absolute;
+  bottom: 0;
+  right: 1.5ch;
+  transform: translateY(50%);
+  z-index: 1;
+}
+
+/* Indent the right edge of the last message when it has reactions so text
+   wraps before it can slide under the chips. Uses a fixed reserve wide
+   enough for ~2 chips; extra reactions wrap upward via flex-wrap. */
+.message-group .message:last-of-type:has(.reaction-bar) {
+  padding-right: 6rem;
+}
+
 .reaction {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 1px 6px;
-  background-color: var(--reaction-bg);
+  margin: 0px 2px;
+  padding: 2px 8px;
+  background-color: var(--bg);
   border: var(--border-width) solid var(--reaction-border);
+  border-radius: 6px;
   color: var(--fg);
   font-size: calc(var(--font-size) - 1px);
+  line-height: 1;
   cursor: pointer;
   user-select: none;
   outline: none;
+  transition: border-color var(--transition-speed), background-color var(--transition-speed),
+    transform var(--transition-speed);
 }
 
 .reaction:hover {
   border-color: var(--fg);
+  transform: translateY(-1px);
+}
+
+.message-group .reaction:hover {
+  transform: none;
 }
 
 .reaction:focus {
@@ -402,57 +862,183 @@ img[data-mx-emoticon] {
   border-color: var(--accent-primary);
 }
 
-.reaction__emoji {
+img.reaction__emoji {
   height: var(--reaction-size);
   width: auto;
-  vertical-align: middle;
-  display: inline;
+}
+
+span.reaction__emoji {
+  font-size: var(--reaction-size);
+  line-height: 1;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  margin-right: 2px;
 }
 
 .reaction__count {
   color: var(--reaction-count);
   font-size: calc(var(--font-size) - 2px);
+  line-height: 1;
+}
+
+/* ── Quick react picker ──────────────────────────────────────────────────── */
+
+.quick-react-picker {
+  position: fixed;
+  flex-direction: column;
+  gap: 0;
+  background-color: var(--bg);
+  border: var(--border-width) solid var(--accent-primary);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6),
+              0 0 0 1px color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  z-index: 300;
+  width: 300px;
+  animation: quick-react-in 80ms ease;
+}
+
+@keyframes quick-react-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.quick-react-picker__input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: var(--border-width) solid var(--border-color);
+}
+
+.quick-react-picker__prompt {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+  user-select: none;
+  opacity: 0.7;
+}
+
+.quick-react-picker__input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  caret-color: var(--cursor);
+  min-width: 0;
+}
+
+.quick-react-picker__input::placeholder {
+  color: var(--roomlist-muted);
+  opacity: 0.7;
+}
+
+.quick-react-picker__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px;
+}
+
+.quick-react-picker__btn {
+  background: transparent;
+  border: var(--border-width) solid transparent;
+  padding: 4px 5px;
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: 3px;
+  line-height: 1;
+  outline: none;
+  transition: border-color var(--transition-speed), background-color var(--transition-speed);
+}
+
+.quick-react-picker__btn:hover,
+.quick-react-picker__btn--focused,
+.quick-react-picker__btn:focus {
+  border-color: var(--accent-primary);
+  background-color: var(--selection-bg);
+}
+
+.quick-react-picker__hint {
+  padding: 3px 8px 5px;
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 3px);
+  border-top: var(--border-width) solid var(--border-color);
+  letter-spacing: 0.03em;
 }
 
 /* ── Input bar ───────────────────────────────────────────────────────────── */
 
 .input-bar {
   display: flex;
-  align-items: center;
-  border-top: var(--border-width) solid var(--border-color);
+  align-items: stretch; /* mode indicator stretches full height */
+  /* border-top: var(--border-width) solid var(--border-color); */
   flex-shrink: 0;
   background-color: var(--bg);
+  margin-top: auto;
 }
 
+/*
+ * Width = timeline padding-left (12px) + avatar width (24px) + wrapper gap (8px) = 44px.
+ * This makes the compose box left-edge align exactly with .message-group boxes above.
+ */
 .input-bar__mode {
-  padding: 4px 8px;
-  color: var(--accent-primary);
+  width: 40px;
+  /* flex-shrink: 0; */
+  /* flex-grow: 0; */
+  padding: 10px 4px 12px;
+  margin: 8px 0px 8px 4px;
+  color: var(--bg);
+  background-color: var(--accent-primary);
   font-size: calc(var(--font-size) - 1px);
   letter-spacing: 0.05em;
-  flex-shrink: 0;
-  border-right: var(--border-width) solid var(--border-color);
-  min-width: 3.5em;
+  font-weight: bold;
+  min-width: 0;
   text-align: center;
   user-select: none;
+  vertical-align: center;
+  /* display: flex; */
+  align-items: flex-end;
+  justify-content: center;
+  border-right: var(--border-width) solid var(--border-color);
+  transition: background-color var(--transition-speed), color var(--transition-speed);
+  border-radius: 8px 0px 0px 8px;
 }
 
 .input-bar__mode--insert {
-  color: var(--accent-secondary);
+  background-color: var(--accent-secondary);
+  color: var(--bg);
 }
 
 .input-bar__mode--command {
-  color: var(--accent-warning);
+  background-color: var(--accent-warning);
+  color: var(--bg);
 }
 
 .input-bar__mode--visual {
-  color: var(--accent-primary);
+  background-color: var(--accent-primary);
+  color: var(--bg);
 }
 
-.input-bar__prompt {
-  padding: 4px 6px;
-  color: var(--accent-primary);
-  flex-shrink: 0;
-  user-select: none;
+/* The bordered compose box — visually matches .message-group */
+.input-bar__compose-box {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  border: var(--border-width) solid color-mix(in srgb, var(--border-color) 70%, var(--accent-primary) 30%);
+  border-radius: 0px 8px 8px 0px;
+  min-width: 0;
+  margin: 8px 20px 8px 0;
+  /* Matches .message-group padding-top so text aligns with message body.
+     Kept on the box (not the field) so the clone can animate it to 0 during
+     flight, mirroring how the real group's padding-top is revealed on landing. */
+  padding-top: calc(var(--font-size) * var(--line-height) * 0.25);
+  transition: border-color var(--transition-speed), box-shadow var(--transition-speed), border-radius var(--transition-speed);
+}
+
+.input-bar__compose-box:focus-within {
+  border-color: color-mix(in srgb, var(--accent-primary) 55%, var(--border-color));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 12%, transparent);
 }
 
 .input-bar__field {
@@ -463,7 +1049,8 @@ img[data-mx-emoticon] {
   font-family: var(--font-family);
   font-size: var(--font-size);
   line-height: var(--line-height);
-  padding: 4px 8px 4px 0;
+  /* Matches .message padding so text sits at the correct position. */
+  padding: 4px 10px 8px 10px;
   outline: none;
   caret-color: var(--cursor);
   resize: none;
@@ -471,6 +1058,60 @@ img[data-mx-emoticon] {
 
 .input-bar__field::placeholder {
   color: var(--roomlist-muted);
+}
+
+/* ── Send animations ─────────────────────────────────────────────────────── */
+
+/* Compose box border fades out when text flies into an existing bubble */
+@keyframes composeBoxMerge {
+  0%   { border-color: color-mix(in srgb, var(--border-color) 70%, var(--accent-primary) 30%);
+         box-shadow: none; }
+  20%  { border-color: transparent; box-shadow: none; }
+  100% { border-color: color-mix(in srgb, var(--border-color) 70%, var(--accent-primary) 30%);
+         box-shadow: none; }
+}
+
+.input-bar__compose-box--merge {
+  animation: composeBoxMerge 380ms ease forwards;
+}
+
+/* Compose box fades back in with a brief green glow after the clone departs */
+@keyframes composeBoxSent {
+  0%   { opacity: 0; border-color: color-mix(in srgb, var(--accent-primary) 70%, transparent);
+         box-shadow: 0 0 8px color-mix(in srgb, var(--accent-primary) 25%, transparent); }
+  60%  { opacity: 1; }
+  100% { border-color: color-mix(in srgb, var(--border-color) 70%, var(--accent-primary) 30%);
+         box-shadow: none; }
+}
+
+.input-bar__compose-box--sent {
+  animation: composeBoxSent 350ms ease forwards;
+}
+
+/* ── Message reveal animations ───────────────────────────────────────────── */
+
+/*
+ * When the clone lands, the real message box is revealed instantly (no fade).
+ * Only the header label (sender + time) fades in — this is the visible signal
+ * that the box has "become" a real message.
+ */
+@keyframes msgHeaderReveal {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.msg-header--reveal {
+  animation: msgHeaderReveal 250ms ease both;
+}
+
+/* Merged message row: just a quick fade */
+@keyframes msgMergeReveal {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.message--entering {
+  animation: msgMergeReveal 160ms ease forwards;
 }
 
 /* ── Focus indicators (keyboard nav) ─────────────────────────────────────── */
@@ -485,10 +1126,695 @@ img[data-mx-emoticon] {
 a {
   color: var(--accent-link);
   text-decoration: none;
+  transition: text-shadow var(--transition-speed);
 }
 
 a:hover {
   text-decoration: underline;
+  text-shadow: 0 0 4px color-mix(in srgb, var(--accent-link) 40%, transparent);
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────── */
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 100;
+  background-color: var(--bg);
+  border-bottom: var(--border-width) solid var(--border-color);
+  border-left: var(--border-width) solid var(--border-color);
+  font-size: calc(var(--font-size) - 2px);
+  user-select: none;
+  pointer-events: auto;
+}
+
+.status-bar__mode {
+  padding: 2px 8px;
+  color: var(--bg);
+  background-color: var(--accent-primary);
+  font-weight: bold;
+  letter-spacing: 0.05em;
+  transition: background-color var(--transition-speed);
+}
+
+.status-bar__mode--insert {
+  background-color: var(--accent-secondary);
+}
+
+.status-bar__mode--command {
+  background-color: var(--accent-warning);
+}
+
+.status-bar__mode--visual {
+  background-color: var(--accent-primary);
+}
+
+.status-bar__sep {
+  color: var(--border-color);
+}
+
+.status-bar__room {
+  padding: 2px 8px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-bar__spacer {
+  flex: 1;
+}
+
+.status-bar__encryption {
+  padding: 2px 4px;
+}
+
+.status-bar__encryption--on {
+  filter: drop-shadow(0 0 3px var(--accent-success));
+}
+
+.status-bar__connection {
+  padding: 2px 8px;
+  color: var(--roomlist-muted);
+  transition: color var(--transition-speed);
+}
+
+.status-bar__connection--online {
+  color: var(--accent-success);
+  text-shadow: 0 0 4px var(--glow-color);
+}
+
+.status-bar__connection--offline {
+  color: var(--accent-error);
+}
+
+/* ── Login screen ────────────────────────────────────────────────────── */
+
+.login-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background-color: var(--bg);
+  gap: 8px;
+  padding: 24px;
+}
+
+.login-screen__banner {
+  color: var(--accent-primary);
+  text-align: left;
+  text-shadow: 0 0 var(--glow-radius) var(--glow-color),
+    0 0 calc(var(--glow-radius) * 3) var(--glow-color);
+  animation: banner-flicker 4s ease-in-out infinite;
+}
+
+@keyframes banner-flicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.8; }
+  94% { opacity: 1; }
+  96% { opacity: 0.9; }
+  97% { opacity: 1; }
+}
+
+.login-screen__tagline {
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 1px);
+  letter-spacing: 0.1em;
+}
+
+.login-screen__divider {
+  color: var(--border-color);
+  margin: 4px 0;
+}
+
+.login-screen__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.login-screen__field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  padding: 4px 0;
+  transition: border-color var(--transition-speed);
+}
+
+.login-screen__field--focused {
+  border-bottom-color: var(--accent-primary);
+  box-shadow: 0 1px 0 0 var(--glow-color);
+}
+
+.login-screen__field-prompt {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.login-screen__field-label {
+  color: var(--roomlist-muted);
+  flex-shrink: 0;
+  min-width: 11ch;
+  text-transform: lowercase;
+}
+
+.login-screen__field-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  outline: none;
+  caret-color: var(--cursor);
+}
+
+.login-screen__field-input::placeholder {
+  color: var(--roomlist-muted);
+}
+
+.login-screen__submit {
+  margin-top: 8px;
+  background: transparent;
+  border: var(--border-width) solid var(--accent-primary);
+  color: var(--accent-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  padding: 6px 16px;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  transition: background-color var(--transition-speed), color var(--transition-speed),
+    box-shadow var(--transition-speed);
+}
+
+.login-screen__submit:hover {
+  background-color: var(--accent-primary);
+  color: var(--bg);
+  box-shadow: 0 0 var(--glow-radius) var(--glow-color);
+}
+
+.login-screen__submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.login-screen__status {
+  min-height: 1.5em;
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 1px);
+}
+
+.login-screen__status--error {
+  color: var(--accent-error);
+}
+
+.login-screen__status--success {
+  color: var(--accent-success);
+  text-shadow: 0 0 4px var(--glow-color);
+}
+
+.login-screen__hints {
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  letter-spacing: 0.05em;
+  margin-top: 12px;
+}
+
+/* ── Command bar ─────────────────────────────────────────────────────────── */
+
+.command-bar {
+  display: flex;
+  align-items: center;
+  border-top: var(--border-width) solid var(--border-color);
+  background-color: var(--bg);
+  flex-shrink: 0;
+}
+
+.command-bar__prompt {
+  padding: 4px 6px;
+  color: var(--accent-warning);
+  text-shadow: 0 0 4px var(--glow-color);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.command-bar__input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+  padding: 4px 8px 4px 0;
+  outline: none;
+  caret-color: var(--cursor);
+}
+
+.command-bar__input::placeholder {
+  color: var(--roomlist-muted);
+}
+
+.command-bar__completion {
+  padding: 4px 8px;
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 1px);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+}
+
+/* ── Shortcode preview (emoji autocomplete popup) ────────────────────────── */
+
+.shortcode-preview {
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: var(--bg);
+  border: var(--border-width) solid var(--border-color);
+  border-bottom: none;
+  z-index: 50;
+  flex-shrink: 0;
+}
+
+.shortcode-preview__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.shortcode-preview__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background-color var(--transition-speed);
+}
+
+.shortcode-preview__item:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.shortcode-preview__item--active {
+  background-color: var(--selection-bg);
+  color: var(--selection-fg);
+}
+
+.shortcode-preview__emoji-glyph {
+  font-size: calc(var(--font-size) + 2px);
+  width: 1.5em;
+  text-align: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.shortcode-preview__emoji-img {
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.shortcode-preview__label {
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 1px);
+}
+
+.shortcode-preview__item--active .shortcode-preview__label {
+  color: var(--selection-fg);
+}
+
+.shortcode-preview__empty {
+  padding: 8px 10px;
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 1px);
+}
+
+/* ── GIF picker popup ────────────────────────────────────────────────────── */
+
+/* Backdrop — full-screen dimmed overlay, flex-centers the panel */
+.gif-picker {
+  position: fixed;
+  inset: 0;
+  display: flex;              /* overridden to "none" when hidden */
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.65);
+  z-index: 200;
+  /* subtle fade-in */
+  animation: gif-picker-fade-in 0.1s ease;
+}
+
+@keyframes gif-picker-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Floating panel */
+.gif-picker__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(600px, calc(100vw - 40px));
+  max-height: min(540px, calc(100vh - 80px));
+  background-color: var(--bg);
+  border: var(--border-width) solid var(--accent-primary);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-color);
+  overflow: hidden;
+}
+
+/* Header row */
+.gif-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.gif-picker__title {
+  color: var(--accent-primary);
+  font-size: calc(var(--font-size) - 1px);
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gif-picker__close-hint {
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  opacity: 0.5;
+}
+
+/* Search row */
+.gif-picker__search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.gif-picker__search-prompt {
+  color: var(--accent-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  opacity: 0.7;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.gif-picker__search {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  caret-color: var(--cursor);
+  padding: 0;
+}
+
+.gif-picker__search::placeholder {
+  color: var(--roomlist-muted);
+  opacity: 0.6;
+}
+
+/* Scrollable GIF grid */
+.gif-picker__grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  padding: 6px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Empty state */
+.gif-picker__empty {
+  grid-column: 1 / -1;
+  padding: 32px 0;
+  text-align: center;
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 1px);
+}
+
+/* Individual GIF cell */
+.gif-picker__cell {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background-color: rgba(255, 255, 255, 0.04);
+  border: var(--border-width) solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color var(--transition-speed);
+}
+
+.gif-picker__cell:hover,
+.gif-picker__cell:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
+.gif-picker__cell:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+.gif-picker__thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Title label — shown on hover/focus */
+.gif-picker__cell-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 2px 4px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: var(--fg);
+  font-size: calc(var(--font-size) - 3px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity var(--transition-speed);
+  pointer-events: none;
+}
+
+.gif-picker__cell:hover .gif-picker__cell-label,
+.gif-picker__cell:focus .gif-picker__cell-label {
+  opacity: 1;
+}
+
+/* Status / hint bar */
+.gif-picker__status {
+  padding: 4px 10px;
+  border-top: var(--border-width) solid var(--border-color);
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* ── Help dialog ─────────────────────────────────────────────────────────── */
+
+.help-dialog {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.65);
+  z-index: 200;
+  animation: gif-picker-fade-in 0.1s ease;
+}
+
+.help-dialog__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(680px, calc(100vw - 40px));
+  max-height: min(520px, calc(100vh - 80px));
+  background-color: var(--bg);
+  border: var(--border-width) solid var(--accent-primary);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-color);
+  overflow: hidden;
+}
+
+.help-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.help-dialog__title {
+  color: var(--accent-primary);
+  font-size: calc(var(--font-size) - 1px);
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.help-dialog__close-hint {
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  opacity: 0.5;
+}
+
+/* Tab bar */
+.help-dialog__tabs {
+  display: flex;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.help-dialog__tab {
+  background: transparent;
+  border: none;
+  border-right: var(--border-width) solid var(--border-color);
+  color: var(--roomlist-muted);
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 1px);
+  letter-spacing: 0.06em;
+  padding: 4px 14px;
+  text-transform: uppercase;
+  outline: none;
+}
+
+.help-dialog__tab:hover {
+  color: var(--fg);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.help-dialog__tab--active {
+  color: var(--accent-primary);
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* Scrollable area holding headings + table */
+.help-dialog__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Column headings — two layouts */
+.help-dialog__headings {
+  display: grid;
+  gap: 0 12px;
+  padding: 4px 10px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  letter-spacing: 0.06em;
+}
+
+.help-dialog__headings--bindings  { grid-template-columns: 12ch 10ch 1fr; }
+.help-dialog__headings--commands  { grid-template-columns: 14ch 20ch 1fr; }
+
+.help-dialog__table {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 4px 0;
+}
+
+/* Rows — two layouts matching their headings */
+.help-dialog__row {
+  display: grid;
+  gap: 0 12px;
+  padding: 3px 10px;
+  cursor: default;
+  outline: none;
+}
+
+.help-dialog__row--bindings  { grid-template-columns: 12ch 10ch 1fr; }
+.help-dialog__row--commands  { grid-template-columns: 14ch 20ch 1fr; }
+
+.help-dialog__row:focus,
+.help-dialog__row:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.help-dialog__row:focus .help-dialog__cmd-name,
+.help-dialog__row:focus .help-dialog__key {
+  color: var(--accent-primary);
+}
+
+/* Keys column (bindings) */
+.help-dialog__key {
+  color: var(--fg);
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+/* Mode column (bindings) */
+.help-dialog__mode {
+  color: var(--roomlist-muted);
+  white-space: nowrap;
+}
+
+/* Command name column */
+.help-dialog__cmd-name {
+  color: var(--fg);
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+/* Args column */
+.help-dialog__cmd-args {
+  color: var(--accent-secondary, var(--roomlist-muted));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Description (shared) */
+.help-dialog__cmd-desc {
+  color: var(--msg-body, var(--fg));
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.help-dialog__footer {
+  padding: 4px 10px;
+  border-top: var(--border-width) solid var(--border-color);
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  flex-shrink: 0;
+  background-color: rgba(255, 255, 255, 0.02);
 }
 
 /* ── Utility: visually hidden ────────────────────────────────────────────── */

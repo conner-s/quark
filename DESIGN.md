@@ -597,3 +597,50 @@ quark/
 - Media cache management
 - Accessibility audit (keyboard-only, screen reader hints)
 - Performance profiling (large rooms, many emoji packs)
+
+---
+
+## TODO (current as of 2026-03-23)
+
+### In Progress / Partially Implemented
+- [ ] **Sliding Sync (MSC4186)** — backend uses matrix-sdk default sync; Sliding Sync not explicitly configured
+- [ ] **Presence display** — `quark:presence` events are handled in `sync.ts` but no dedicated presence UI in the room list or member list
+- [x] **GIF upload-to-homeserver** — `send_gif` command downloads GIF from external URL, uploads to homeserver, sends as `m.image`
+- [ ] **Custom emoji in reply previews** — `ReplyPreview.ts` exists; verify `:shortcode:` resolves to images inline
+
+### Not Yet Implemented
+
+#### Authentication
+- [ ] OIDC login via MAS (only password auth is implemented)
+- [ ] SSO login flow
+
+#### E2EE / Crypto
+- [ ] Key backup (SSSS) — no backup/restore commands exist
+- [ ] Cross-signing setup UI — verification status exists but no guided cross-signing bootstrap flow
+
+#### Media
+- [ ] Authenticated media (MSC3916) — `/_matrix/client/v1/media/download/` endpoint not used; currently uses legacy `/_matrix/media/v3/download/`
+
+#### Messaging
+- [ ] Private read receipts (`m.read.private`) — only public receipts emitted
+- [ ] Room summary previews (MSC3266) — no preview fetch before joining
+
+#### Room Discovery
+- [ ] Room directory browser — `:join #room:server` works but no searchable directory UI
+
+#### Emoji / Sticker Packs
+- [ ] Pack management UI — create, edit, and import emoji/sticker packs (per-room and account data)
+
+#### Configuration
+- [ ] Theme hot-reloading — filesystem watcher (`notify` crate) not hooked up; requires app restart to change theme
+- [ ] `config.toml` full loading — verify all `[general]`, `[sync]`, `[media]`, `[gif]`, `[emoji]` sections are read at startup
+
+#### UI / Polish
+- [x] **Compose box animation** — input bar restyled as a message bubble; sent messages animate upward into the timeline with header/avatar fade-in; compose box pulses on send; consecutive own-messages merge into the same group
+- [x] **Reply indicator in timeline** — reply messages show an inline quoted preview and always start a new message group (bubble break), even for consecutive same-sender messages
+- [x] **Reactions UI** — `e` key opens a floating `QuickReactPicker` for the selected message; reaction chips are click-to-toggle; both dispatch to `sendReaction`
+- [x] **Member list sidebar** — toggled with `m`; renders as a fixed right-side column (Discord-style) with presence indicators and power-level badges; populated on room select
+
+#### Hardening
+- [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
+- [ ] Performance profiling — large rooms (1000+ messages), many emoji packs

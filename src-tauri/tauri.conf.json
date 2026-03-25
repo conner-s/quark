@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "zone.derg.quark",
   "build": {
-    "frontendDist": "../src",
-    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1450",
     "beforeDevCommand": "pnpm dev",
     "beforeBuildCommand": "pnpm build"
   },
@@ -35,10 +35,5 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  },
-  "plugins": {
-    "notification": {
-      "enable": true
-    }
   }
 }

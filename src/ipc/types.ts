@@ -36,6 +36,20 @@ export interface CreateRoomOptions {
   enable_encryption: boolean;
 }
 
+// ─── Members ──────────────────────────────────────────────────────────────────
+
+/** Power level categories */
+export type MemberPowerLevel = "admin" | "mod" | "member";
+
+/** A single room member — matches matrix::rooms::RoomMember */
+export interface RoomMember {
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  power_level: MemberPowerLevel;
+  presence: "online" | "unavailable" | "offline" | null;
+}
+
 // ─── Timeline ─────────────────────────────────────────────────────────────────
 
 /** Serializable timeline event — matches matrix::timeline::TimelineEvent */
@@ -54,6 +68,7 @@ export interface TimelineEvent {
   media_mimetype: string | null;
   media_width: number | null;
   media_height: number | null;
+  reactions?: { key: string; count: number; own: boolean }[];
 }
 
 // ─── Reactions ────────────────────────────────────────────────────────────────

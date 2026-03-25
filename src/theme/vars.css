@@ -46,24 +46,25 @@
   --message-spacing: 4px;
 
   /* ── Border styles ───────────────────────────────────────────────────── */
-  --border-style: single;
+  --border-style: rounded;
   --border-h: "─";
   --border-v: "│";
-  --border-tl: "┌";
-  --border-tr: "┐";
-  --border-bl: "└";
-  --border-br: "┘";
+  --border-tl: "╭";
+  --border-tr: "╮";
+  --border-bl: "╰";
+  --border-br: "╯";
   --border-color: #333333;
-  --border-width: 1px;
+  --border-width: 2px;
 
   /* ── Layout ──────────────────────────────────────────────────────────── */
   --space-strip-width: 36px;
   --room-list-width: 220px;
+  --member-list-width: 200px;
 
   /* ── Emoji / sticker sizes ───────────────────────────────────────────── */
   --emoji-size: 32px;
   --sticker-max-size: 256px;
-  --reaction-size: 20px;
+  --reaction-size: 14px;
 
   /* ── Prompt / mode indicator ─────────────────────────────────────────── */
   --prompt-symbol: ":>";
@@ -80,4 +81,9 @@
   /* ── Focus ───────────────────────────────────────────────────────────── */
   --focus-color: #00ff41;
   --focus-width: 1px;
+
+  /* ── Eye-candy ─────────────────────────────────────────────────────── */
+  --glow-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
+  --glow-radius: 6px;
+  --transition-speed: 150ms;
 }

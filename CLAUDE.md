@@ -1,0 +1,66 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+pnpm dev          # Vite dev server (port 1450) — frontend only, mock IPC
+pnpm build        # tsc + vite build → dist/
+pnpm test         # Vitest (single run)
+pnpm test:watch   # Vitest (watch mode)
+pnpm tauri dev    # Full Tauri app (Rust + frontend, hot-reload)
+pnpm tauri build  # Release build (.app / .msi / .deb)
+```
+
+Run a single test file: `pnpm test src/ui/Input.test.ts`
+
+Rust backend: `cargo build` / `cargo test` from `src-tauri/`.
+
+## Architecture
+
+Quark is a **Tauri v2 desktop Matrix client** with a terminal aesthetic and vim-style navigation.
+
+```
+Frontend (TypeScript/Vanilla DOM)
+    ↕  Tauri IPC (invoke/event)
+Rust backend (matrix-sdk 0.9)
+```
+
+**Why no React/Vue**: DOM-based components keep the terminal feel without framework overhead. UI components are plain TS classes that manipulate the DOM directly.
+
+**Why Tauri over Electron**: ~10x smaller binary; Rust matrix-sdk gives best-in-class E2EE and Sliding Sync.
+
+**Why not a true TUI**: Custom emoji/stickers must render inline as images — impossible without a browser renderer.
+
+### Frontend (`src/`)
+
+- `main.ts` — bootstrap, login wiring, sync startup
+- `app/actions.ts` — IPC dispatcher (all user-initiated operations)
+- `app/state.ts` — global app state
+- `app/keyboard.ts` — keyboard event routing
+- `app/sync.ts` — sync polling loop
+- `ipc/` — Tauri invoke wrappers (`index.ts`), shared types (`types.ts`), mock layer (`mock.ts`), toggle (`invoke.ts`)
+- `ui/` — DOM components (Timeline, Input, RoomList, SpaceStrip, pickers, modals)
+- `vim/` — vim mode state machine (`mode.ts`), keymap resolution (`keybindings.ts`), `:` command parser (`commands.ts`)
+- `theme/` — CSS custom property loader; `style/base.css` for monospace terminal base
+
+**Mock/browser dev mode**: `pnpm dev` runs with mock IPC (no Rust process needed). Toggle with `ipc/invoke.ts` `FORCE_MOCK` flag.
+
+### Rust Backend (`src-tauri/src/`)
+
+- `lib.rs` — Tauri builder, plugin init, managed state (`MatrixState`, `CacheState`, `NotificationConfig`)
+- `commands.rs` — all `#[tauri::command]` handlers (IPC surface)
+- `matrix/` — protocol implementation: `client.rs` (login/sync/session), `timeline.rs` (messages/edits/redactions), `rooms.rs`, `crypto.rs` (E2EE/verification), `emoji.rs` (MSC2545), `stickers.rs`, `reactions.rs`, `spaces.rs`, `threads.rs`, `media.rs`
+- `media_cache.rs` — disk-based LRU cache (200MB default)
+- `notifications.rs` — system notifications with quiet hours and room muting
+- `config/` — TOML theme parser, vimrc-style keybinding parser
+- `gif/` — Tenor & Giphy API integration
+
+### IPC Contract
+
+Types shared between frontend and backend live in `src/ipc/types.ts`. When adding a new Tauri command: define the handler in `commands.rs`, register it in `lib.rs`, add the invoke wrapper in `src/ipc/index.ts`, add a mock in `src/ipc/mock.ts`, and update types if needed.
+
+## Design Spec
+
+`DESIGN.md` is the authoritative spec — covers UI layout, vim keybinding config syntax (`quarkrc`), Matrix feature support, theming (TOML structure), config files, and the phased implementation TODO list. Read it before implementing new features.

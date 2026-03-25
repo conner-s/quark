@@ -133,7 +133,7 @@ describe("Timeline", () => {
     it("shows reply preview when replyTo is set", () => {
       timeline.setMessages([
         makeMsg({
-          replyTo: { senderName: "Charlie", body: "Original message" },
+          replyTo: { eventId: "$evt-orig", senderName: "Charlie", body: "Original message" },
         }),
       ]);
 
@@ -141,7 +141,7 @@ describe("Timeline", () => {
       expect(reply).not.toBeNull();
 
       const replySender = reply?.querySelector(".reply-preview__sender");
-      expect(replySender?.textContent).toBe("<Charlie>");
+      expect(replySender?.textContent).toBe("Charlie");
 
       const replyBody = reply?.querySelector(".reply-preview__body");
       expect(replyBody?.textContent).toBe("Original message");

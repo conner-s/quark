@@ -40,3 +40,15 @@ tempfile = "3"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+# macOS Tahoe: objc2 debug assertions panic on removed NSApplicationDelegate methods
+[profile.dev.package.objc2]
+debug-assertions = false
+[profile.dev.package.objc2-app-kit]
+debug-assertions = false
+[profile.dev.package.objc2-foundation]
+debug-assertions = false
+[profile.dev.package.objc2-web-kit]
+debug-assertions = false
+[profile.dev.package.block2]
+debug-assertions = false

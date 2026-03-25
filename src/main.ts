@@ -3,10 +3,17 @@
 
 import { mountApp } from "./ui/App.js";
 import { AppState } from "./app/state.js";
-import { setComponents, login, selectRoom, selectSpace } from "./app/actions.js";
+import { setComponents, login, selectRoom, selectSpace, refreshRooms } from "./app/actions.js";
 import { setupKeyboard } from "./app/keyboard.js";
 import { startSync } from "./app/sync.js";
 import { showError } from "./ui/NotificationToast.js";
+import { setForceMock } from "./ipc/invoke.js";
+import { showMainLayout } from "./ui/App.js";
+
+// ── Debug mode ────────────────────────────────────────────────────────────────
+// Append ?debug to the URL to skip login and show the chat UI with mock data.
+
+const DEBUG_MODE = new URLSearchParams(window.location.search).has("debug");
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
@@ -20,6 +27,22 @@ const components = mountApp(appEl);
 
 // Register components with the action dispatcher
 setComponents(components);
+
+// ── Debug auto-login ──────────────────────────────────────────────────────────
+
+if (DEBUG_MODE) {
+  setForceMock(true);
+  AppState.set("loggedIn", true);
+  showMainLayout(components);
+  setupKeyboard(components);
+  void refreshRooms().then(async () => {
+    // Auto-select the first room so the timeline is populated
+    const rooms = AppState.get("roomListCache");
+    if (rooms.length > 0) {
+      await selectRoom(rooms[0].room_id);
+    }
+  });
+}
 
 // ── Login screen wiring ───────────────────────────────────────────────────────
 

@@ -11,13 +11,11 @@ export async function login(
   homeserverUrl: string,
   username: string,
   password: string,
-  dataDir: string,
 ): Promise<SessionInfo> {
   return invoke<SessionInfo>("login", {
     homeserverUrl,
     username,
     password,
-    dataDir,
   });
 }
 
@@ -28,12 +26,10 @@ export async function login(
 export async function restoreSession(
   homeserverUrl: string,
   session: SessionInfo,
-  dataDir: string,
 ): Promise<void> {
   return invoke<void>("restore_session", {
     homeserverUrl,
     session,
-    dataDir,
   });
 }
 

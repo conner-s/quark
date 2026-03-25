@@ -3,13 +3,19 @@
 import { isTauri, mockInvoke } from "./mock.js";
 
 let realInvoke: typeof import("@tauri-apps/api/core").invoke | null = null;
+let _forceMock = false;
+
+/** Force all IPC calls through the mock backend (for debug mode). */
+export function setForceMock(enabled: boolean): void {
+  _forceMock = enabled;
+}
 
 async function getInvoke() {
-  if (isTauri() && !realInvoke) {
+  if (!_forceMock && isTauri() && !realInvoke) {
     const mod = await import("@tauri-apps/api/core");
     realInvoke = mod.invoke;
   }
-  return realInvoke;
+  return _forceMock ? null : realInvoke;
 }
 
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {

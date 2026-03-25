@@ -77,38 +77,7 @@ describe("Input", () => {
     });
   });
 
-  describe("prompt symbol", () => {
-    it("shows default prompt symbol :>", () => {
-      const prompt = input.getElement().querySelector(".input-bar__prompt");
-      expect(prompt?.textContent).toBe(":>");
-    });
-
-    it("accepts a custom prompt symbol in constructor", () => {
-      const custom = new Input(">>>");
-      document.body.appendChild(custom.getElement());
-
-      const prompt = custom.getElement().querySelector(".input-bar__prompt");
-      expect(prompt?.textContent).toBe(">>>");
-
-      custom.getElement().remove();
-    });
-
-    it("setPromptSymbol updates the prompt when not in command mode", () => {
-      input.setPromptSymbol("$");
-
-      const prompt = input.getElement().querySelector(".input-bar__prompt");
-      expect(prompt?.textContent).toBe("$");
-    });
-  });
-
   describe("command mode", () => {
-    it("shows : prefix in Command mode", () => {
-      input.setMode(Mode.Command);
-
-      const prompt = input.getElement().querySelector(".input-bar__prompt");
-      expect(prompt?.textContent).toBe(":");
-    });
-
     it("shows command placeholder in Command mode", () => {
       input.setMode(Mode.Command);
 

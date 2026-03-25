@@ -5,6 +5,7 @@ export type {
   SessionInfo,
   RoomInfo,
   CreateRoomOptions,
+  RoomMember,
   TimelineEvent,
   ReactionGroup,
   EmojiEntry,
@@ -31,7 +32,7 @@ export type {
 export { login, restoreSession, logout } from "./client.js";
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────
-export { getRooms, joinRoom, leaveRoom, createRoom } from "./rooms.js";
+export { getRooms, joinRoom, leaveRoom, createRoom, getRoomMembers } from "./rooms.js";
 
 // ─── Timeline ─────────────────────────────────────────────────────────────────
 export {
@@ -70,7 +71,7 @@ export {
 export { getThreadRoots, getThreadTimeline } from "./threads.js";
 
 // ─── GIF ──────────────────────────────────────────────────────────────────────
-export { searchGifs } from "./gif.js";
+export { searchGifs, sendGif } from "./gif.js";
 export type { GifProvider } from "./gif.js";
 
 // ─── Config ───────────────────────────────────────────────────────────────────

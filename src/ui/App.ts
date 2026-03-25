@@ -13,9 +13,11 @@ import { ThreadView } from "./ThreadView.js";
 import { MemberList } from "./MemberList.js";
 import { EmojiPicker } from "./EmojiPicker.js";
 import { GifPicker } from "./GifPicker.js";
+import { HelpDialog } from "./HelpDialog.js";
 import { StickerPicker } from "./StickerPicker.js";
 import { Verification } from "./Verification.js";
 import { ShortcodePreview } from "./ShortcodePreview.js";
+import { QuickReactPicker } from "./QuickReactPicker.js";
 
 // ── AppComponents ─────────────────────────────────────────────────────────────
 
@@ -43,7 +45,9 @@ export interface AppComponents {
   stickerPicker: StickerPicker;
   verification: Verification;
   shortcodePreview: ShortcodePreview;
+  helpDialog: HelpDialog;
   commandBar: CommandBar;
+  quickReactPicker: QuickReactPicker;
 
   // Status
   statusBar: StatusBar;
@@ -77,6 +81,8 @@ export function mountApp(container: HTMLElement): AppComponents {
   const stickerPicker = new StickerPicker();
   const verification = new Verification();
   const shortcodePreview = new ShortcodePreview();
+  const helpDialog = new HelpDialog();
+  const quickReactPicker = new QuickReactPicker();
 
   // ── Login screen ─────────────────────────────────────────────────────────
   container.appendChild(loginScreen.getElement());
@@ -115,7 +121,7 @@ export function mountApp(container: HTMLElement): AppComponents {
 
   container.appendChild(mainLayout);
 
-  // ── Status bar (outside grid, at very bottom) ────────────────────────────
+  // ── Status bar (fixed bottom-right, floats over content) ─────────────────
   container.appendChild(statusBar.getElement());
 
   // ── Overlays (appended to body so they float above everything) ───────────
@@ -123,6 +129,8 @@ export function mountApp(container: HTMLElement): AppComponents {
   document.body.appendChild(gifPicker.getElement());
   document.body.appendChild(stickerPicker.getElement());
   document.body.appendChild(verification.getElement());
+  document.body.appendChild(helpDialog.getElement());
+  document.body.appendChild(quickReactPicker.getElement());
 
   return {
     loginScreen,
@@ -141,6 +149,8 @@ export function mountApp(container: HTMLElement): AppComponents {
     stickerPicker,
     verification,
     shortcodePreview,
+    helpDialog,
+    quickReactPicker,
     mainLayout,
   };
 }

@@ -2,14 +2,13 @@
 
 export type LoginCallback = (homeserver: string, username: string, password: string) => void | Promise<void>;
 
-const ASCII_BANNER = `
-  ██████  ██    ██  █████  ██████  ██   ██
+const ASCII_BANNER = `  ██████  ██    ██  █████  ██████  ██   ██
  ██    ██ ██    ██ ██   ██ ██   ██ ██  ██
  ██    ██ ██    ██ ███████ ██████  █████
  ██ ▄▄ ██ ██    ██ ██   ██ ██   ██ ██  ██
   ██████   ██████  ██   ██ ██   ██ ██   ██
      ▀▀
-`.trimStart();
+`;
 
 type FieldName = "homeserver" | "username" | "password";
 const FIELDS: FieldName[] = ["homeserver", "username", "password"];
