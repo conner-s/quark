@@ -3,7 +3,7 @@
 import { AppState } from "./state.js";
 import type { AppComponents } from "../ui/App.js";
 import type { TimelineEvent, RoomInfo } from "../ipc/types.js";
-import { refreshRooms, selectRoom } from "./actions.js";
+import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent } from "./actions.js";
 import { showToast } from "../ui/NotificationToast.js";
 import { handleIncomingMessage } from "./notifications.js";
 
@@ -60,7 +60,8 @@ function timelineEventToMessage(e: TimelineEvent) {
 
   return {
     id: e.event_id,
-    senderName: e.sender,
+    senderId: e.sender,
+    senderName: resolveDisplayName(e.sender),
     timestamp: new Date(e.timestamp).toISOString(),
     body: e.body,
     htmlBody: e.formatted_body ?? undefined,
@@ -87,12 +88,22 @@ export async function startSync(components: AppComponents): Promise<() => void> 
       const currentRoom = AppState.get("currentRoomId");
 
       if (payload.room_id === currentRoom) {
-        // Append to active timeline
-        timeline.appendMessage(timelineEventToMessage(payload.event));
-
-        // Also append to state cache
+        // Deduplicate: skip events already in the state cache (e.g. initial sync
+        // replay of messages already loaded via getTimeline, or a second client
+        // emitting the same event in dev hot-reload scenarios).
         const current = AppState.get("currentTimeline");
-        AppState.set("currentTimeline", [...current, payload.event]);
+        const alreadyInState = current.some((e) => e.event_id === payload.event.event_id);
+        if (!alreadyInState) {
+          AppState.set("currentTimeline", [...current, payload.event]);
+        }
+
+        // Skip rendering if: (a) already in state (replay), (b) it's our own
+        // echo (deduplication via _ownSentEventIds), or (c) it's already in the
+        // DOM (race: echo arrived after confirmMessage but before add-to-set).
+        const alreadyInDom = !!timeline.getMessageElementById(payload.event.event_id);
+        if (!alreadyInState && !alreadyInDom && !consumeOwnSentEvent(payload.event.event_id)) {
+          timeline.appendMessage(timelineEventToMessage(payload.event));
+        }
       } else {
         // Update unread count on room list item
         const cached = AppState.get("roomListCache");
@@ -121,7 +132,7 @@ export async function startSync(components: AppComponents): Promise<() => void> 
           ?.name ?? payload.room_id;
       handleIncomingMessage(
         payload.room_id,
-        payload.event.sender,
+        resolveDisplayName(payload.event.sender),
         payload.event.body,
         roomName
       );

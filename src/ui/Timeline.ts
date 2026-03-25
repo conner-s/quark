@@ -1,6 +1,6 @@
 // Message timeline
 
-import { createReactionBar, type ReactionGroup } from "./Reactions.js";
+import { createReactionBar, updateReactionBar, type ReactionGroup } from "./Reactions.js";
 
 // ── Avatar generation ─────────────────────────────────────────────────────────
 
@@ -15,15 +15,7 @@ function senderColor(sender: string): string {
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
-function buildAvatarElement(sender: string, avatarUrl?: string): HTMLElement {
-  if (avatarUrl) {
-    const img = document.createElement("img");
-    img.className = "message-group__avatar";
-    img.src = avatarUrl;
-    img.alt = "";
-    img.setAttribute("aria-hidden", "true");
-    return img;
-  }
+function buildFallbackAvatar(sender: string): HTMLElement {
   const color = senderColor(sender);
   const initial = (sender.startsWith("@") ? sender[1] : sender[0]).toUpperCase();
   const el = document.createElement("span");
@@ -36,6 +28,19 @@ function buildAvatarElement(sender: string, avatarUrl?: string): HTMLElement {
   return el;
 }
 
+function buildAvatarElement(sender: string, avatarUrl?: string): HTMLElement {
+  if (avatarUrl) {
+    const img = document.createElement("img");
+    img.className = "message-group__avatar";
+    img.src = avatarUrl;
+    img.alt = "";
+    img.setAttribute("aria-hidden", "true");
+    img.onerror = () => img.replaceWith(buildFallbackAvatar(sender));
+    return img;
+  }
+  return buildFallbackAvatar(sender);
+}
+
 export interface ReplyPreviewData {
   /** Matrix event ID of the message being replied to */
   eventId: string;
@@ -46,6 +51,8 @@ export interface ReplyPreviewData {
 export interface MessageData {
   id: string;
   senderName: string;
+  /** Matrix user ID of the sender — used for avatar lookup; falls back to senderName */
+  senderId?: string;
   /** URL for the sender's avatar image (mxc:// resolved to https://) */
   senderAvatarUrl?: string;
   /** If true the sender is the local user */
@@ -242,6 +249,7 @@ function buildMessageGroup(msgs: MessageData[]): HTMLElement {
   // ── Wrapper: avatar to the left, box to the right ─────────────────────
   const wrapper = document.createElement("div");
   wrapper.className = "message-group-wrapper";
+  wrapper.dataset.sender = first.senderId ?? first.senderName;
 
   const avatar = buildAvatarElement(first.senderName, first.senderAvatarUrl);
   wrapper.appendChild(avatar);
@@ -275,7 +283,7 @@ function groupMessages(msgs: MessageData[]): (MessageData | MessageData[])[] {
       result.push(msg); // ungrouped system message
     } else if (
       currentGroup.length > 0 &&
-      currentGroup[0].senderName === msg.senderName &&
+      (currentGroup[0].senderId ?? currentGroup[0].senderName) === (msg.senderId ?? msg.senderName) &&
       !msg.replyTo // replies always start a fresh group
     ) {
       currentGroup.push(msg);
@@ -352,16 +360,17 @@ export class Timeline {
       lastWrapper.classList.contains("message-group-wrapper") &&
       isGroupable(msg)
     ) {
-      // Check sender of the existing group
-      const innerGroup = lastWrapper.querySelector<HTMLElement>(".message-group");
-      const groupSender = innerGroup?.querySelector(".message-group__sender");
-      if (groupSender && groupSender.textContent === msg.senderName && !msg.replyTo) {
+      // Check sender of the existing group (compare by Matrix user ID, not display name)
+      const wrapperSenderId = (lastWrapper as HTMLElement).dataset.sender;
+      if (wrapperSenderId === (msg.senderId ?? msg.senderName) && !msg.replyTo) {
         // Append into existing group (replies always start a new group)
+        const innerGroup = lastWrapper.querySelector<HTMLElement>(".message-group");
+        if (!innerGroup) return;
         const el = buildMessageElement(msg);
         const msgHeader = el.querySelector(".message__header");
         if (msgHeader) (msgHeader as HTMLElement).style.display = "none";
         if (animate) el.classList.add("message--entering");
-        innerGroup!.appendChild(el);
+        innerGroup.appendChild(el);
         if (!this._scrolledUp) this._scrollToBottom();
         return;
       }
@@ -511,9 +520,83 @@ export class Timeline {
     }
   }
 
+  /**
+   * Replace fallback avatars for a sender with a real image.
+   * Called after an avatar thumbnail has been downloaded.
+   */
+  updateSenderAvatar(sender: string, dataUrl: string): void {
+    const wrappers = this._listEl.querySelectorAll<HTMLElement>(`[data-sender="${CSS.escape(sender)}"]`);
+    for (const wrapper of wrappers) {
+      const fallback = wrapper.querySelector<HTMLElement>(".message-group__avatar-fallback");
+      if (!fallback) continue;
+      const img = document.createElement("img");
+      img.className = "message-group__avatar";
+      img.src = dataUrl;
+      img.alt = "";
+      img.setAttribute("aria-hidden", "true");
+      img.onerror = () => img.replaceWith(buildFallbackAvatar(sender));
+      fallback.replaceWith(img);
+    }
+  }
+
   /** Returns the DOM element for the given message event ID, or null. */
   getMessageElementById(eventId: string): HTMLElement | null {
     return this._listEl.querySelector<HTMLElement>(`[data-message-id="${eventId}"]`);
+  }
+
+  /**
+   * Swap out the src of an image/sticker message once the mxc:// content
+   * has been downloaded and converted to a data URL.
+   */
+  updateMessageMedia(eventId: string, dataUrl: string): void {
+    const el = this.getMessageElementById(eventId);
+    if (!el) return;
+    const img = el.querySelector<HTMLImageElement>(".message__media");
+    if (img) img.src = dataUrl;
+  }
+
+  /**
+   * Promote an optimistic message to its real server-assigned event ID.
+   * Call this when the send IPC resolves: updates both the DOM element's
+   * data-message-id attribute and the internal _messages array so that
+   * reactions, edits, and selection all target the real event ID.
+   */
+  confirmMessage(optimisticId: string, realEventId: string): void {
+    const idx = this._messages.findIndex((m) => m.id === optimisticId);
+    if (idx >= 0) {
+      this._messages[idx] = { ...this._messages[idx], id: realEventId };
+    }
+    const el = this.getMessageElementById(optimisticId);
+    if (el) {
+      el.dataset.messageId = realEventId;
+    }
+  }
+
+  /**
+   * Update the reaction bar for a message in-place.
+   * If the message has no reaction bar yet, one is created and appended.
+   * Passing an empty array removes the bar.
+   */
+  updateMessageReactions(eventId: string, reactions: ReactionGroup[]): void {
+    // Keep internal cache in sync
+    const idx = this._messages.findIndex((m) => m.id === eventId);
+    if (idx >= 0) {
+      this._messages[idx] = { ...this._messages[idx], reactions };
+    }
+
+    const el = this.getMessageElementById(eventId);
+    if (!el) return;
+
+    const bar = el.querySelector<HTMLElement>(".reaction-bar");
+    if (reactions.length === 0) {
+      bar?.remove();
+      return;
+    }
+    if (bar) {
+      updateReactionBar(bar, reactions);
+    } else {
+      el.appendChild(createReactionBar(reactions));
+    }
   }
 
   /**

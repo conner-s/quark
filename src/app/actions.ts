@@ -2,8 +2,12 @@
 
 import { AppState } from "./state.js";
 
+import { saveSession, clearSession } from "./session.js";
+
 import {
   login as ipcLogin,
+  restoreSession as ipcRestoreSession,
+  logout as ipcLogout,
   getRooms,
   getRoomMembers,
   getTimeline,
@@ -19,6 +23,8 @@ import {
   startSasVerification,
   searchGifs,
   sendGif as ipcSendGif,
+  getThumbnail,
+  downloadMedia,
 } from "../ipc/index.js";
 
 import { applyTheme } from "../theme/loader.js";
@@ -35,6 +41,38 @@ import type { RoomEntry } from "../ui/RoomList.js";
 import type { MessageData, ReplyPreviewData } from "../ui/Timeline.js";
 import type { MemberEntry } from "../ui/MemberList.js";
 import type { SpaceItem } from "../ui/SpaceStrip.js";
+
+// ── Own-sent event deduplication ─────────────────────────────────────────────
+
+/**
+ * Event IDs of messages sent by this client that are awaiting their sync echo.
+ * The sync handler checks this set and skips appending the echo to avoid
+ * showing a duplicate alongside the already-visible optimistic message.
+ */
+const _ownSentEventIds = new Set<string>();
+
+/**
+ * Consume an event ID from the own-sent set.
+ * Returns true (and removes the ID) if this event was sent by us,
+ * false otherwise.
+ */
+export function consumeOwnSentEvent(eventId: string): boolean {
+  return _ownSentEventIds.delete(eventId);
+}
+
+// ── Member caches ─────────────────────────────────────────────────────────────
+
+/** userId → display name, populated when room members are fetched */
+const _memberDisplayName = new Map<string, string>();
+/** userId → mxc:// URL, populated when room members are fetched */
+const _memberAvatarMxc = new Map<string, string>();
+/** mxc:// URL → data: URL, populated as thumbnails are downloaded */
+const _avatarDataUrl = new Map<string, string>();
+
+/** Resolve a user ID to its display name, falling back to the raw ID. */
+export function resolveDisplayName(userId: string): string {
+  return _memberDisplayName.get(userId) ?? userId;
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,24 +101,34 @@ function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[]): 
     if (parent) {
       replyTo = {
         eventId: parent.event_id,
-        senderName: parent.sender,
+        senderName: resolveDisplayName(parent.sender),
         body: parent.body.slice(0, 80),
       };
     }
   }
 
+  // Resolve avatar: prefer cached data URL, then mock-injected URL (dev mode)
+  const mxcUrl = _memberAvatarMxc.get(e.sender);
+  const senderAvatarUrl =
+    (mxcUrl && _avatarDataUrl.get(mxcUrl)) ??
+    ((e as unknown as Record<string, unknown>)["_mock_avatar_url"] as string | undefined);
+
   return {
     id: e.event_id,
-    senderName: e.sender,
-    // _mock_avatar_url is injected by the mock layer; in production this
-    // would come from a member profile cache lookup.
-    senderAvatarUrl: (e as unknown as Record<string, unknown>)["_mock_avatar_url"] as string | undefined,
+    senderId: e.sender,
+    senderName: resolveDisplayName(e.sender),
+    senderAvatarUrl,
     timestamp: new Date(e.timestamp).toISOString(),
     body: e.body,
     htmlBody: e.formatted_body ?? undefined,
     type: msgType,
     mediaUrl: e.media_url ?? undefined,
-    reactions: e.reactions,
+    reactions: e.reactions?.map((r) => ({
+      key: r.key,
+      count: r.count,
+      own: r.own,
+      imageUrl: _resolveReactionImage(r.key),
+    })),
     replyTo,
   };
 }
@@ -108,7 +156,8 @@ export async function login(homeserver: string, username: string, password: stri
   loginScreen.setLoading(true);
 
   try {
-    await ipcLogin(homeserver, username, password);
+    const session = await ipcLogin(homeserver, username, password);
+    saveSession(session);
     AppState.set("loggedIn", true);
 
     showMainLayout(getComponents());
@@ -126,10 +175,47 @@ export async function login(homeserver: string, username: string, password: stri
 }
 
 /**
+ * Attempt to restore a previously saved session. Returns true on success.
+ * Call this on startup before showing the login form.
+ */
+export async function attemptSessionRestore(components: import("../ui/App.js").AppComponents): Promise<boolean> {
+  const { loadSession } = await import("./session.js");
+  const session = loadSession();
+  if (!session) return false;
+
+  try {
+    await ipcRestoreSession(session.homeserver_url, session);
+    AppState.set("loggedIn", true);
+    showMainLayout(components);
+    await refreshRooms();
+    return true;
+  } catch (err) {
+    // Stale/invalid session — clear it and fall through to login form
+    clearSession();
+    console.warn("Session restore failed, showing login:", err);
+    return false;
+  }
+}
+
+/**
+ * Logout: revoke server session, clear local session, show login screen.
+ */
+export async function logout(): Promise<void> {
+  try {
+    await ipcLogout();
+  } catch (err) {
+    console.warn("Logout IPC failed (continuing anyway):", err);
+  }
+  clearSession();
+  AppState.set("loggedIn", false);
+  window.location.reload();
+}
+
+/**
  * Select a room: fetch timeline, update header, mark read.
  */
 export async function selectRoom(roomId: string): Promise<void> {
-  const { roomList, roomHeader, timeline, statusBar } = getComponents();
+  const { roomList, roomHeader, timeline, memberList, statusBar } = getComponents();
   const prevRoom = AppState.get("currentRoomId");
 
   AppState.set("currentRoomId", roomId);
@@ -150,17 +236,39 @@ export async function selectRoom(roomId: string): Promise<void> {
   statusBar.setRoom(roomName);
 
   try {
-    const events = await getTimeline(roomId);
+    // Fetch timeline and members in parallel — members must be ready before
+    // converting events so display names are available on first render.
+    const [events, members] = await Promise.all([
+      getTimeline(roomId),
+      getRoomMembers(roomId).catch(() => [] as RoomMember[]),
+    ]);
+
     AppState.set("currentTimeline", events);
 
+    // Populate display-name and mxc caches from members (synchronous)
+    for (const m of members) {
+      if (m.display_name) _memberDisplayName.set(m.user_id, m.display_name);
+      if (m.avatar_url) _memberAvatarMxc.set(m.user_id, m.avatar_url);
+    }
+
+    // Render timeline — display names and any previously-cached avatars are now available
     const messages = events.map((e) => timelineEventToMessage(e, events));
     timeline.setMessages(messages);
+
+    // Populate the member list sidebar
+    memberList.setMembers(members.map(roomMemberToEntry));
+
+    // Download uncached avatar thumbnails in the background
+    _downloadMemberAvatars(members, timeline);
+
+    // Download mxc:// image content in the background
+    _downloadMessageImages(events, timeline);
+
+    // Resolve any mxc:// custom emoji used in reaction chips
+    void _downloadReactionEmoji(events, timeline);
   } catch (err) {
     showError(`Failed to load timeline: ${err instanceof Error ? err.message : String(err)}`);
   }
-
-  // Load member list in background (non-blocking)
-  void loadRoomMembers(roomId);
 
   // Cancel any active reply if we changed rooms
   if (prevRoom !== roomId) {
@@ -438,18 +546,58 @@ export async function sendMessage(body: string): Promise<void> {
   }
 
   try {
-    await ipcSendMessage(roomId, body, undefined, replyToEventId ?? undefined);
+    const eventId = await ipcSendMessage(roomId, body, undefined, replyToEventId ?? undefined);
+    // Promote the optimistic message to its real server-assigned event ID and
+    // register it so the sync echo is ignored (preventing a duplicate).
+    const { timeline } = getComponents();
+    timeline.confirmMessage(optimisticMsg.id, eventId);
+    _ownSentEventIds.add(eventId);
   } catch (err) {
     showError(`Failed to send: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
 /**
- * Send a reaction to an event.
+ * Send a reaction to an event. Optimistically updates the reaction bar so the
+ * user gets immediate feedback before the server round-trip completes.
  */
 export async function sendReaction(eventId: string, key: string): Promise<void> {
   const roomId = AppState.get("currentRoomId");
   if (!roomId) return;
+
+  // Optimistic UI update ─────────────────────────────────────────────────────
+  const { timeline } = getComponents();
+  const events = AppState.get("currentTimeline");
+  const targetEvent = events.find((e) => e.event_id === eventId);
+
+  if (targetEvent) {
+    const current = targetEvent.reactions ?? [];
+    const existing = current.find((r) => r.key === key);
+
+    let updated: typeof current;
+    if (existing?.own) {
+      // Toggle off — remove this user's reaction
+      updated = current
+        .map((r) => r.key === key ? { ...r, count: r.count - 1, own: false, own_event_id: null } : r)
+        .filter((r) => r.count > 0);
+    } else if (existing) {
+      // Increment existing group
+      updated = current.map((r) => r.key === key ? { ...r, count: r.count + 1, own: true } : r);
+    } else {
+      // Brand new reaction
+      updated = [...current, { key, count: 1, senders: [], own: true, own_event_id: null }];
+    }
+
+    AppState.set(
+      "currentTimeline",
+      events.map((e) => (e.event_id === eventId ? { ...e, reactions: updated } : e))
+    );
+
+    timeline.updateMessageReactions(
+      eventId,
+      updated.map((r) => ({ key: r.key, count: r.count, own: r.own, imageUrl: _resolveReactionImage(r.key) }))
+    );
+  }
 
   try {
     await ipcSendReaction(roomId, eventId, key);
@@ -457,6 +605,18 @@ export async function sendReaction(eventId: string, key: string): Promise<void> 
     showError(`Failed to react: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
+
+/**
+ * Return a cached data-URL for a reaction key that is an mxc:// URI,
+ * or undefined for plain Unicode emoji.
+ */
+function _resolveReactionImage(key: string): string | undefined {
+  if (!key.startsWith("mxc://")) return undefined;
+  return _emojiImageCache.get(key);
+}
+
+/** Cache: mxc:// URL → data: URL for custom emoji rendered in reaction chips */
+const _emojiImageCache = new Map<string, string>();
 
 /**
  * Start composing a reply to a message.
@@ -804,13 +964,92 @@ function roomMemberToEntry(m: RoomMember): MemberEntry {
 }
 
 /**
- * Fetch and populate the member list for the given room.
+ * Scan all events for reactions whose key is an mxc:// custom emoji URL,
+ * download each (using the shared media cache), and update the reaction chips
+ * in the timeline once the image arrives.
+ */
+async function _downloadReactionEmoji(
+  events: TimelineEvent[],
+  timeline: import("../ui/Timeline.js").Timeline
+): Promise<void> {
+  // Gather unique mxc:// keys across all events
+  const mxcKeys = new Set<string>();
+  for (const e of events) {
+    for (const r of e.reactions ?? []) {
+      if (r.key.startsWith("mxc://") && !_emojiImageCache.has(r.key)) {
+        mxcKeys.add(r.key);
+      }
+    }
+  }
+
+  for (const mxc of mxcKeys) {
+    getThumbnail(mxc, 32, 32)
+      .then((dl) => {
+        const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+        _emojiImageCache.set(mxc, dataUrl);
+
+        // Update every message that has a reaction with this mxc key
+        for (const e of events) {
+          const reactions = e.reactions ?? [];
+          if (!reactions.some((r) => r.key === mxc)) continue;
+          timeline.updateMessageReactions(
+            e.event_id,
+            reactions.map((r) => ({
+              key: r.key,
+              count: r.count,
+              own: r.own,
+              imageUrl: _emojiImageCache.get(r.key),
+            }))
+          );
+        }
+      })
+      .catch(() => { /* non-critical */ });
+  }
+}
+
+/** Download mxc:// image message content and swap in data URLs once ready. */
+function _downloadMessageImages(events: TimelineEvent[], timeline: import("../ui/Timeline.js").Timeline): void {
+  for (const e of events) {
+    if (!e.media_url || !e.media_url.startsWith("mxc://")) continue;
+    const eventId = e.event_id;
+    const mxc = e.media_url;
+    downloadMedia(mxc).then((dl) => {
+      const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+      timeline.updateMessageMedia(eventId, dataUrl);
+    }).catch(() => { /* non-critical */ });
+  }
+}
+
+/** Download uncached avatar thumbnails and update the timeline when each arrives. */
+function _downloadMemberAvatars(members: RoomMember[], timeline: import("../ui/Timeline.js").Timeline): void {
+  for (const m of members) {
+    if (!m.avatar_url) continue;
+    const mxc = m.avatar_url;
+    if (_avatarDataUrl.has(mxc)) {
+      timeline.updateSenderAvatar(m.user_id, _avatarDataUrl.get(mxc)!);
+      continue;
+    }
+    getThumbnail(mxc, 40, 40).then((dl) => {
+      const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+      _avatarDataUrl.set(mxc, dataUrl);
+      timeline.updateSenderAvatar(m.user_id, dataUrl);
+    }).catch(() => { /* non-critical */ });
+  }
+}
+
+/**
+ * Refresh the member list for the current room (e.g. after a sync event).
  */
 export async function loadRoomMembers(roomId: string): Promise<void> {
-  const { memberList } = getComponents();
+  const { memberList, timeline } = getComponents();
   try {
     const members = await getRoomMembers(roomId);
+    for (const m of members) {
+      if (m.display_name) _memberDisplayName.set(m.user_id, m.display_name);
+      if (m.avatar_url) _memberAvatarMxc.set(m.user_id, m.avatar_url);
+    }
     memberList.setMembers(members.map(roomMemberToEntry));
+    _downloadMemberAvatars(members, timeline);
   } catch {
     // Non-critical — member list may just stay empty
   }
