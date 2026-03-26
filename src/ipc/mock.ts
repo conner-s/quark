@@ -189,7 +189,20 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
         },
       ] as EmojiPack[];
     case "get_sticker_packs":
-      return [] as EmojiPack[];
+      return [
+        {
+          pack_id: "mock-sticker-pack",
+          display_name: "Mock Stickers",
+          avatar_url: null,
+          source: "user",
+          room_id: null,
+          emojis: [
+            { shortcode: "wave", url: "mxc://matrix.org/mock-wave", usage: ["sticker"], body: "Wave" },
+            { shortcode: "thumbsup", url: "mxc://matrix.org/mock-thumbsup", usage: ["sticker"], body: "Thumbs Up" },
+            { shortcode: "heart", url: "mxc://matrix.org/mock-heart", usage: ["sticker"], body: "Heart" },
+          ],
+        },
+      ] as EmojiPack[];
     case "search_gifs": {
       const query = ((args?.query as string) ?? "").toLowerCase();
       // Placeholder SVG thumbnails so the grid actually renders in dev mode
@@ -235,6 +248,8 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       } as TimelineEvent);
       return "$mock-paste-event-id";
     }
+    case "send_sticker":
+      return "$mock-sticker-event-id";
     case "get_own_profile":
       return { user_id: "@you:matrix.org", display_name: "You", avatar_url: null };
     case "get_notification_config":

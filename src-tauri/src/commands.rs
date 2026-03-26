@@ -312,6 +312,27 @@ pub async fn send_pasted_image(
     .await
 }
 
+#[tauri::command]
+pub async fn send_sticker(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    shortcode: String,
+    url: String,
+    body: Option<String>,
+    pack_id: String,
+    pack_name: Option<String>,
+) -> Result<String, String> {
+    let client = get_client(&state)?;
+    let sticker = crate::matrix::stickers::StickerInfo {
+        shortcode,
+        url,
+        body,
+        pack_id,
+        pack_name,
+    };
+    crate::matrix::stickers::send_sticker(&client, &room_id, &sticker).await
+}
+
 // ─── Crypto Commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]

@@ -36,3 +36,25 @@ export async function getUserEmoji(): Promise<EmojiPack[]> {
 export async function getRoomEmoji(roomId: string): Promise<EmojiPack[]> {
   return getEmojiPacks(roomId);
 }
+
+/**
+ * Send a sticker event to a room.
+ * Matches the Rust `send_sticker` command.
+ */
+export async function sendSticker(
+  roomId: string,
+  shortcode: string,
+  url: string,
+  body: string | null,
+  packId: string,
+  packName: string | null,
+): Promise<string> {
+  return invoke<string>("send_sticker", {
+    roomId,
+    shortcode,
+    url,
+    body,
+    packId,
+    packName,
+  });
+}

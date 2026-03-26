@@ -36,6 +36,9 @@ import {
   getThumbnail,
   downloadMedia,
   sendPastedImage,
+  getEmojiPacks,
+  getStickerPacks,
+  sendSticker as ipcSendSticker,
 } from "../ipc/index.js";
 
 import { applyTheme } from "../theme/loader.js";
@@ -52,6 +55,9 @@ import type { RoomEntry } from "../ui/RoomList.js";
 import type { MessageData, ReplyPreviewData } from "../ui/Timeline.js";
 import type { MemberEntry } from "../ui/MemberList.js";
 import type { SpaceItem } from "../ui/SpaceStrip.js";
+import type { EmojiEntry } from "../ui/EmojiPicker.js";
+import type { StickerEntry } from "../ui/StickerPicker.js";
+import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
 
 // ── Own-sent event deduplication ─────────────────────────────────────────────
 
@@ -846,12 +852,64 @@ export function closeThread(): void {
   threadView.hide();
 }
 
+// ── Emoji picker state ────────────────────────────────────────────────────────
+
+/** Whether the EmojiPicker callbacks have been wired (one-time setup). */
+let _emojiPickerWired = false;
+
 /**
- * Show the emoji picker.
+ * Show the emoji picker, loading BUILTIN_EMOJI immediately and custom
+ * emoji packs asynchronously. Wires selection/tab-change callbacks on
+ * first call.
  */
 export function openEmojiPicker(): void {
-  const { emojiPicker } = getComponents();
+  const { emojiPicker, input } = getComponents();
+
+  if (!_emojiPickerWired) {
+    _emojiPickerWired = true;
+
+    emojiPicker.onSelect((entry) => {
+      const current = input.getValue();
+      const insertion = entry.imageUrl ? `:${entry.shortcode}: ` : `${entry.key}`;
+      input.setValue(current + insertion);
+      input.focus();
+    });
+
+    emojiPicker.onTabChange((tab) => {
+      emojiPicker.hide();
+      if (tab === "sticker") {
+        void openStickerPicker();
+      } else if (tab === "gif") {
+        openGifPicker();
+      }
+    });
+  }
+
+  // Show builtin emoji immediately so the picker opens without waiting
+  const builtinEntries: EmojiEntry[] = BUILTIN_EMOJI.map((e) => ({
+    key: e.key,
+    shortcode: e.shortcode,
+  }));
+  emojiPicker.setEntries(builtinEntries);
   emojiPicker.show();
+
+  // Async: prepend custom emoji packs (if any) once loaded
+  const roomId = AppState.get("currentRoomId");
+  getEmojiPacks(roomId ?? undefined)
+    .then((packs) => {
+      const customEntries: EmojiEntry[] = [];
+      for (const pack of packs) {
+        for (const e of pack.emojis) {
+          if (!e.usage.includes("sticker")) {
+            customEntries.push({ key: `:${e.shortcode}:`, shortcode: e.shortcode, imageUrl: e.url });
+          }
+        }
+      }
+      if (customEntries.length > 0) {
+        emojiPicker.setEntries([...customEntries, ...builtinEntries]);
+      }
+    })
+    .catch(() => { /* non-critical */ });
 }
 
 /**
@@ -938,11 +996,59 @@ export function openGifPicker(): void {
   gifPicker.show();
 }
 
+// ── Sticker picker state ──────────────────────────────────────────────────────
+
+/** Whether the StickerPicker onSelect callback has been wired (one-time setup). */
+let _stickerPickerWired = false;
+
 /**
- * Show the sticker picker.
+ * Show the sticker picker. Loads sticker packs for the current room and wires
+ * the send callback on first call.
  */
-export function openStickerPicker(): void {
+export async function openStickerPicker(): Promise<void> {
   const { stickerPicker } = getComponents();
+
+  if (!_stickerPickerWired) {
+    _stickerPickerWired = true;
+
+    stickerPicker.onSelect(async (sticker) => {
+      const roomId = AppState.get("currentRoomId");
+      if (!roomId) {
+        showError("No room selected");
+        return;
+      }
+      // id is encoded as "packId::shortcode"
+      const sepIdx = sticker.id.lastIndexOf("::");
+      const packId = sepIdx >= 0 ? sticker.id.slice(0, sepIdx) : sticker.id;
+      const shortcode = sepIdx >= 0 ? sticker.id.slice(sepIdx + 2) : sticker.name;
+      try {
+        await ipcSendSticker(roomId, shortcode, sticker.url, sticker.name, packId, sticker.packName ?? null);
+        showSuccess("Sticker sent");
+      } catch (err) {
+        showError(`Failed to send sticker: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    });
+  }
+
+  const roomId = AppState.get("currentRoomId");
+  try {
+    const packs = await getStickerPacks(roomId ?? undefined);
+    const stickers: StickerEntry[] = [];
+    for (const pack of packs) {
+      for (const e of pack.emojis) {
+        stickers.push({
+          id: `${pack.pack_id}::${e.shortcode}`,
+          name: e.body ?? e.shortcode,
+          url: e.url,
+          packName: pack.display_name ?? pack.pack_id,
+        });
+      }
+    }
+    stickerPicker.setStickers(stickers);
+  } catch {
+    stickerPicker.setStickers([]);
+  }
+
   stickerPicker.show();
 }
 
@@ -1091,7 +1197,10 @@ export async function refreshRooms(): Promise<void> {
   const { roomList, spaceStrip } = getComponents();
 
   try {
-    const [rooms, userSpaces] = await Promise.all([getRooms(), getUserSpaces()]);
+    const [rooms, userSpaces] = await Promise.all([
+      getRooms(),
+      getUserSpaces().catch(() => [] as Awaited<ReturnType<typeof getUserSpaces>>),
+    ]);
     AppState.set("roomListCache", rooms);
 
     // Build the set of rooms that belong to any space

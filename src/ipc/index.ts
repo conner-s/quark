@@ -54,6 +54,7 @@ export {
   getStickerPacks,
   getUserEmoji,
   getRoomEmoji,
+  sendSticker,
 } from "./emoji.js";
 
 // ─── Media ────────────────────────────────────────────────────────────────────

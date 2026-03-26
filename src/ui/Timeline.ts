@@ -396,8 +396,9 @@ export class Timeline {
   setMessages(msgs: MessageData[]): void {
     this._messages = [...msgs];
     this._renderAll();
-    this._scrollToBottom();
+    this._scrolledUp = false;
     this._scrollTopFired = false;
+    requestAnimationFrame(() => this._scrollToBottom());
   }
 
   /** Append a single message, scrolling to bottom if not scrolled up */

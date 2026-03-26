@@ -63,6 +63,7 @@ pub fn run() {
             commands::get_emoji_packs,
             // Stickers
             commands::get_sticker_packs,
+            commands::send_sticker,
             // Media
             commands::download_media,
             commands::upload_media,
