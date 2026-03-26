@@ -92,6 +92,31 @@ export class MemberList {
     this._updateActive();
   }
 
+  focusFirst(): void {
+    const first = this._scrollEl.querySelector<HTMLElement>(".member-list__item, .member-list__section-header");
+    first?.focus();
+  }
+
+  navDown(): void {
+    const items = Array.from(
+      this._scrollEl.querySelectorAll<HTMLElement>(".member-list__item, .member-list__section-header")
+    );
+    const focused = document.activeElement as HTMLElement;
+    const idx = items.indexOf(focused);
+    const next = items[idx + 1] ?? items[0];
+    next?.focus();
+  }
+
+  navUp(): void {
+    const items = Array.from(
+      this._scrollEl.querySelectorAll<HTMLElement>(".member-list__item, .member-list__section-header")
+    );
+    const focused = document.activeElement as HTMLElement;
+    const idx = items.indexOf(focused);
+    const prev = idx <= 0 ? items[items.length - 1] : items[idx - 1];
+    prev?.focus();
+  }
+
   // ── Private ────────────────────────────────────────────────────────────
 
   private _render(): void {

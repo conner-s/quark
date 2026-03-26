@@ -84,21 +84,23 @@ function dispatchAction(action: string, components: AppComponents): void {
       break;
 
     // ── Navigation — routed by active panel ────────────────────────────
-    case "nav-down":
-      if (AppState.get("activePanel") === "roomlist") {
-        roomList.navDown();
-      } else {
-        timeline.selectNext();
-      }
+    case "nav-down": {
+      const panel = AppState.get("activePanel");
+      if (panel === "roomlist") roomList.navDown();
+      else if (panel === "spaces") components.spaceStrip.navDown();
+      else if (panel === "members") components.memberList.navDown();
+      else timeline.selectNext();
       break;
+    }
 
-    case "nav-up":
-      if (AppState.get("activePanel") === "roomlist") {
-        roomList.navUp();
-      } else {
-        timeline.selectPrev();
-      }
+    case "nav-up": {
+      const panel = AppState.get("activePanel");
+      if (panel === "roomlist") roomList.navUp();
+      else if (panel === "spaces") components.spaceStrip.navUp();
+      else if (panel === "members") components.memberList.navUp();
+      else timeline.selectPrev();
       break;
+    }
 
     case "jump-top":
       if (AppState.get("activePanel") !== "roomlist") timeline.selectFirst();
@@ -291,6 +293,11 @@ export function setupKeyboard(components: AppComponents): void {
     void sendReaction(eventId, key);
   });
 
+  // Track activePanel when focus lands on the space strip
+  components.spaceStrip.getElement().addEventListener("quark:space-focused", () => {
+    AppState.set("activePanel", "spaces");
+  });
+
   // Clicking the input field while not in Insert mode switches to Insert mode
   components.input.onFocusEnterInsert(() => {
     if (modeManager.current !== Mode.Insert) {
@@ -428,22 +435,48 @@ export function setupKeyboard(components: AppComponents): void {
       return;
     }
 
-    // Left/Right arrows switch focus between panels
-    if (e.key === "ArrowLeft" && AppState.get("activePanel") === "timeline") {
-      e.preventDefault();
-      AppState.set("activePanel", "roomlist");
-      components.roomList.focusActive();
+    // Left/Right arrows navigate between panels: spaces ← roomlist ← timeline → members
+    const activePanel = AppState.get("activePanel");
+    if (e.key === "ArrowLeft") {
+      if (activePanel === "timeline") {
+        e.preventDefault();
+        AppState.set("activePanel", "roomlist");
+        components.roomList.focusActive();
+        return;
+      }
+      if (activePanel === "roomlist") {
+        e.preventDefault();
+        AppState.set("activePanel", "spaces");
+        components.spaceStrip.focusActive();
+        return;
+      }
       return;
     }
-    if (e.key === "ArrowRight" && AppState.get("activePanel") === "roomlist") {
-      e.preventDefault();
-      AppState.set("activePanel", "timeline");
+    if (e.key === "ArrowRight") {
+      if (activePanel === "spaces") {
+        e.preventDefault();
+        AppState.set("activePanel", "roomlist");
+        components.roomList.focusActive();
+        return;
+      }
+      if (activePanel === "roomlist") {
+        e.preventDefault();
+        AppState.set("activePanel", "timeline");
+        return;
+      }
+      if (activePanel === "timeline" && AppState.get("memberListVisible")) {
+        e.preventDefault();
+        AppState.set("activePanel", "members");
+        components.memberList.focusFirst();
+        return;
+      }
       return;
     }
 
     // Normal / Visual — resolve through keymap
-    const activeContext = AppState.get("activePanel") === "timeline" ? "timeline" as const
-      : AppState.get("activePanel") === "roomlist" ? "roomlist" as const
+    const panelCtx = AppState.get("activePanel");
+    const activeContext = panelCtx === "timeline" ? "timeline" as const
+      : panelCtx === "roomlist" ? "roomlist" as const
       : "global" as const;
 
     const result = keymapManager.resolveKey(e.key, activeContext);

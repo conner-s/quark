@@ -42,6 +42,28 @@ export class SpaceStrip {
     this._updateActive();
   }
 
+  focusActive(): void {
+    const active = this._el.querySelector<HTMLElement>(".space-strip__item--active");
+    const first = this._el.querySelector<HTMLElement>(".space-strip__item");
+    (active ?? first)?.focus();
+  }
+
+  navDown(): void {
+    const items = Array.from(this._el.querySelectorAll<HTMLElement>(".space-strip__item"));
+    const focused = document.activeElement as HTMLElement;
+    const idx = items.indexOf(focused);
+    const next = items[idx + 1] ?? items[0];
+    next?.focus();
+  }
+
+  navUp(): void {
+    const items = Array.from(this._el.querySelectorAll<HTMLElement>(".space-strip__item"));
+    const focused = document.activeElement as HTMLElement;
+    const idx = items.indexOf(focused);
+    const prev = idx <= 0 ? items[items.length - 1] : items[idx - 1];
+    prev?.focus();
+  }
+
   /** Swap in a resolved avatar data URL for a space item. */
   updateSpaceAvatar(spaceId: string, dataUrl: string): void {
     const item = this._el.querySelector<HTMLElement>(`[data-space-id="${CSS.escape(spaceId)}"]`);
@@ -114,6 +136,10 @@ export class SpaceStrip {
     }
 
     el.addEventListener("click", () => this._selectId(item.id));
+    el.addEventListener("focus", () => {
+      // Dispatch a focusspace event so keyboard.ts can update activePanel
+      this._el.dispatchEvent(new CustomEvent("quark:space-focused", { bubbles: true }));
+    });
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -147,12 +173,16 @@ export class SpaceStrip {
 
     if (e.key === "j" || e.key === "ArrowDown") {
       e.preventDefault();
+      e.stopPropagation();
       const next = items[currentIndex + 1];
       next?.focus();
     } else if (e.key === "k" || e.key === "ArrowUp") {
       e.preventDefault();
+      e.stopPropagation();
       const prev = items[currentIndex - 1];
       prev?.focus();
+    } else if (e.key === "Enter" || e.key === " ") {
+      // Handled by individual item click listeners
     }
   }
 }

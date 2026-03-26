@@ -4,7 +4,7 @@ import type { RoomInfo, TimelineEvent } from "../ipc/types.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type ActivePanel = "roomlist" | "timeline" | "spaces";
+export type ActivePanel = "roomlist" | "timeline" | "spaces" | "members";
 
 export interface AppStateSnapshot {
   loggedIn: boolean;
