@@ -8,6 +8,10 @@ export type ActivePanel = "roomlist" | "timeline" | "spaces";
 
 export interface AppStateSnapshot {
   loggedIn: boolean;
+  /** Matrix user ID of the locally logged-in user (e.g. @alice:matrix.org). */
+  ownUserId: string | null;
+  /** Display name of the locally logged-in user. */
+  ownDisplayName: string | null;
   currentRoomId: string | null;
   currentSpaceId: string | null;
   activePanel: ActivePanel;
@@ -32,6 +36,8 @@ export type StateChangeListener<K extends StateChangeKey = StateChangeKey> = (
 class AppStateManager {
   private _state: AppStateSnapshot = {
     loggedIn: false,
+    ownUserId: null,
+    ownDisplayName: null,
     currentRoomId: null,
     currentSpaceId: null,
     activePanel: "roomlist",

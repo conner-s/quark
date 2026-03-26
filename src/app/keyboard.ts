@@ -291,6 +291,14 @@ export function setupKeyboard(components: AppComponents): void {
     void sendReaction(eventId, key);
   });
 
+  // Clicking the input field while not in Insert mode switches to Insert mode
+  components.input.onFocusEnterInsert(() => {
+    if (modeManager.current !== Mode.Insert) {
+      modeManager.transition(Mode.Insert);
+      components.input.focus();
+    }
+  });
+
   // Wire compose box action buttons
   components.input.onEmojiPickerClick(() => {
     modeManager.transition(Mode.Insert);

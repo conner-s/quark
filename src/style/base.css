@@ -968,6 +968,178 @@ span.reaction__emoji {
   letter-spacing: 0.03em;
 }
 
+/* ── Emoji / Sticker picker overlay ─────────────────────────────────────── */
+
+.emoji-picker {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  width: 340px;
+  max-height: min(420px, calc(100vh - 100px));
+  background-color: var(--bg);
+  border: var(--border-width) solid var(--accent-primary);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  z-index: 250;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: profile-dialog-in 80ms ease;
+}
+
+.emoji-picker__tabs {
+  display: flex;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.emoji-picker__tab {
+  background: transparent;
+  border: none;
+  border-right: var(--border-width) solid var(--border-color);
+  color: var(--roomlist-muted);
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 1px);
+  letter-spacing: 0.06em;
+  padding: 4px 14px;
+  text-transform: uppercase;
+  outline: none;
+}
+
+.emoji-picker__tab:hover { color: var(--fg); background-color: rgba(255,255,255,0.04); }
+.emoji-picker__tab--active { color: var(--accent-primary); background-color: rgba(255,255,255,0.03); }
+
+.emoji-picker__search {
+  background: transparent;
+  border: none;
+  border-bottom: var(--border-width) solid var(--border-color);
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  outline: none;
+  padding: 6px 10px;
+  flex-shrink: 0;
+}
+
+.emoji-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  padding: 6px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.emoji-picker__cell {
+  aspect-ratio: 1;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  outline: none;
+  padding: 0;
+}
+
+.emoji-picker__cell:hover,
+.emoji-picker__cell:focus {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.emoji-picker__img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+/* Sticker picker shares .emoji-picker layout */
+.sticker-picker {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  width: 340px;
+  max-height: min(420px, calc(100vh - 100px));
+  background-color: var(--bg);
+  border: var(--border-width) solid var(--accent-primary);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  z-index: 250;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: profile-dialog-in 80ms ease;
+}
+
+.sticker-picker__pack-label {
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.sticker-picker__search {
+  background: transparent;
+  border: none;
+  border-bottom: var(--border-width) solid var(--border-color);
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  outline: none;
+  padding: 6px 10px;
+  flex-shrink: 0;
+}
+
+.sticker-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 6px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.sticker-picker__cell {
+  aspect-ratio: 1;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+  padding: 0;
+}
+
+.sticker-picker__cell:hover,
+.sticker-picker__cell--focused,
+.sticker-picker__cell:focus { background-color: rgba(255, 255, 255, 0.1); }
+
+.sticker-picker__img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 2px;
+}
+
+.sticker-picker__cell-label {
+  font-size: calc(var(--font-size) - 3px);
+  color: var(--roomlist-muted);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+  padding: 0 2px;
+}
+
 /* ── Input bar ───────────────────────────────────────────────────────────── */
 
 .input-bar {
@@ -1863,7 +2035,12 @@ a:hover {
               0 0 0 1px color-mix(in srgb, var(--accent-primary) 20%, transparent);
   z-index: 300;
   width: 320px;
-  animation: quick-react-in 80ms ease;
+  animation: profile-dialog-in 80ms ease;
+}
+
+@keyframes profile-dialog-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% - 4px)); }
+  to   { opacity: 1; transform: translate(-50%, -50%); }
 }
 
 .profile-dialog__header {

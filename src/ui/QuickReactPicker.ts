@@ -236,7 +236,7 @@ export class QuickReactPicker {
     // (which routes hjkl to the timeline) never sees these events.
     e.stopPropagation();
 
-    if (e.key === "Escape") {
+    if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
       e.preventDefault();
       this.hide();
       return;
@@ -258,9 +258,13 @@ export class QuickReactPicker {
   private _handleGridKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
-    if (e.key === "Escape" || (e.key === "Tab" && e.shiftKey)) {
+    if (e.key === "Escape" || (e.ctrlKey && e.key === "[") || (e.key === "Tab" && e.shiftKey)) {
       e.preventDefault();
-      this._returnToInput();
+      if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
+        this.hide();
+      } else {
+        this._returnToInput();
+      }
       return;
     }
     if (e.key === "Tab") {

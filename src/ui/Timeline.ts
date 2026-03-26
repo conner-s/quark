@@ -398,7 +398,13 @@ export class Timeline {
     this._renderAll();
     this._scrolledUp = false;
     this._scrollTopFired = false;
-    requestAnimationFrame(() => this._scrollToBottom());
+    // Scroll immediately (for text content), then again after images may have loaded
+    this._scrollToBottom();
+    requestAnimationFrame(() => {
+      this._scrollToBottom();
+      // Second pass after a short delay to catch any late-loading content
+      setTimeout(() => this._scrollToBottom(), 150);
+    });
   }
 
   /** Append a single message, scrolling to bottom if not scrolled up */

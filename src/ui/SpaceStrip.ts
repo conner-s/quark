@@ -42,6 +42,26 @@ export class SpaceStrip {
     this._updateActive();
   }
 
+  /** Swap in a resolved avatar data URL for a space item. */
+  updateSpaceAvatar(spaceId: string, dataUrl: string): void {
+    const item = this._el.querySelector<HTMLElement>(`[data-space-id="${CSS.escape(spaceId)}"]`);
+    if (!item) return;
+    // Replace existing img or text with the resolved image
+    const existing = item.querySelector("img");
+    if (existing) {
+      existing.src = dataUrl;
+    } else {
+      item.textContent = "";
+      const img = document.createElement("img");
+      img.src = dataUrl;
+      img.alt = "";
+      img.style.width = "20px";
+      img.style.height = "20px";
+      img.style.objectFit = "cover";
+      item.appendChild(img);
+    }
+  }
+
   // ── Private ──────────────────────────────────────────────────────────────
 
   private _render(): void {

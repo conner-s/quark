@@ -25,6 +25,7 @@ export class Input {
   private _onEmojiClick: (() => void) | null = null;
   private _onAttachClick: (() => void) | null = null;
   private _onImagePaste: ((blob: Blob) => void) | null = null;
+  private _onFocusEnterInsert: (() => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -55,6 +56,9 @@ export class Input {
     this._fieldEl.setAttribute("aria-label", "Compose message");
     this._fieldEl.placeholder = "…";
     this._composeBoxEl.appendChild(this._fieldEl);
+
+    // Clicking the field while not in insert mode should switch to insert mode
+    this._fieldEl.addEventListener("click", () => this._onFocusEnterInsert?.());
 
     // Image paste handler
     this._fieldEl.addEventListener("paste", (e) => {
@@ -100,6 +104,11 @@ export class Input {
     this._composeBoxEl.appendChild(actionsEl);
 
     this._el.appendChild(this._composeBoxEl);
+  }
+
+  /** Register a callback invoked when the field is clicked to enter insert mode. */
+  onFocusEnterInsert(handler: () => void): void {
+    this._onFocusEnterInsert = handler;
   }
 
   /** Register a callback for the emoji picker button. */
