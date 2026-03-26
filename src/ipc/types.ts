@@ -132,6 +132,33 @@ export interface VerificationStatus {
   trust_level: string;
 }
 
+/**
+ * Cross-signing key status — matches matrix::crypto::CrossSigningInfo.
+ * `is_complete` is true when all three keys (master, self-signing, user-signing)
+ * are present locally.
+ */
+export interface CrossSigningInfo {
+  has_master: boolean;
+  has_self_signing: boolean;
+  has_user_signing: boolean;
+  is_complete: boolean;
+}
+
+/**
+ * SAS emoji verification info — matches matrix::crypto::SasInfo.
+ * `emoji` is a list of [symbol, description] pairs (up to 7).
+ * Available only after key exchange; poll get_sas_info until present.
+ */
+export interface SasInfo {
+  flow_id: string;
+  other_user_id: string;
+  other_device_id: string;
+  /** Each element is [emoji_symbol, description], e.g. ["🐶", "Dog"] */
+  emoji: [string, string][];
+  /** Three-digit decimal alternative to emoji, or null */
+  decimals: [number, number, number] | null;
+}
+
 // ─── Spaces ───────────────────────────────────────────────────────────────────
 
 /** A child room/space — matches matrix::spaces::SpaceChild */

@@ -12,6 +12,8 @@ export type {
   EmojiPack,
   MediaDownload,
   VerificationStatus,
+  CrossSigningInfo,
+  SasInfo,
   SpaceChild,
   ThreadRoot,
   GifResult,
@@ -57,7 +59,18 @@ export {
 export { downloadMedia, getThumbnail, uploadMedia } from "./media.js";
 
 // ─── Crypto ───────────────────────────────────────────────────────────────────
-export { getVerificationStatus, startSasVerification } from "./crypto.js";
+export {
+  getVerificationStatus,
+  getCrossSigningStatus,
+  bootstrapCrossSigning,
+  getUserDevices,
+  startSasVerification,
+  acceptVerificationRequest,
+  acceptSasVerification,
+  confirmSasVerification,
+  cancelSasVerification,
+  getSasInfo,
+} from "./crypto.js";
 
 // ─── Spaces ───────────────────────────────────────────────────────────────────
 export {

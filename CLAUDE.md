@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Instructions
+Always make sure that DESIGN.md is up to date. Cross off tasks as they are completed.
+When starting on a feature, always create a new git branch if currently on main unless otherwise instructed.
+Commit changes as you go when on a feature branch.
+
 ## Commands
 
 ```bash

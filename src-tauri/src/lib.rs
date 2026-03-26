@@ -71,7 +71,15 @@ pub fn run() {
             commands::set_cache_size_limit,
             // Crypto
             commands::get_verification_status,
+            commands::get_cross_signing_status,
+            commands::bootstrap_cross_signing,
+            commands::get_user_devices,
             commands::start_sas_verification,
+            commands::accept_verification_request,
+            commands::accept_sas_verification,
+            commands::confirm_sas_verification,
+            commands::cancel_sas_verification,
+            commands::get_sas_info,
             // Spaces
             commands::get_space_hierarchy,
             // Threads

@@ -222,6 +222,43 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     }
     case "get_notification_config":
       return { enabled: true, show_body: true, show_sender: true, mute_rooms: [], quiet_hours: null };
+
+    // ─── Crypto ──────────────────────────────────────────────────────────
+    case "get_verification_status":
+      return { user_id: "@you:matrix.org", device_id: "MOCKDEVICE", is_verified: true, is_cross_signed: false, trust_level: "self-verified" };
+    case "get_cross_signing_status":
+      return { has_master: false, has_self_signing: false, has_user_signing: false, is_complete: false };
+    case "bootstrap_cross_signing":
+      // Simulate server needing UIAA if no password supplied
+      if (!args?.password) throw new Error("UIAA_REQUIRED");
+      return null;
+    case "get_user_devices":
+      return [
+        { user_id: args?.userId as string ?? "@alice:matrix.org", device_id: "ALICEPHONE", is_verified: false, is_cross_signed: false, trust_level: "unverified" },
+        { user_id: args?.userId as string ?? "@alice:matrix.org", device_id: "ALICEDESKTOP", is_verified: true, is_cross_signed: false, trust_level: "self-verified" },
+      ];
+    case "start_sas_verification":
+      return "mock-flow-id-" + Date.now();
+    case "accept_verification_request":
+    case "accept_sas_verification":
+    case "confirm_sas_verification":
+    case "cancel_sas_verification":
+      return null;
+    case "get_sas_info": {
+      // Simulate emojis becoming available after a short delay
+      const MOCK_EMOJIS: [string, string][] = [
+        ["🐶", "Dog"], ["🌙", "Moon"], ["🎩", "Hat"],
+        ["🌹", "Rose"], ["🏠", "House"], ["🐧", "Penguin"], ["🎉", "Party"],
+      ];
+      return {
+        flow_id: args?.flowId as string ?? "mock-flow-id",
+        other_user_id: args?.userId as string ?? "@alice:matrix.org",
+        other_device_id: "ALICEPHONE",
+        emoji: MOCK_EMOJIS,
+        decimals: null,
+      };
+    }
+
     default:
       console.warn(`[mock] unhandled command: ${cmd}`, args);
       return null;

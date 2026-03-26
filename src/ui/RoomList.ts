@@ -122,6 +122,32 @@ export class RoomList {
     }
   }
 
+  navDown(): void {
+    const items = Array.from(
+      this._scrollEl.querySelectorAll<HTMLElement>(".room-list__item")
+    );
+    const focused = document.activeElement as HTMLElement;
+    const currentIndex = items.indexOf(focused);
+    const next = items[currentIndex + 1] ?? items[0];
+    next?.focus();
+  }
+
+  navUp(): void {
+    const items = Array.from(
+      this._scrollEl.querySelectorAll<HTMLElement>(".room-list__item")
+    );
+    const focused = document.activeElement as HTMLElement;
+    const currentIndex = items.indexOf(focused);
+    const prev = currentIndex <= 0 ? items[items.length - 1] : items[currentIndex - 1];
+    prev?.focus();
+  }
+
+  focusActive(): void {
+    const active = this._scrollEl.querySelector<HTMLElement>(".room-list__item--active");
+    const first = this._scrollEl.querySelector<HTMLElement>(".room-list__item");
+    (active ?? first)?.focus();
+  }
+
   private _handleKeydown(e: KeyboardEvent): void {
     const items = Array.from(
       this._scrollEl.querySelectorAll<HTMLElement>(".room-list__item")
@@ -129,15 +155,7 @@ export class RoomList {
     const focused = document.activeElement as HTMLElement;
     const currentIndex = items.indexOf(focused);
 
-    if (e.key === "j" || e.key === "ArrowDown") {
-      e.preventDefault();
-      const next = items[currentIndex + 1];
-      next?.focus();
-    } else if (e.key === "k" || e.key === "ArrowUp") {
-      e.preventDefault();
-      const prev = items[currentIndex - 1];
-      prev?.focus();
-    } else if (e.key === "Enter" && currentIndex >= 0) {
+    if (e.key === "Enter" && currentIndex >= 0) {
       e.preventDefault();
       const room = this._rooms[currentIndex];
       if (room) this._selectId(room.id);

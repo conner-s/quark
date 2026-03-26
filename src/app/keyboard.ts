@@ -61,7 +61,7 @@ function registerDefaultBindings(): void {
 // ── Action dispatcher ─────────────────────────────────────────────────────────
 
 function dispatchAction(action: string, components: AppComponents): void {
-  const { input, commandBar, timeline } = components;
+  const { input, commandBar, timeline, roomList } = components;
 
   switch (action) {
     case "mode-insert":
@@ -78,21 +78,29 @@ function dispatchAction(action: string, components: AppComponents): void {
       modeManager.transition(Mode.Visual);
       break;
 
-    // ── Navigation — handled directly on Timeline ───────────────────────
+    // ── Navigation — routed by active panel ────────────────────────────
     case "nav-down":
-      timeline.selectNext();
+      if (AppState.get("activePanel") === "roomlist") {
+        roomList.navDown();
+      } else {
+        timeline.selectNext();
+      }
       break;
 
     case "nav-up":
-      timeline.selectPrev();
+      if (AppState.get("activePanel") === "roomlist") {
+        roomList.navUp();
+      } else {
+        timeline.selectPrev();
+      }
       break;
 
     case "jump-top":
-      timeline.selectFirst();
+      if (AppState.get("activePanel") !== "roomlist") timeline.selectFirst();
       break;
 
     case "jump-bottom":
-      timeline.selectLast();
+      if (AppState.get("activePanel") !== "roomlist") timeline.selectLast();
       break;
 
     // ── Message actions — operate on the selected message ───────────────
@@ -381,6 +389,19 @@ export function setupKeyboard(components: AppComponents): void {
 
     if (mode === Mode.Command) {
       // Command bar handles its own keydown — nothing to do here
+      return;
+    }
+
+    // Left/Right arrows switch focus between panels
+    if (e.key === "ArrowLeft" && AppState.get("activePanel") === "timeline") {
+      e.preventDefault();
+      AppState.set("activePanel", "roomlist");
+      components.roomList.focusActive();
+      return;
+    }
+    if (e.key === "ArrowRight" && AppState.get("activePanel") === "roomlist") {
+      e.preventDefault();
+      AppState.set("activePanel", "timeline");
       return;
     }
 

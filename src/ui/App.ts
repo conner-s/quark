@@ -16,6 +16,7 @@ import { GifPicker } from "./GifPicker.js";
 import { HelpDialog } from "./HelpDialog.js";
 import { StickerPicker } from "./StickerPicker.js";
 import { Verification } from "./Verification.js";
+import { DevicePicker } from "./DevicePicker.js";
 import { ShortcodePreview } from "./ShortcodePreview.js";
 import { QuickReactPicker } from "./QuickReactPicker.js";
 
@@ -44,6 +45,7 @@ export interface AppComponents {
   gifPicker: GifPicker;
   stickerPicker: StickerPicker;
   verification: Verification;
+  devicePicker: DevicePicker;
   shortcodePreview: ShortcodePreview;
   helpDialog: HelpDialog;
   commandBar: CommandBar;
@@ -80,6 +82,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   const gifPicker = new GifPicker();
   const stickerPicker = new StickerPicker();
   const verification = new Verification();
+  const devicePicker = new DevicePicker();
   const shortcodePreview = new ShortcodePreview();
   const helpDialog = new HelpDialog();
   const quickReactPicker = new QuickReactPicker();
@@ -129,6 +132,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   document.body.appendChild(gifPicker.getElement());
   document.body.appendChild(stickerPicker.getElement());
   document.body.appendChild(verification.getElement());
+  document.body.appendChild(devicePicker.getElement());
   document.body.appendChild(helpDialog.getElement());
   document.body.appendChild(quickReactPicker.getElement());
 
@@ -148,6 +152,7 @@ export function mountApp(container: HTMLElement): AppComponents {
     gifPicker,
     stickerPicker,
     verification,
+    devicePicker,
     shortcodePreview,
     helpDialog,
     quickReactPicker,

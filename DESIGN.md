@@ -616,7 +616,7 @@ quark/
 
 #### E2EE / Crypto
 - [ ] Key backup (SSSS) — no backup/restore commands exist
-- [ ] Cross-signing setup UI — verification status exists but no guided cross-signing bootstrap flow
+- [x] Cross-signing setup UI — `:cross-sign [password]` bootstraps keys; `:verify <user-id>` starts SAS with emoji polling
 
 #### Media
 - [ ] Authenticated media (MSC3916) — `/_matrix/client/v1/media/download/` endpoint not used; currently uses legacy `/_matrix/media/v3/download/`
@@ -640,7 +640,21 @@ quark/
 - [x] **Reply indicator in timeline** — reply messages show an inline quoted preview and always start a new message group (bubble break), even for consecutive same-sender messages
 - [x] **Reactions UI** — `e` key opens a floating `QuickReactPicker` for the selected message; reaction chips are click-to-toggle; both dispatch to `sendReaction`
 - [x] **Member list sidebar** — toggled with `m`; renders as a fixed right-side column (Discord-style) with presence indicators and power-level badges; populated on room select
+- [ ] Handle spaces. Want to do this similar to Cinny.
+- [ ] Sort DMs by recent
+- [ ] Sort rooms in spaces by space-defined order.
+- [ ] Don't show rooms that are in spaces in the DM view
+- [ ] Add profile dialogue and keybind to activate it.
+- [ ] Back out of threads and replys with escape.
+- [ ] Add emoji search window
+- [ ] Show custom emojis in previews
+- [ ] Show all emojis in react picker (currently only showing a subset for some reason)
+- [ ] Add sticker picker dialogue
+- [ ] Add buttons on right side of compose box for attachments, emoji picker
+- [ ] Support pasting images into the image text box
 
 #### Hardening
+- [ ] Bug - rooms don't always load. When they do, sometimes I'm not able to scroll.
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
 - [ ] Performance profiling — large rooms (1000+ messages), many emoji packs
+- [ ] Command audit - make sure all commands are fully implemented

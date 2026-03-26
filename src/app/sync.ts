@@ -3,7 +3,7 @@
 import { AppState } from "./state.js";
 import type { AppComponents } from "../ui/App.js";
 import type { TimelineEvent, RoomInfo } from "../ipc/types.js";
-import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline } from "./actions.js";
+import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest } from "./actions.js";
 import { showToast } from "../ui/NotificationToast.js";
 import { handleIncomingMessage } from "./notifications.js";
 
@@ -34,6 +34,12 @@ interface SyncReactionPayload {
   sender: string;
   key: string;
   reaction_event_id: string;
+}
+
+interface SyncVerificationRequestPayload {
+  user_id: string;
+  device_id: string;
+  flow_id: string;
 }
 
 // ── Tauri event listener shim ─────────────────────────────────────────────────
@@ -208,6 +214,18 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     }
   );
 
+  // ── quark://sync/verification_request ────────────────────────────────────
+  const unlistenVerification = await tauriListen<SyncVerificationRequestPayload>(
+    "quark://sync/verification_request",
+    (payload) => {
+      handleIncomingVerificationRequest(
+        payload.user_id,
+        payload.device_id,
+        payload.flow_id,
+      );
+    }
+  );
+
   _unlisteners = [
     unlistenMessage,
     unlistenRooms,
@@ -215,6 +233,7 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     unlistenPresence,
     unlistenConnected,
     unlistenReaction,
+    unlistenVerification,
   ];
 
   // Mark as online

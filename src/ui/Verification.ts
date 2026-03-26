@@ -1,6 +1,12 @@
 // SAS / QR device verification UI
 
-export type VerificationState = "waiting" | "comparing" | "verified" | "failed" | "cancelled";
+export type VerificationState =
+  | "incoming"   // Received a request from another device — show accept prompt
+  | "waiting"    // We sent a request; waiting for the other device to respond
+  | "comparing"  // Emoji are ready; user compares them
+  | "verified"
+  | "failed"
+  | "cancelled";
 
 export interface SasEmoji {
   /** Unicode emoji glyph */
@@ -12,6 +18,7 @@ export interface SasEmoji {
 type VerificationCallback = () => void;
 
 const STATE_MESSAGES: Record<VerificationState, string> = {
+  incoming: "Incoming verification request",
   waiting: "Waiting for other device…",
   comparing: "Compare these emoji with the other device:",
   verified: "Verification successful!",
@@ -36,6 +43,7 @@ export class Verification {
   private _state: VerificationState = "waiting";
   private _sasEmoji: SasEmoji[] = [];
   private _focusedAction: "confirm" | "deny" = "confirm";
+  private _incomingSubtitleEl: HTMLElement;
 
   private _onConfirm: VerificationCallback | null = null;
   private _onDeny: VerificationCallback | null = null;
@@ -54,6 +62,12 @@ export class Verification {
     title.className = "verification__title";
     title.textContent = "Verify Device";
     this._el.appendChild(title);
+
+    // ── Incoming request subtitle (device / user info) ────────────────────
+    this._incomingSubtitleEl = document.createElement("div");
+    this._incomingSubtitleEl.className = "verification__incoming-subtitle";
+    this._incomingSubtitleEl.style.display = "none";
+    this._el.appendChild(this._incomingSubtitleEl);
 
     // ── Status message ────────────────────────────────────────────────────
     this._statusEl = document.createElement("div");
@@ -143,23 +157,51 @@ export class Verification {
 
     const isTerminal = state === "verified" || state === "failed" || state === "cancelled";
     const isComparing = state === "comparing";
+    const isIncoming = state === "incoming";
 
-    this._confirmBtn.style.display = isComparing ? "" : "none";
-    this._denyBtn.style.display = isComparing ? "" : "none";
+    // Confirm/deny visible in "comparing" (emoji check) and "incoming" (accept/reject)
+    const showActions = isComparing || isIncoming;
+    this._confirmBtn.style.display = showActions ? "" : "none";
+    this._denyBtn.style.display = showActions ? "" : "none";
     this._dismissBtn.style.display = isTerminal ? "" : "none";
 
+    // Relabel buttons for incoming vs comparing contexts
+    if (isIncoming) {
+      this._confirmBtn.textContent = "[ Accept ]";
+      this._confirmBtn.setAttribute("aria-label", "Accept verification request");
+      this._denyBtn.textContent = "[ Reject ]";
+      this._denyBtn.setAttribute("aria-label", "Reject verification request");
+    } else {
+      this._confirmBtn.textContent = "[ They Match ]";
+      this._confirmBtn.setAttribute("aria-label", "Confirm — emoji match");
+      this._denyBtn.textContent = "[ They Don't Match ]";
+      this._denyBtn.setAttribute("aria-label", "Deny — emoji do not match");
+    }
+
+    // Show subtitle only for incoming state
+    this._incomingSubtitleEl.style.display = isIncoming ? "" : "none";
+
     // Add state class to root for styling
-    const allStates: VerificationState[] = ["waiting", "comparing", "verified", "failed", "cancelled"];
+    const allStates: VerificationState[] = ["incoming", "waiting", "comparing", "verified", "failed", "cancelled"];
     for (const s of allStates) {
       this._el.classList.toggle(`verification--${s}`, state === s);
     }
 
-    if (isComparing) {
+    if (showActions) {
       this._focusedAction = "confirm";
       this._updateFocus();
     } else if (isTerminal) {
       this._dismissBtn.focus();
     }
+  }
+
+  /**
+   * Populate the "incoming" subtitle with who is asking to verify.
+   * Call this before setState("incoming").
+   */
+  setIncomingRequest(fromUserId: string, fromDeviceId: string): void {
+    this._incomingSubtitleEl.textContent =
+      `${fromDeviceId} from ${fromUserId} wants to verify this Quark session.`;
   }
 
   /** Set the 7 SAS emoji to display for comparison. */
@@ -194,7 +236,7 @@ export class Verification {
   }
 
   private _updateFocus(): void {
-    if (this._state !== "comparing") return;
+    if (this._state !== "comparing" && this._state !== "incoming") return;
     if (this._focusedAction === "confirm") {
       this._confirmBtn.focus();
       this._confirmBtn.classList.add("verification__btn--focused");
@@ -222,7 +264,7 @@ export class Verification {
       case "l":
       case "ArrowLeft":
       case "ArrowRight":
-        if (this._state === "comparing") {
+        if (this._state === "comparing" || this._state === "incoming") {
           e.preventDefault();
           this._focusedAction =
             this._focusedAction === "confirm" ? "deny" : "confirm";
@@ -231,7 +273,7 @@ export class Verification {
         return;
 
       case "Tab":
-        if (this._state === "comparing") {
+        if (this._state === "comparing" || this._state === "incoming") {
           e.preventDefault();
           this._focusedAction =
             this._focusedAction === "confirm" ? "deny" : "confirm";

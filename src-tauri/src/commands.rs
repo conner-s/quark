@@ -6,7 +6,7 @@ use crate::{
     gif::GifResult,
     matrix::{
         client::{MatrixState, SessionInfo},
-        crypto::VerificationStatus,
+        crypto::{CrossSigningInfo, SasInfo, VerificationStatus},
         emoji::EmojiPack,
         media::MediaDownload,
         reactions::ReactionGroup,
@@ -296,6 +296,82 @@ pub async fn start_sas_verification(
 ) -> Result<String, String> {
     let client = get_client(&state)?;
     crate::matrix::crypto::start_sas_verification(&client, &user_id, &device_id).await
+}
+
+#[tauri::command]
+pub async fn accept_verification_request(
+    state: State<'_, MatrixState>,
+    user_id: String,
+    flow_id: String,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::crypto::accept_verification_request(&client, &user_id, &flow_id).await
+}
+
+#[tauri::command]
+pub async fn accept_sas_verification(
+    state: State<'_, MatrixState>,
+    user_id: String,
+    flow_id: String,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::crypto::accept_sas_verification(&client, &user_id, &flow_id).await
+}
+
+#[tauri::command]
+pub async fn confirm_sas_verification(
+    state: State<'_, MatrixState>,
+    user_id: String,
+    flow_id: String,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::crypto::confirm_sas_verification(&client, &user_id, &flow_id).await
+}
+
+#[tauri::command]
+pub async fn cancel_sas_verification(
+    state: State<'_, MatrixState>,
+    user_id: String,
+    flow_id: String,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::crypto::cancel_sas_verification(&client, &user_id, &flow_id).await
+}
+
+#[tauri::command]
+pub async fn get_sas_info(
+    state: State<'_, MatrixState>,
+    user_id: String,
+    flow_id: String,
+) -> Result<Option<SasInfo>, String> {
+    let client = get_client(&state)?;
+    crate::matrix::crypto::get_sas_info(&client, &user_id, &flow_id).await
+}
+
+#[tauri::command]
+pub async fn get_cross_signing_status(
+    state: State<'_, MatrixState>,
+) -> Result<CrossSigningInfo, String> {
+    let client = get_client(&state)?;
+    crate::matrix::crypto::get_cross_signing_status(&client).await
+}
+
+#[tauri::command]
+pub async fn bootstrap_cross_signing(
+    state: State<'_, MatrixState>,
+    password: Option<String>,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::crypto::bootstrap_cross_signing(&client, password).await
+}
+
+#[tauri::command]
+pub async fn get_user_devices(
+    state: State<'_, MatrixState>,
+    user_id: String,
+) -> Result<Vec<VerificationStatus>, String> {
+    let client = get_client(&state)?;
+    crate::matrix::crypto::get_user_verification_statuses(&client, &user_id).await
 }
 
 // ─── Spaces Commands ──────────────────────────────────────────────────────────
