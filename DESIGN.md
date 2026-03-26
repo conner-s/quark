@@ -652,9 +652,36 @@ quark/
 - [ ] Add sticker picker dialogue
 - [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach shows "not yet implemented" toast
 - [x] Support pasting images into the compose box — clipboard image paste detected in `Input`, converted to base64, uploaded via new `send_pasted_image` IPC (Rust: decode base64 → upload → send as `m.image`)
+- [ ] Polish pass over top bar displaying room info. Take cues from the message UI.
+- [ ] Emoji and sticker picker styling. Should show in box above compose area.
+- [ ] Threads animate open a space between message bubbles and display there.
+- [ ] Settings UI
+- [ ] Permissions UI
+- [ ] Room configuration UI
+- [ ] Mouse interactions (click on profile to open profile view, react and reply buttons, etc.)
+- [ ] Pinned messages UI
+- [ ] Implement themes (command currently does nothing)
 
 #### Hardening
-- [ ] Bug - rooms don't always load. When they do, sometimes I'm not able to scroll.
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
 - [ ] Performance profiling — large rooms (1000+ messages), many emoji packs
 - [ ] Command audit - make sure all commands are fully implemented
+
+#### Bugs
+- [ ] rooms don't always load. When they do, sometimes I'm not able to scroll.
+- [ ] Some images aren't showing up
+- [ ] Space icons don't show up
+- [ ] Timeline should always start scrolled to the bottom; sometimes it starts in the middle
+- [ ] Profile pictures don't show in profile view
+- [ ] Profile view always selects user, not sender of selected message
+- [ ] Profile viewer starts offset from center, then snaps into view.
+- [ ] Unable to move vim keyboard focus to room list, space list, or member list.
+- [ ] Send message animation is no longer aligned when creating a new bubble, likely something to do with margins or padding.
+- [ ] Sent messages show as from "you" rather than with the correct profile info for the user.
+- [ ] Emoji picker sometimes goes off screen.
+- [ ] Clicking in the compose box allows you to type without switching to insert mode.
+- [ ] Custom emojis are not shown in shortcode preview, emoji picker, or react picker.
+- [ ] ctrl + [ does not work as escape in all places (i.e. react emoji picker)
+- [ ] React picker and emoji picker are separate entities; probably best to combine for consistentcy and maintainability
+- [ ] Noticeable delay when swtiching rooms.
+
