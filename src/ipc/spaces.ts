@@ -53,3 +53,10 @@ export async function getSubSpaces(spaceId: string): Promise<SpaceChild[]> {
   const children = await getSpaceChildren(spaceId);
   return children.filter((c) => c.is_space);
 }
+
+/**
+ * Get all space rooms the current user has joined.
+ */
+export async function getUserSpaces(): Promise<SpaceChild[]> {
+  return invoke<SpaceChild[]>("get_user_spaces", {});
+}

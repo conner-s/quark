@@ -16,6 +16,7 @@ import {
   editMessage as ipcEditMessage,
   redactMessage as ipcRedactMessage,
   getSpaceChildren,
+  getUserSpaces,
   joinRoom,
   leaveRoom,
   getThreadTimeline,
@@ -347,26 +348,43 @@ export async function selectSpace(spaceId: string): Promise<void> {
   spaceStrip.setActiveSpace(spaceId);
 
   if (spaceId === "__home__") {
-    // Show all rooms
+    // Show rooms that are NOT in any space (and include DMs)
     const allRooms = AppState.get("roomListCache");
-    roomList.setRooms(allRooms.map(roomInfoToEntry));
+    const spaceRoomIds = new Set(AppState.get("spaceRoomIds"));
+    const homeRooms = allRooms.filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id));
+    roomList.setRooms(homeRooms.map(roomInfoToEntry));
     return;
   }
 
   if (spaceId === "__dms__") {
     const allRooms = AppState.get("roomListCache");
-    const dms = allRooms.filter((r) => r.is_direct).map(roomInfoToEntry);
+    const dms = allRooms
+      .filter((r) => r.is_direct)
+      .sort((a, b) => {
+        // Sort by activity: notification count first, then unread, then alphabetical
+        const aScore = a.notification_count * 2 + a.unread_count;
+        const bScore = b.notification_count * 2 + b.unread_count;
+        if (bScore !== aScore) return bScore - aScore;
+        return (a.name ?? "").localeCompare(b.name ?? "");
+      })
+      .map(roomInfoToEntry);
     roomList.setRooms(dms);
     return;
   }
 
   try {
     const children = await getSpaceChildren(spaceId);
-    const roomIds = new Set(children.filter((c) => !c.is_space).map((c) => c.room_id));
-    const filtered = AppState.get("roomListCache")
-      .filter((r) => roomIds.has(r.room_id))
-      .map(roomInfoToEntry);
-    roomList.setRooms(filtered);
+    // The backend already sorts by m.space.child order field (then alphabetically).
+    // Preserve that order by iterating children and finding matching cached rooms.
+    const cache = AppState.get("roomListCache");
+    const cacheById = new Map(cache.map((r) => [r.room_id, r]));
+    const ordered = children
+      .filter((c) => !c.is_space)
+      .flatMap((c) => {
+        const r = cacheById.get(c.room_id);
+        return r ? [roomInfoToEntry(r)] : [];
+      });
+    roomList.setRooms(ordered);
   } catch (err) {
     showError(`Failed to load space: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -1021,19 +1039,41 @@ export async function refreshRooms(): Promise<void> {
   const { roomList, spaceStrip } = getComponents();
 
   try {
-    const rooms = await getRooms();
+    const [rooms, userSpaces] = await Promise.all([getRooms(), getUserSpaces()]);
     AppState.set("roomListCache", rooms);
 
+    // Build the set of rooms that belong to any space
+    // (fetched lazily — we do one get_space_hierarchy call per space in background)
+    const spaceRoomIdSet = new Set<string>();
+    await Promise.all(
+      userSpaces.map(async (space) => {
+        try {
+          const children = await getSpaceChildren(space.room_id);
+          for (const c of children) {
+            if (!c.is_space) spaceRoomIdSet.add(c.room_id);
+          }
+        } catch {
+          // Non-critical — worst case the home view shows extra rooms
+        }
+      })
+    );
+    AppState.set("spaceRoomIds", [...spaceRoomIdSet]);
+
+    // Populate space strip
+    const spaceItems: SpaceItem[] = userSpaces.map((s) => ({
+      id: s.room_id,
+      name: s.name ?? s.room_id,
+      avatarUrl: s.avatar_url ?? undefined,
+    }));
+    spaceStrip.setSpaces(spaceItems);
+
+    // Refresh the current space view with fresh data
     const spaceId = AppState.get("currentSpaceId");
     if (!spaceId || spaceId === "__home__") {
-      roomList.setRooms(rooms.map(roomInfoToEntry));
+      const spaceRoomIds = new Set(AppState.get("spaceRoomIds"));
+      const homeRooms = rooms.filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id));
+      roomList.setRooms(homeRooms.map(roomInfoToEntry));
     }
-
-    // Build space strip from rooms that are spaces
-    // (In a real integration the spaces would come from a dedicated IPC call;
-    //  for now we surface any cached space IDs we know about.)
-    const spaces: SpaceItem[] = [];
-    spaceStrip.setSpaces(spaces);
   } catch (err) {
     showError(`Failed to load rooms: ${err instanceof Error ? err.message : String(err)}`);
   }

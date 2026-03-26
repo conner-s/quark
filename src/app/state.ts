@@ -12,6 +12,8 @@ export interface AppStateSnapshot {
   currentSpaceId: string | null;
   activePanel: ActivePanel;
   roomListCache: RoomInfo[];
+  /** Room IDs that belong to at least one space (used to filter home view). */
+  spaceRoomIds: string[];
   currentTimeline: TimelineEvent[];
   replyToEventId: string | null;
   threadRootEventId: string | null;
@@ -34,6 +36,7 @@ class AppStateManager {
     currentSpaceId: null,
     activePanel: "roomlist",
     roomListCache: [],
+    spaceRoomIds: [],
     currentTimeline: [],
     replyToEventId: null,
     threadRootEventId: null,

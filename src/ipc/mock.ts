@@ -153,13 +153,18 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     case "redact_message":
     case "start_sync":
       return null;
+    case "get_user_spaces":
+      return [
+        { room_id: "!space1:matrix.org", name: "Work", avatar_url: null, is_space: true, topic: null, member_count: 5, order: null, canonical_alias: null },
+        { room_id: "!space2:matrix.org", name: "Gaming", avatar_url: null, is_space: true, topic: null, member_count: 10, order: null, canonical_alias: null },
+      ];
     case "get_space_hierarchy":
       return [
-        { space_id: "!space1:matrix.org", name: "Work", avatar_url: null },
-        { space_id: "!space2:matrix.org", name: "Gaming", avatar_url: null },
+        { room_id: "!general:matrix.org", name: "general", avatar_url: null, is_space: false, topic: "General discussion", member_count: 42, order: "1", canonical_alias: null },
+        { room_id: "!dev:matrix.org", name: "dev", avatar_url: null, is_space: false, topic: "Development talk", member_count: 18, order: "2", canonical_alias: null },
       ];
     case "get_space_children":
-      return MOCK_ROOMS.slice(0, 3);
+      return MOCK_ROOMS.slice(0, 2).map((r, i) => ({ room_id: r.room_id, name: r.name, avatar_url: r.avatar_url, is_space: false, topic: r.topic, member_count: r.member_count, order: String(i + 1), canonical_alias: null }));
     case "load_theme":
       // Return a minimal theme object so :theme commands don't crash in debug mode
       return {

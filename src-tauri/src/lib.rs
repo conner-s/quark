@@ -82,6 +82,7 @@ pub fn run() {
             commands::get_sas_info,
             // Spaces
             commands::get_space_hierarchy,
+            commands::get_user_spaces,
             // Threads
             commands::get_thread_roots,
             commands::get_thread_timeline,

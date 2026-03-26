@@ -640,10 +640,10 @@ quark/
 - [x] **Reply indicator in timeline** — reply messages show an inline quoted preview and always start a new message group (bubble break), even for consecutive same-sender messages
 - [x] **Reactions UI** — `e` key opens a floating `QuickReactPicker` for the selected message; reaction chips are click-to-toggle; both dispatch to `sendReaction`
 - [x] **Member list sidebar** — toggled with `m`; renders as a fixed right-side column (Discord-style) with presence indicators and power-level badges; populated on room select
-- [ ] Handle spaces. Want to do this similar to Cinny.
-- [ ] Sort DMs by recent
-- [ ] Sort rooms in spaces by space-defined order.
-- [ ] Don't show rooms that are in spaces in the DM view
+- [x] Handle spaces — `get_user_spaces` IPC command populates SpaceStrip with joined spaces; spaces refresh in parallel with room list load
+- [x] Sort DMs by recent — DM list sorted by notification_count × 2 + unread_count descending, then alphabetically
+- [x] Sort rooms in spaces by space-defined order — `selectSpace()` preserves backend-sorted order from `getSpaceChildren()` (backend sorts by `m.space.child` `order` field, fallback alphabetical)
+- [x] Don't show rooms that are in spaces in the DM view — home view (`__home__`) filters out rooms that belong to any space; `spaceRoomIds` set built at startup by fetching each space's children
 - [ ] Add profile dialogue and keybind to activate it.
 - [x] Back out of threads and replies with escape — global Escape handler now calls `cancelReply()` and `closeThread()`
 - [ ] Add emoji search window

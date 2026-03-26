@@ -386,6 +386,14 @@ pub async fn get_space_hierarchy(
     crate::matrix::spaces::get_space_hierarchy(&client, &space_room_id, max_depth).await
 }
 
+#[tauri::command]
+pub async fn get_user_spaces(
+    state: State<'_, MatrixState>,
+) -> Result<Vec<SpaceChild>, String> {
+    let client = get_client(&state)?;
+    crate::matrix::spaces::get_user_spaces(&client).await
+}
+
 // ─── Thread Commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]

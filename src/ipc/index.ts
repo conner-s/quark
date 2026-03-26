@@ -78,6 +78,7 @@ export {
   getSpaceChildren,
   getSpaceRooms,
   getSubSpaces,
+  getUserSpaces,
 } from "./spaces.js";
 
 // ─── Threads ──────────────────────────────────────────────────────────────────
