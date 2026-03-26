@@ -137,11 +137,14 @@ function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[]): 
     (mxcUrl && _avatarDataUrl.get(mxcUrl)) ??
     ((e as unknown as Record<string, unknown>)["_mock_avatar_url"] as string | undefined);
 
+  const ownUserId = AppState.get("ownUserId");
+
   return {
     id: e.event_id,
     senderId: e.sender,
     senderName: resolveDisplayName(e.sender),
     senderAvatarUrl,
+    isOwn: ownUserId ? e.sender === ownUserId : false,
     timestamp: new Date(e.timestamp).toISOString(),
     body: e.body,
     htmlBody: e.formatted_body ?? undefined,

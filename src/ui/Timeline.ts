@@ -177,14 +177,12 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     img.className = "message__image";
     img.src = msg.mediaUrl ?? "";
     img.alt = msg.mediaAlt ?? "image";
-    img.loading = "lazy";
     row.appendChild(img);
   } else if (type === "sticker") {
     const img = document.createElement("img");
     img.className = "message__sticker";
     img.src = msg.mediaUrl ?? "";
     img.alt = msg.mediaAlt ?? "sticker";
-    img.loading = "lazy";
     row.appendChild(img);
   } else {
     // Text / system
