@@ -24,6 +24,7 @@ export class Input {
   private _currentMode: string = "Normal";
   private _onEmojiClick: (() => void) | null = null;
   private _onAttachClick: (() => void) | null = null;
+  private _onImagePaste: ((blob: Blob) => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -54,6 +55,23 @@ export class Input {
     this._fieldEl.setAttribute("aria-label", "Compose message");
     this._fieldEl.placeholder = "…";
     this._composeBoxEl.appendChild(this._fieldEl);
+
+    // Image paste handler
+    this._fieldEl.addEventListener("paste", (e) => {
+      if (!this._onImagePaste) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith("image/")) {
+          const blob = item.getAsFile();
+          if (blob) {
+            e.preventDefault();
+            this._onImagePaste(blob);
+            return;
+          }
+        }
+      }
+    });
 
     // Action buttons on the right side of the compose box
     const actionsEl = document.createElement("div");
@@ -92,6 +110,11 @@ export class Input {
   /** Register a callback for the attach file button. */
   onAttachClick(handler: () => void): void {
     this._onAttachClick = handler;
+  }
+
+  /** Register a callback invoked when an image is pasted into the compose field. */
+  onImagePaste(handler: (blob: Blob) => void): void {
+    this._onImagePaste = handler;
   }
 
   /** Returns the compose box element (for position measurement and animation). */

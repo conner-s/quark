@@ -10,6 +10,7 @@ import {
   closeThread,
   openEmojiPicker,
   openGifPicker,
+  openProfileDialog,
   executeCommand,
   toggleMemberList,
   startReply,
@@ -17,6 +18,7 @@ import {
   openThread,
   openQuickReactPicker,
   setupReactionChipHandler,
+  handleImagePaste,
 } from "./actions.js";
 import { AppState } from "./state.js";
 import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
@@ -42,6 +44,7 @@ function registerDefaultBindings(): void {
   keymapManager.nmap("E", "edit");
   keymapManager.nmap("t", "open-thread");
   keymapManager.nmap("m", "toggle-members");
+  keymapManager.nmap("P", "open-profile");
 
   // Timeline context — tmap
   keymapManager.tmap("j", "nav-down");
@@ -146,6 +149,10 @@ function dispatchAction(action: string, components: AppComponents): void {
 
     case "toggle-members":
       toggleMemberList();
+      break;
+
+    case "open-profile":
+      void openProfileDialog();
       break;
 
     default:
@@ -295,11 +302,16 @@ export function setupKeyboard(components: AppComponents): void {
     showToast("Upload: not yet implemented", "info");
   });
 
+  // Wire image paste in compose field
+  components.input.onImagePaste((blob) => {
+    void handleImagePaste(blob);
+  });
+
   // Wire reaction chip clicks (bubbling custom events) → sendReaction
   setupReactionChipHandler();
 
   const { input, commandBar, shortcodePreview, timeline,
-          emojiPicker, gifPicker, stickerPicker, verification, helpDialog, quickReactPicker } = components;
+          emojiPicker, gifPicker, stickerPicker, verification, helpDialog, quickReactPicker, profileDialog } = components;
 
   // Sync mode indicators + blur/focus on mode change
   modeManager.on((_from, to) => {
@@ -388,6 +400,7 @@ export function setupKeyboard(components: AppComponents): void {
       verification.hide();
       helpDialog.hide();
       quickReactPicker.hide();
+      profileDialog.hide();
       timeline.clearSelection();
       cancelReply();
       closeThread();

@@ -66,6 +66,7 @@ pub fn run() {
             // Media
             commands::download_media,
             commands::upload_media,
+            commands::send_pasted_image,
             commands::get_cache_stats,
             commands::clear_media_cache,
             commands::set_cache_size_limit,
@@ -83,6 +84,8 @@ pub fn run() {
             // Spaces
             commands::get_space_hierarchy,
             commands::get_user_spaces,
+            // Profile
+            commands::get_own_profile,
             // Threads
             commands::get_thread_roots,
             commands::get_thread_timeline,

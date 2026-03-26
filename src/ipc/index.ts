@@ -3,6 +3,7 @@
 // ─── Shared types ─────────────────────────────────────────────────────────────
 export type {
   SessionInfo,
+  OwnProfile,
   RoomInfo,
   CreateRoomOptions,
   RoomMember,
@@ -31,7 +32,7 @@ export type {
 } from "./types.js";
 
 // ─── Client (auth) ────────────────────────────────────────────────────────────
-export { login, restoreSession, logout } from "./client.js";
+export { login, restoreSession, logout, getOwnProfile } from "./client.js";
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────
 export { getRooms, joinRoom, leaveRoom, createRoom, getRoomMembers } from "./rooms.js";
@@ -56,7 +57,7 @@ export {
 } from "./emoji.js";
 
 // ─── Media ────────────────────────────────────────────────────────────────────
-export { downloadMedia, getThumbnail, uploadMedia } from "./media.js";
+export { downloadMedia, getThumbnail, uploadMedia, sendPastedImage } from "./media.js";
 
 // ─── Crypto ───────────────────────────────────────────────────────────────────
 export {

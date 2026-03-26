@@ -1,7 +1,7 @@
 // Matrix client IPC calls — auth commands
 
 import { invoke } from "./invoke.js";
-import type { SessionInfo } from "./types.js";
+import type { SessionInfo, OwnProfile } from "./types.js";
 
 /**
  * Login with password credentials.
@@ -39,4 +39,12 @@ export async function restoreSession(
  */
 export async function logout(): Promise<void> {
   return invoke<void>("logout");
+}
+
+/**
+ * Fetch the current user's own profile.
+ * Matches the Rust `get_own_profile` command.
+ */
+export async function getOwnProfile(): Promise<OwnProfile> {
+  return invoke<OwnProfile>("get_own_profile", {});
 }

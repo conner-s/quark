@@ -44,3 +44,16 @@ export async function getThumbnail(
 export async function uploadMedia(filePath: string): Promise<string> {
   return invoke<string>("upload_media", { filePath });
 }
+
+/**
+ * Upload base64-encoded image bytes and send as an m.image event.
+ * Used for clipboard paste.
+ */
+export async function sendPastedImage(
+  roomId: string,
+  dataBase64: string,
+  mimeType: string,
+  filename: string,
+): Promise<string> {
+  return invoke<string>("send_pasted_image", { roomId, dataBase64, mimeType, filename });
+}

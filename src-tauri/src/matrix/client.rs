@@ -94,6 +94,42 @@ pub async fn restore_session_from_info(
     Ok(())
 }
 
+/// Own user profile info.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OwnProfile {
+    pub user_id: String,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+/// Fetch the current user's own profile (display name + avatar URL).
+pub async fn get_own_profile(client: &Client) -> Result<OwnProfile, String> {
+    let user_id = client
+        .user_id()
+        .ok_or("Not logged in")?
+        .to_string();
+
+    let display_name = client
+        .account()
+        .get_display_name()
+        .await
+        .map_err(|e| format!("Failed to get display name: {e}"))?;
+
+    let avatar_url = client
+        .account()
+        .get_avatar_url()
+        .await
+        .ok()
+        .flatten()
+        .map(|u| u.to_string());
+
+    Ok(OwnProfile {
+        user_id,
+        display_name,
+        avatar_url,
+    })
+}
+
 /// Start a background sync task. Returns immediately; sync runs in background.
 ///
 /// If an `app_handle` is provided, sync event handlers are registered before

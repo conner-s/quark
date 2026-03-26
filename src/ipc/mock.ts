@@ -225,6 +225,18 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       } as TimelineEvent);
       return "$mock-gif-event-id";
     }
+    case "send_pasted_image": {
+      const filename = (args?.filename as string) ?? "pasted-image.png";
+      MOCK_TIMELINE.push({
+        ...mockEvent("@you:matrix.org", `[Image: ${filename}]`, 0),
+        msg_type: "m.image",
+        media_url: "",
+        media_mimetype: (args?.mimeType as string) ?? "image/png",
+      } as TimelineEvent);
+      return "$mock-paste-event-id";
+    }
+    case "get_own_profile":
+      return { user_id: "@you:matrix.org", display_name: "You", avatar_url: null };
     case "get_notification_config":
       return { enabled: true, show_body: true, show_sender: true, mute_rooms: [], quiet_hours: null };
 

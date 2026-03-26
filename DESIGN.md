@@ -644,14 +644,14 @@ quark/
 - [x] Sort DMs by recent — DM list sorted by notification_count × 2 + unread_count descending, then alphabetically
 - [x] Sort rooms in spaces by space-defined order — `selectSpace()` preserves backend-sorted order from `getSpaceChildren()` (backend sorts by `m.space.child` `order` field, fallback alphabetical)
 - [x] Don't show rooms that are in spaces in the DM view — home view (`__home__`) filters out rooms that belong to any space; `spaceRoomIds` set built at startup by fetching each space's children
-- [ ] Add profile dialogue and keybind to activate it.
+- [x] Add profile dialogue and keybind — `ProfileDialog` overlay shows display name, user ID, and avatar; opened with `P` in normal mode or `:profile` command; `get_own_profile` IPC backed by matrix-sdk `account()` API
 - [x] Back out of threads and replies with escape — global Escape handler now calls `cancelReply()` and `closeThread()`
 - [ ] Add emoji search window
 - [ ] Show custom emojis in previews
 - [x] Show all emojis in react picker — `QuickReactPicker` now loads all `BUILTIN_EMOJI` (pinned common reactions first) in a scrollable grid; filtering uses shortcode text
 - [ ] Add sticker picker dialogue
 - [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach shows "not yet implemented" toast
-- [ ] Support pasting images into the image text box
+- [x] Support pasting images into the compose box — clipboard image paste detected in `Input`, converted to base64, uploaded via new `send_pasted_image` IPC (Rust: decode base64 → upload → send as `m.image`)
 
 #### Hardening
 - [ ] Bug - rooms don't always load. When they do, sometimes I'm not able to scroll.

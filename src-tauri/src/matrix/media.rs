@@ -47,6 +47,47 @@ fn to_base64(data: &[u8]) -> String {
     result
 }
 
+/// Decode standard base64 to bytes.
+fn from_base64(s: &str) -> Result<Vec<u8>, String> {
+    const VALS: [i8; 256] = {
+        let mut v = [-1i8; 256];
+        let chars = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut i = 0usize;
+        while i < chars.len() {
+            v[chars[i] as usize] = i as i8;
+            i += 1;
+        }
+        v
+    };
+    let s = s.trim_end_matches('=');
+    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let a = VALS[bytes[i] as usize];
+        if a < 0 { return Err(format!("Invalid base64 char at {i}")); }
+        if i + 1 >= bytes.len() { break; }
+        let b = VALS[bytes[i + 1] as usize];
+        if b < 0 { return Err(format!("Invalid base64 char at {}", i + 1)); }
+        out.push(((a as u8) << 2) | ((b as u8) >> 4));
+        if i + 2 >= bytes.len() { break; }
+        let c = VALS[bytes[i + 2] as usize];
+        if c < 0 { return Err(format!("Invalid base64 char at {}", i + 2)); }
+        out.push(((b as u8) << 4) | ((c as u8) >> 2));
+        if i + 3 >= bytes.len() { break; }
+        let d = VALS[bytes[i + 3] as usize];
+        if d < 0 { return Err(format!("Invalid base64 char at {}", i + 3)); }
+        out.push(((c as u8) << 6) | (d as u8));
+        i += 4;
+    }
+    Ok(out)
+}
+
+/// Public interface to decode a base64 string to bytes.
+pub fn decode_base64(s: &str) -> Result<Vec<u8>, String> {
+    from_base64(s)
+}
+
 /// Upload a file to the homeserver and return its mxc:// URL.
 pub async fn upload_media(
     client: &Client,

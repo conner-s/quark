@@ -10,6 +10,13 @@ export interface SessionInfo {
   homeserver_url: string;
 }
 
+/** Own user profile — matches matrix::client::OwnProfile */
+export interface OwnProfile {
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
 // ─── Rooms ────────────────────────────────────────────────────────────────────
 
 /** Serializable room info — matches matrix::rooms::RoomInfo */

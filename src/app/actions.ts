@@ -8,6 +8,7 @@ import {
   login as ipcLogin,
   restoreSession as ipcRestoreSession,
   logout as ipcLogout,
+  getOwnProfile,
   getRooms,
   getRoomMembers,
   getTimeline,
@@ -34,6 +35,7 @@ import {
   sendGif as ipcSendGif,
   getThumbnail,
   downloadMedia,
+  sendPastedImage,
 } from "../ipc/index.js";
 
 import { applyTheme } from "../theme/loader.js";
@@ -852,6 +854,23 @@ export function openEmojiPicker(): void {
   emojiPicker.show();
 }
 
+/**
+ * Open the profile dialog showing the current user's own profile.
+ */
+export async function openProfileDialog(): Promise<void> {
+  const { profileDialog } = getComponents();
+  try {
+    const profile = await getOwnProfile();
+    profileDialog.show({
+      userId: profile.user_id,
+      displayName: profile.display_name,
+      avatarUrl: profile.avatar_url,
+    });
+  } catch (err) {
+    showError(`Failed to load profile: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 // GIF picker search state (persisted across picker open/close within a session)
 let _gifQuery = "";
 let _gifResultCount = 0;
@@ -928,6 +947,34 @@ export function openStickerPicker(): void {
 }
 
 /**
+ * Handle a pasted image from the clipboard.
+ * Uploads to the homeserver and sends as an m.image event.
+ */
+export async function handleImagePaste(blob: Blob): Promise<void> {
+  const roomId = AppState.get("currentRoomId");
+  if (!roomId) return;
+
+  try {
+    // Convert blob to base64
+    const arrayBuffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const dataBase64 = btoa(binary);
+
+    const ext = blob.type.split("/")[1] ?? "png";
+    const filename = `pasted-image-${Date.now()}.${ext}`;
+
+    showToast("Uploading image…", "info");
+    await sendPastedImage(roomId, dataBase64, blob.type, filename);
+  } catch (err) {
+    showError(`Failed to send image: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
  * Execute a parsed : command.
  */
 export async function executeCommand(parsed: ParsedCommand): Promise<void> {
@@ -995,6 +1042,11 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
 
     case "help": {
       getComponents().helpDialog.show();
+      break;
+    }
+
+    case "profile": {
+      void openProfileDialog();
       break;
     }
 

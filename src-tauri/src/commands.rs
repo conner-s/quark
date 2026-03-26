@@ -5,7 +5,7 @@ use crate::{
     },
     gif::GifResult,
     matrix::{
-        client::{MatrixState, SessionInfo},
+        client::{MatrixState, OwnProfile, SessionInfo},
         crypto::{CrossSigningInfo, SasInfo, VerificationStatus},
         emoji::EmojiPack,
         media::MediaDownload,
@@ -278,6 +278,40 @@ pub async fn upload_media(
     crate::matrix::media::upload_file(&client, &file_path).await
 }
 
+/// Upload image data (base64-encoded) and send it as an m.image event.
+/// Used for clipboard paste of images from the frontend.
+#[tauri::command]
+pub async fn send_pasted_image(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    data_base64: String,
+    mime_type: String,
+    filename: String,
+) -> Result<String, String> {
+    let client = get_client(&state)?;
+
+    let data = crate::matrix::media::decode_base64(&data_base64)?;
+
+    let mxc_url = crate::matrix::media::upload_media(
+        &client,
+        data,
+        &mime_type,
+        Some(&filename),
+    )
+    .await?;
+
+    crate::matrix::timeline::send_image(
+        &client,
+        &room_id,
+        &filename,
+        &mxc_url,
+        &mime_type,
+        None,
+        None,
+    )
+    .await
+}
+
 // ─── Crypto Commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -392,6 +426,16 @@ pub async fn get_user_spaces(
 ) -> Result<Vec<SpaceChild>, String> {
     let client = get_client(&state)?;
     crate::matrix::spaces::get_user_spaces(&client).await
+}
+
+// ─── Profile Commands ─────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_own_profile(
+    state: State<'_, MatrixState>,
+) -> Result<OwnProfile, String> {
+    let client = get_client(&state)?;
+    crate::matrix::client::get_own_profile(&client).await
 }
 
 // ─── Thread Commands ──────────────────────────────────────────────────────────

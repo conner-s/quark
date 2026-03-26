@@ -19,6 +19,7 @@ import { Verification } from "./Verification.js";
 import { DevicePicker } from "./DevicePicker.js";
 import { ShortcodePreview } from "./ShortcodePreview.js";
 import { QuickReactPicker } from "./QuickReactPicker.js";
+import { ProfileDialog } from "./ProfileDialog.js";
 
 // ── AppComponents ─────────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ export interface AppComponents {
   helpDialog: HelpDialog;
   commandBar: CommandBar;
   quickReactPicker: QuickReactPicker;
+  profileDialog: ProfileDialog;
 
   // Status
   statusBar: StatusBar;
@@ -86,6 +88,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   const shortcodePreview = new ShortcodePreview();
   const helpDialog = new HelpDialog();
   const quickReactPicker = new QuickReactPicker();
+  const profileDialog = new ProfileDialog();
 
   // ── Login screen ─────────────────────────────────────────────────────────
   container.appendChild(loginScreen.getElement());
@@ -135,6 +138,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   document.body.appendChild(devicePicker.getElement());
   document.body.appendChild(helpDialog.getElement());
   document.body.appendChild(quickReactPicker.getElement());
+  document.body.appendChild(profileDialog.getElement());
 
   return {
     loginScreen,
@@ -156,6 +160,7 @@ export function mountApp(container: HTMLElement): AppComponents {
     shortcodePreview,
     helpDialog,
     quickReactPicker,
+    profileDialog,
     mainLayout,
   };
 }
