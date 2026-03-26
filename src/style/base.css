@@ -405,6 +405,14 @@ body {
   min-height: 0;
 }
 
+.timeline__loading-more {
+  text-align: center;
+  color: var(--msg-system);
+  font-size: calc(var(--font-size) - 2px);
+  padding: 4px 0;
+  flex-shrink: 0;
+}
+
 /* ── Message group (consecutive messages from the same sender) ──────────── */
 /* CSS-bordered box with a fieldset-legend–style inline sender label.       */
 
@@ -749,6 +757,7 @@ body {
   max-height: 400px;
   width: auto;
   height: auto;
+  object-fit: contain;
   margin-top: 4px;
   border: var(--border-width) solid var(--border-color);
 }
@@ -767,9 +776,9 @@ body {
 /* ── Custom emoji (inline) ───────────────────────────────────────────────── */
 
 img[data-mx-emoticon] {
-  height: var(--emoji-size);
+  height: 1em;
   width: auto;
-  vertical-align: middle;
+  vertical-align: -0.15em;
   display: inline;
 }
 
@@ -863,8 +872,9 @@ img[data-mx-emoticon] {
 }
 
 img.reaction__emoji {
-  height: var(--reaction-size);
+  height: calc(var(--reaction-size) + 4px);
   width: auto;
+  vertical-align: middle;
 }
 
 span.reaction__emoji {

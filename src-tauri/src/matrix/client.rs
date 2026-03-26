@@ -1,6 +1,6 @@
 use matrix_sdk::{
     config::SyncSettings,
-    ruma::api::client::filter::FilterDefinition,
+    ruma::{api::client::filter::FilterDefinition, presence::PresenceState},
     Client,
 };
 use serde::{Deserialize, Serialize};
@@ -106,7 +106,11 @@ pub async fn start_sync(client: Client, app_handle: Option<tauri::AppHandle>) {
 
     tokio::spawn(async move {
         let filter = FilterDefinition::default();
-        let sync_settings = SyncSettings::default().filter(filter.into());
+        // Use Unavailable so Synapse does not write a presence update on every
+        // sync poll — avoids lock contention on the presence table.
+        let sync_settings = SyncSettings::default()
+            .filter(filter.into())
+            .set_presence(PresenceState::Unavailable);
         let mut was_connected = false;
 
         loop {

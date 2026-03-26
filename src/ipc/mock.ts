@@ -136,7 +136,7 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     case "get_rooms":
       return MOCK_ROOMS;
     case "get_timeline":
-      return MOCK_TIMELINE;
+      return { events: MOCK_TIMELINE, prev_batch: null };
     case "get_room_members":
       return MOCK_MEMBERS;
     case "send_message": {

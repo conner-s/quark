@@ -42,6 +42,15 @@ pub struct TimelineEvent {
     pub reactions: Vec<ReactionGroup>,
 }
 
+/// A page of timeline events plus a token for loading the previous (older) page.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimelinePage {
+    pub events: Vec<TimelineEvent>,
+    /// Pagination token: pass as `before` to `get_timeline` to load older messages.
+    /// `None` means the beginning of the room history has been reached.
+    pub prev_batch: Option<String>,
+}
+
 /// Fetch recent timeline events for a room.
 /// Also aggregates any reaction events found in the same batch and attaches
 /// them to their target messages so the frontend can display them immediately.
@@ -49,7 +58,8 @@ pub async fn get_timeline(
     client: &Client,
     room_id: &str,
     limit: usize,
-) -> Result<Vec<TimelineEvent>, String> {
+    before: Option<String>,
+) -> Result<TimelinePage, String> {
     let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
 
     let room = client
@@ -58,11 +68,13 @@ pub async fn get_timeline(
 
     let mut opts = MessagesOptions::backward();
     opts.limit = UInt::try_from(limit as u64).unwrap_or(UInt::from(50u32));
+    opts.from = before;
 
     let messages = room
         .messages(opts)
         .await
         .map_err(|e| format!("Failed to fetch timeline: {e}"))?;
+    let prev_batch = messages.end.clone();
 
     let own_user_id = client.user_id().map(|u| u.to_string()).unwrap_or_default();
 
@@ -121,7 +133,7 @@ pub async fn get_timeline(
 
     // Reverse so oldest messages come first
     events.reverse();
-    Ok(events)
+    Ok(TimelinePage { events, prev_batch })
 }
 
 fn convert_sync_timeline_event(event: AnySyncTimelineEvent) -> Option<TimelineEvent> {

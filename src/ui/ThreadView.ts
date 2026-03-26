@@ -197,6 +197,13 @@ export class ThreadView {
     this._scrollToBottom();
   }
 
+  updateMessageMedia(eventId: string, dataUrl: string): void {
+    const el = this._timelineEl.querySelector<HTMLElement>(`[data-message-id="${eventId}"]`);
+    if (!el) return;
+    const img = el.querySelector<HTMLImageElement>(".thread-view__message-image, .thread-view__message-sticker");
+    if (img) img.src = dataUrl;
+  }
+
   focusInput(): void {
     this._inputField.focus();
   }

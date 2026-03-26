@@ -1,19 +1,24 @@
 // Timeline IPC calls
 
 import { invoke } from "./invoke.js";
-import type { TimelineEvent } from "./types.js";
+import type { TimelineEvent, TimelinePage } from "./types.js";
 
-export type { TimelineEvent };
+export type { TimelineEvent, TimelinePage };
 
 /**
- * Fetch recent timeline events for a room.
+ * Fetch a page of timeline events for a room.
+ * Pass `before` (from a previous `TimelinePage.prev_batch`) to load older messages.
  * Matches the Rust `get_timeline` command.
  */
 export async function getTimeline(
   roomId: string,
-  limit?: number,
-): Promise<TimelineEvent[]> {
-  return invoke<TimelineEvent[]>("get_timeline", { roomId, limit });
+  opts?: { limit?: number; before?: string },
+): Promise<TimelinePage> {
+  return invoke<TimelinePage>("get_timeline", {
+    roomId,
+    limit: opts?.limit,
+    before: opts?.before,
+  });
 }
 
 /**

@@ -13,7 +13,7 @@ use crate::{
         rooms::{CreateRoomOptions, RoomInfo, RoomMemberInfo},
         spaces::SpaceChild,
         threads::ThreadRoot,
-        timeline::TimelineEvent,
+        timeline::{TimelineEvent, TimelinePage},
     },
     media_cache::CacheStats,
     notifications::NotificationConfig,
@@ -160,9 +160,10 @@ pub async fn get_timeline(
     state: State<'_, MatrixState>,
     room_id: String,
     limit: Option<usize>,
-) -> Result<Vec<TimelineEvent>, String> {
+    before: Option<String>,
+) -> Result<TimelinePage, String> {
     let client = get_client(&state)?;
-    crate::matrix::timeline::get_timeline(&client, &room_id, limit.unwrap_or(50)).await
+    crate::matrix::timeline::get_timeline(&client, &room_id, limit.unwrap_or(50), before).await
 }
 
 #[tauri::command]

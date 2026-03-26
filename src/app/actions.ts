@@ -60,6 +60,13 @@ export function consumeOwnSentEvent(eventId: string): boolean {
   return _ownSentEventIds.delete(eventId);
 }
 
+// ── Pagination state ──────────────────────────────────────────────────────────
+
+/** Pagination token for loading older messages; null when at the start of history. */
+let _prevBatch: string | null = null;
+/** Prevents concurrent "load more" fetches. */
+let _paginationLoading = false;
+
 // ── Member caches ─────────────────────────────────────────────────────────────
 
 /** userId → display name, populated when room members are fetched */
@@ -220,6 +227,8 @@ export async function selectRoom(roomId: string): Promise<void> {
 
   AppState.set("currentRoomId", roomId);
   AppState.set("activePanel", "timeline");
+  _prevBatch = null;
+  _paginationLoading = false;
   roomList.setActiveRoom(roomId);
 
   // Find room info in cache
@@ -238,10 +247,13 @@ export async function selectRoom(roomId: string): Promise<void> {
   try {
     // Fetch timeline and members in parallel — members must be ready before
     // converting events so display names are available on first render.
-    const [events, members] = await Promise.all([
-      getTimeline(roomId),
+    const [page, members] = await Promise.all([
+      getTimeline(roomId, { limit: 50 }),
       getRoomMembers(roomId).catch(() => [] as RoomMember[]),
     ]);
+
+    const { events, prev_batch } = page;
+    _prevBatch = prev_batch;
 
     AppState.set("currentTimeline", events);
 
@@ -255,6 +267,9 @@ export async function selectRoom(roomId: string): Promise<void> {
     const messages = events.map((e) => timelineEventToMessage(e, events));
     timeline.setMessages(messages);
 
+    // Register scroll-to-top for pagination (re-registers on each room change)
+    timeline.onScrollToTop(() => void loadMoreMessages());
+
     // Populate the member list sidebar
     memberList.setMembers(members.map(roomMemberToEntry));
 
@@ -266,6 +281,9 @@ export async function selectRoom(roomId: string): Promise<void> {
 
     // Resolve any mxc:// custom emoji used in reaction chips
     void _downloadReactionEmoji(events, timeline);
+
+    // Resolve mxc:// URLs for inline custom emoji in formatted message bodies
+    _downloadInlineEmoji(timeline);
   } catch (err) {
     showError(`Failed to load timeline: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -273,6 +291,42 @@ export async function selectRoom(roomId: string): Promise<void> {
   // Cancel any active reply if we changed rooms
   if (prevRoom !== roomId) {
     cancelReply();
+  }
+}
+
+/**
+ * Load the next page of older messages for the current room and prepend them.
+ * Called automatically when the user scrolls to the top of the timeline.
+ */
+async function loadMoreMessages(): Promise<void> {
+  if (_paginationLoading || !_prevBatch) return;
+  const roomId = AppState.get("currentRoomId");
+  if (!roomId) return;
+
+  const { timeline } = getComponents();
+  _paginationLoading = true;
+  timeline.showLoadingMore();
+
+  try {
+    const page = await getTimeline(roomId, { limit: 50, before: _prevBatch });
+    _prevBatch = page.prev_batch;
+
+    if (page.events.length === 0) return;
+
+    const existingEvents = AppState.get("currentTimeline");
+    AppState.set("currentTimeline", [...page.events, ...existingEvents]);
+
+    const messages = page.events.map((e) => timelineEventToMessage(e, page.events));
+    timeline.prependMessages(messages);
+
+    _downloadMessageImages(page.events, timeline);
+    _downloadInlineEmoji(timeline);
+    void _downloadReactionEmoji(page.events, timeline);
+  } catch (err) {
+    showError(`Failed to load more messages: ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    _paginationLoading = false;
+    timeline.hideLoadingMore();
   }
 }
 
@@ -600,7 +654,9 @@ export async function sendReaction(eventId: string, key: string): Promise<void> 
   }
 
   try {
-    await ipcSendReaction(roomId, eventId, key);
+    const reactionEventId = await ipcSendReaction(roomId, eventId, key);
+    // Pre-register so the sync echo of our own reaction is not double-counted.
+    _seenReactionEventIds.add(reactionEventId);
   } catch (err) {
     showError(`Failed to react: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -617,6 +673,47 @@ function _resolveReactionImage(key: string): string | undefined {
 
 /** Cache: mxc:// URL → data: URL for custom emoji rendered in reaction chips */
 const _emojiImageCache = new Map<string, string>();
+
+/** Seen reaction event IDs — prevents double-counting sync echoes of own reactions. */
+const _seenReactionEventIds = new Set<string>();
+
+/**
+ * Apply an incoming reaction from another user (received via sync event).
+ * Deduplicates by reaction_event_id so own-reaction echoes are not double-counted.
+ */
+export function applyIncomingReaction(
+  targetEventId: string,
+  _sender: string,
+  key: string,
+  reactionEventId: string,
+): void {
+  if (_seenReactionEventIds.has(reactionEventId)) return;
+  _seenReactionEventIds.add(reactionEventId);
+
+  const { timeline } = getComponents();
+  const events = AppState.get("currentTimeline");
+  const targetEvent = events.find((e) => e.event_id === targetEventId);
+  if (!targetEvent) return;
+
+  const current = targetEvent.reactions ?? [];
+  const existing = current.find((r) => r.key === key);
+  let updated: typeof current;
+  if (existing) {
+    updated = current.map((r) => r.key === key ? { ...r, count: r.count + 1 } : r);
+  } else {
+    updated = [...current, { key, count: 1, senders: [], own: false, own_event_id: null }];
+  }
+
+  AppState.set(
+    "currentTimeline",
+    events.map((e) => (e.event_id === targetEventId ? { ...e, reactions: updated } : e))
+  );
+
+  timeline.updateMessageReactions(
+    targetEventId,
+    updated.map((r) => ({ key: r.key, count: r.count, own: r.own, imageUrl: _resolveReactionImage(r.key) }))
+  );
+}
 
 /**
  * Start composing a reply to a message.
@@ -699,8 +796,12 @@ export async function openThread(eventId: string): Promise<void> {
         timestamp: new Date(e.timestamp).toISOString(),
         body: e.body,
         htmlBody: e.formatted_body ?? undefined,
+        type: (e.msg_type === "m.image" ? "image" : e.msg_type === "m.sticker" ? "sticker" : "text") as "text" | "image" | "sticker",
+        mediaUrl: e.media_url ?? undefined,
+        mediaAlt: e.body,
       }))
     );
+    _downloadMessageImages(replies, threadView);
   } catch (err) {
     showError(`Failed to load thread: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -1008,7 +1109,7 @@ async function _downloadReactionEmoji(
 }
 
 /** Download mxc:// image message content and swap in data URLs once ready. */
-function _downloadMessageImages(events: TimelineEvent[], timeline: import("../ui/Timeline.js").Timeline): void {
+function _downloadMessageImages(events: TimelineEvent[], timeline: { updateMessageMedia(id: string, dataUrl: string): void }): void {
   for (const e of events) {
     if (!e.media_url || !e.media_url.startsWith("mxc://")) continue;
     const eventId = e.event_id;
@@ -1017,6 +1118,29 @@ function _downloadMessageImages(events: TimelineEvent[], timeline: import("../ui
       const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
       timeline.updateMessageMedia(eventId, dataUrl);
     }).catch(() => { /* non-critical */ });
+  }
+}
+
+/** Public alias used by sync.ts after appending a new message. */
+export function resolveInlineEmojiForTimeline(timeline: import("../ui/Timeline.js").Timeline): void {
+  _downloadInlineEmoji(timeline);
+}
+
+/** Resolve mxc:// URLs for inline custom emoji (data-mx-emoticon imgs) in the timeline. */
+function _downloadInlineEmoji(timeline: import("../ui/Timeline.js").Timeline): void {
+  const urls = timeline.getPendingInlineEmojiUrls();
+  for (const mxc of urls) {
+    if (_emojiImageCache.has(mxc)) {
+      timeline.resolveInlineEmoji(mxc, _emojiImageCache.get(mxc)!);
+      continue;
+    }
+    getThumbnail(mxc, 32, 32)
+      .then((dl) => {
+        const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+        _emojiImageCache.set(mxc, dataUrl);
+        timeline.resolveInlineEmoji(mxc, dataUrl);
+      })
+      .catch(() => { /* non-critical */ });
   }
 }
 

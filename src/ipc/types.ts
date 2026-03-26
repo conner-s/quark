@@ -52,6 +52,13 @@ export interface RoomMember {
 
 // ─── Timeline ─────────────────────────────────────────────────────────────────
 
+/** A page of timeline events with a cursor for loading older messages. */
+export interface TimelinePage {
+  events: TimelineEvent[];
+  /** Token to pass as `before` to fetch the previous (older) page. Null at the start of history. */
+  prev_batch: string | null;
+}
+
 /** Serializable timeline event — matches matrix::timeline::TimelineEvent */
 export interface TimelineEvent {
   event_id: string;

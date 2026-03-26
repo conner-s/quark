@@ -195,6 +195,14 @@ function buildMessageElement(msg: MessageData): HTMLElement {
       // Render HTML body. In production this must be sanitized server-side or
       // with DOMPurify; for the UI shell we accept pre-trusted HTML.
       body.innerHTML = msg.htmlBody;
+      // Stash mxc:// src in data-mxc so actions.ts can resolve them later,
+      // and clear src to avoid broken-image icons in the meantime.
+      for (const img of body.querySelectorAll<HTMLImageElement>("img[data-mx-emoticon]")) {
+        if (img.src.startsWith("mxc://") || img.getAttribute("src")?.startsWith("mxc://")) {
+          img.dataset.mxc = img.getAttribute("src") ?? img.src;
+          img.removeAttribute("src");
+        }
+      }
     } else {
       body.textContent = msg.body;
     }
@@ -306,6 +314,7 @@ function groupMessages(msgs: MessageData[]): (MessageData | MessageData[])[] {
 export class Timeline {
   private _el: HTMLElement;
   private _listEl: HTMLElement;
+  private _loadingEl: HTMLElement;
   /** Whether the user has scrolled up away from the bottom */
   private _scrolledUp = false;
   /** Track messages for grouping on append */
@@ -314,20 +323,36 @@ export class Timeline {
   private _selectedIndex = -1;
   /** The last element appended via appendMessageHidden, pending reveal */
   private _lastHiddenEl: HTMLElement | null = null;
+  private _onScrollTopCallback: (() => void) | null = null;
+  private _scrollTopFired = false;
 
   constructor() {
     this._el = document.createElement("div");
     this._el.className = "timeline";
+
+    this._loadingEl = document.createElement("div");
+    this._loadingEl.className = "timeline__loading-more";
+    this._loadingEl.textContent = "Loading…";
+    this._loadingEl.style.display = "none";
+    this._el.appendChild(this._loadingEl);
 
     this._listEl = document.createElement("div");
     this._listEl.setAttribute("role", "list");
     this._listEl.setAttribute("aria-label", "Message timeline");
     this._el.appendChild(this._listEl);
 
-    // Track whether the user has scrolled away from the bottom
+    // Track whether the user has scrolled away from the bottom,
+    // and fire the scroll-to-top callback when near the top.
     this._el.addEventListener("scroll", () => {
       const { scrollTop, scrollHeight, clientHeight } = this._el;
       this._scrolledUp = scrollHeight - scrollTop - clientHeight > 40;
+
+      if (scrollTop < 80 && !this._scrollTopFired) {
+        this._scrollTopFired = true;
+        this._onScrollTopCallback?.();
+      } else if (scrollTop >= 80) {
+        this._scrollTopFired = false;
+      }
     });
 
     // Reply preview "jump to original" — fired by reply-preview clicks
@@ -341,11 +366,38 @@ export class Timeline {
     return this._el;
   }
 
+  /** Register a callback fired when the user scrolls near the top (once per approach). */
+  onScrollToTop(cb: () => void): void {
+    this._onScrollTopCallback = cb;
+  }
+
+  /** Show a "Loading…" indicator above the message list. */
+  showLoadingMore(): void {
+    this._loadingEl.style.display = "block";
+  }
+
+  /** Hide the loading indicator. */
+  hideLoadingMore(): void {
+    this._loadingEl.style.display = "none";
+  }
+
+  /** Prepend older messages above the current list, preserving scroll position. */
+  prependMessages(msgs: MessageData[]): void {
+    if (msgs.length === 0) return;
+    const oldScrollHeight = this._el.scrollHeight;
+    const oldScrollTop = this._el.scrollTop;
+    this._messages = [...msgs, ...this._messages];
+    this._renderAll();
+    // Restore position so the previously-visible messages stay in view
+    this._el.scrollTop = oldScrollTop + (this._el.scrollHeight - oldScrollHeight);
+  }
+
   /** Replace the entire message list */
   setMessages(msgs: MessageData[]): void {
     this._messages = [...msgs];
     this._renderAll();
     this._scrollToBottom();
+    this._scrollTopFired = false;
   }
 
   /** Append a single message, scrolling to bottom if not scrolled up */
@@ -548,10 +600,23 @@ export class Timeline {
    * Swap out the src of an image/sticker message once the mxc:// content
    * has been downloaded and converted to a data URL.
    */
+  /** Return all unique mxc:// URLs needed for unresolved inline custom emoji. */
+  getPendingInlineEmojiUrls(): string[] {
+    const imgs = this._listEl.querySelectorAll<HTMLImageElement>("img[data-mx-emoticon][data-mxc]");
+    return [...new Set(Array.from(imgs).map((img) => img.dataset.mxc!))];
+  }
+
+  /** Swap in a data: URL for all inline custom emoji with the given mxc URL. */
+  resolveInlineEmoji(mxcUrl: string, dataUrl: string): void {
+    for (const img of this._listEl.querySelectorAll<HTMLImageElement>(`img[data-mxc]`)) {
+      if (img.dataset.mxc === mxcUrl) img.src = dataUrl;
+    }
+  }
+
   updateMessageMedia(eventId: string, dataUrl: string): void {
     const el = this.getMessageElementById(eventId);
     if (!el) return;
-    const img = el.querySelector<HTMLImageElement>(".message__media");
+    const img = el.querySelector<HTMLImageElement>(".message__image, .message__sticker");
     if (img) img.src = dataUrl;
   }
 

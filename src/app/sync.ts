@@ -3,7 +3,7 @@
 import { AppState } from "./state.js";
 import type { AppComponents } from "../ui/App.js";
 import type { TimelineEvent, RoomInfo } from "../ipc/types.js";
-import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent } from "./actions.js";
+import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline } from "./actions.js";
 import { showToast } from "../ui/NotificationToast.js";
 import { handleIncomingMessage } from "./notifications.js";
 
@@ -26,6 +26,14 @@ interface SyncTypingPayload {
 interface SyncPresencePayload {
   user_id: string;
   presence: "online" | "unavailable" | "offline";
+}
+
+interface SyncReactionPayload {
+  room_id: string;
+  target_event_id: string;
+  sender: string;
+  key: string;
+  reaction_event_id: string;
 }
 
 // ── Tauri event listener shim ─────────────────────────────────────────────────
@@ -103,6 +111,7 @@ export async function startSync(components: AppComponents): Promise<() => void> 
         const alreadyInDom = !!timeline.getMessageElementById(payload.event.event_id);
         if (!alreadyInState && !alreadyInDom && !consumeOwnSentEvent(payload.event.event_id)) {
           timeline.appendMessage(timelineEventToMessage(payload.event));
+          resolveInlineEmojiForTimeline(timeline);
         }
       } else {
         // Update unread count on room list item
@@ -189,12 +198,23 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     }
   );
 
+  // ── quark://sync/reaction ─────────────────────────────────────────────────
+  const unlistenReaction = await tauriListen<SyncReactionPayload>(
+    "quark://sync/reaction",
+    (payload) => {
+      const currentRoom = AppState.get("currentRoomId");
+      if (payload.room_id !== currentRoom) return;
+      applyIncomingReaction(payload.target_event_id, payload.sender, payload.key, payload.reaction_event_id);
+    }
+  );
+
   _unlisteners = [
     unlistenMessage,
     unlistenRooms,
     unlistenTyping,
     unlistenPresence,
     unlistenConnected,
+    unlistenReaction,
   ];
 
   // Mark as online

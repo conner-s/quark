@@ -9,10 +9,11 @@ use matrix_sdk::{
     ruma::events::{
         key::verification::request::ToDeviceKeyVerificationRequestEventContent,
         presence::PresenceEvent,
+        reaction::ReactionEventContent,
         receipt::ReceiptEventContent,
         room::message::{OriginalSyncRoomMessageEvent, SyncRoomMessageEvent},
         typing::SyncTypingEvent,
-        SyncEphemeralRoomEvent, ToDeviceEvent,
+        OriginalSyncMessageLikeEvent, SyncEphemeralRoomEvent, ToDeviceEvent,
     },
     Client, Room,
 };
@@ -37,6 +38,7 @@ pub const EVENT_PRESENCE: &str = "quark://sync/presence";
 pub const EVENT_VERIFICATION_REQUEST: &str = "quark://sync/verification_request";
 pub const EVENT_UNREAD_COUNT: &str = "quark://sync/unread_count";
 pub const EVENT_CONNECTED: &str = "quark://sync/connected";
+pub const EVENT_REACTION: &str = "quark://sync/reaction";
 
 // ─── Event Payload Structs ────────────────────────────────────────────────────
 
@@ -90,6 +92,16 @@ pub struct SyncRoomUnreadCount {
     pub room_id: String,
     pub unread_count: u64,
     pub highlight_count: u64,
+}
+
+/// Emitted when a reaction is added to an event in a room.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncReactionUpdate {
+    pub room_id: String,
+    pub target_event_id: String,
+    pub sender: String,
+    pub key: String,
+    pub reaction_event_id: String,
 }
 
 // ─── Handler Registration ─────────────────────────────────────────────────────
@@ -265,6 +277,24 @@ pub fn setup_sync_event_handlers(client: &Client, app_handle: &tauri::AppHandle)
             };
             if let Err(e) = app.emit(EVENT_VERIFICATION_REQUEST, &payload) {
                 error!("Failed to emit {}: {}", EVENT_VERIFICATION_REQUEST, e);
+            }
+        },
+    );
+
+    // ── Reactions ─────────────────────────────────────────────────────────────
+    client.add_event_handler(
+        |ev: OriginalSyncMessageLikeEvent<ReactionEventContent>,
+         room: Room,
+         Ctx(app): Ctx<tauri::AppHandle>| async move {
+            let payload = SyncReactionUpdate {
+                room_id: room.room_id().to_string(),
+                target_event_id: ev.content.relates_to.event_id.to_string(),
+                sender: ev.sender.to_string(),
+                key: ev.content.relates_to.key.clone(),
+                reaction_event_id: ev.event_id.to_string(),
+            };
+            if let Err(e) = app.emit(EVENT_REACTION, &payload) {
+                error!("Failed to emit {}: {}", EVENT_REACTION, e);
             }
         },
     );
