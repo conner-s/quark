@@ -325,6 +325,8 @@ export class Timeline {
   private _lastHiddenEl: HTMLElement | null = null;
   private _onScrollTopCallback: (() => void) | null = null;
   private _scrollTopFired = false;
+  /** Handle for the cleanup timeout of the scroll animation, so we can cancel it */
+  private _scrollAnimCleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -394,6 +396,14 @@ export class Timeline {
 
   /** Replace the entire message list */
   setMessages(msgs: MessageData[]): void {
+    // Cancel any in-progress scroll animation to prevent stuck transforms
+    if (this._scrollAnimCleanupTimer !== null) {
+      clearTimeout(this._scrollAnimCleanupTimer);
+      this._scrollAnimCleanupTimer = null;
+      this._listEl.style.transition = "";
+      this._listEl.style.transform = "";
+    }
+
     this._messages = [...msgs];
     this._renderAll();
     this._scrolledUp = false;
@@ -778,7 +788,9 @@ export class Timeline {
         this._listEl.style.transition = "transform 260ms cubic-bezier(0.25, 0.46, 0.45, 0.94)";
         this._listEl.style.transform = "translateY(0)";
       });
-      setTimeout(() => {
+      if (this._scrollAnimCleanupTimer !== null) clearTimeout(this._scrollAnimCleanupTimer);
+      this._scrollAnimCleanupTimer = setTimeout(() => {
+        this._scrollAnimCleanupTimer = null;
         this._listEl.style.transition = "";
         this._listEl.style.transform = "";
       }, 300);
