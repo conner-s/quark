@@ -7,6 +7,7 @@ import {
   sendMessage,
   sendReaction,
   cancelReply,
+  closeThread,
   openEmojiPicker,
   openGifPicker,
   executeCommand,
@@ -19,6 +20,7 @@ import {
 } from "./actions.js";
 import { AppState } from "./state.js";
 import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
+import { showToast } from "../ui/NotificationToast.js";
 import { filterShortcodes, type ShortcodeEntry } from "../ui/ShortcodePreview.js";
 import { getEmojiPacks } from "../ipc/emoji.js";
 import { getThumbnail } from "../ipc/media.js";
@@ -282,6 +284,17 @@ export function setupKeyboard(components: AppComponents): void {
     void sendReaction(eventId, key);
   });
 
+  // Wire compose box action buttons
+  components.input.onEmojiPickerClick(() => {
+    modeManager.transition(Mode.Insert);
+    components.input.focus();
+    openEmojiPicker();
+  });
+
+  components.input.onAttachClick(() => {
+    showToast("Upload: not yet implemented", "info");
+  });
+
   // Wire reaction chip clicks (bubbling custom events) → sendReaction
   setupReactionChipHandler();
 
@@ -376,6 +389,8 @@ export function setupKeyboard(components: AppComponents): void {
       helpDialog.hide();
       quickReactPicker.hide();
       timeline.clearSelection();
+      cancelReply();
+      closeThread();
       return;
     }
 

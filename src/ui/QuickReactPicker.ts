@@ -1,19 +1,24 @@
-// Quick reaction picker — text input as default, Tab to browse quick emoji
+// Quick reaction picker — text input as default, Tab to browse all emoji
 
-/** Each entry pairs an emoji with search terms for fuzzy filtering. */
-const REACTION_DATA: { emoji: string; terms: string[] }[] = [
-  { emoji: "👍", terms: ["thumbsup", "+1", "like", "good", "yes"] },
-  { emoji: "👎", terms: ["thumbsdown", "-1", "dislike", "no", "bad"] },
-  { emoji: "❤️", terms: ["heart", "love", "red"] },
-  { emoji: "😂", terms: ["joy", "laugh", "lol", "tears", "funny"] },
-  { emoji: "🎉", terms: ["tada", "party", "celebrate", "congrats"] },
-  { emoji: "🚀", terms: ["rocket", "launch", "fast"] },
-  { emoji: "👀", terms: ["eyes", "watch", "look", "see"] },
-  { emoji: "🤔", terms: ["thinking", "think", "hmm", "wonder"] },
-  { emoji: "💯", terms: ["100", "hundred", "perfect", "score"] },
-  { emoji: "✅", terms: ["check", "done", "yes", "correct", "tick"] },
-  { emoji: "😮", terms: ["wow", "surprised", "omg", "shock"] },
-  { emoji: "😢", terms: ["cry", "sad", "tear", "upset"] },
+import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
+
+/** Build reaction data from the full built-in emoji set, with a set of pinned
+ *  common reactions shown first so frequently-used emoji are always at the top. */
+const PINNED_EMOJI = new Set(["👍", "👎", "❤️", "😂", "🎉", "🚀", "👀", "🤔", "💯", "✅", "😮", "😢"]);
+
+const REACTION_DATA: { emoji: string; shortcode: string }[] = [
+  // Pinned common reactions first
+  ...BUILTIN_EMOJI
+    .filter((e) => PINNED_EMOJI.has(e.key))
+    .sort((a, b) => {
+      const order = [...PINNED_EMOJI];
+      return order.indexOf(a.key) - order.indexOf(b.key);
+    })
+    .map((e) => ({ emoji: e.key, shortcode: e.shortcode })),
+  // Then the rest of the emoji set
+  ...BUILTIN_EMOJI
+    .filter((e) => !PINNED_EMOJI.has(e.key))
+    .map((e) => ({ emoji: e.key, shortcode: e.shortcode })),
 ];
 
 type ReactCallback = (eventId: string, key: string) => void;
@@ -72,12 +77,12 @@ export class QuickReactPicker {
     this._gridEl.className = "quick-react-picker__grid";
     this._gridEl.setAttribute("aria-label", "Quick reactions");
 
-    for (const { emoji } of REACTION_DATA) {
+    for (const { emoji, shortcode } of REACTION_DATA) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "quick-react-picker__btn";
       btn.textContent = emoji;
-      btn.setAttribute("title", emoji);
+      btn.setAttribute("title", `:${shortcode}:`);
       btn.setAttribute("tabindex", "-1"); // managed manually
       btn.addEventListener("click", () => this._pick(emoji));
       this._buttons.push(btn);
@@ -89,7 +94,7 @@ export class QuickReactPicker {
     // ── Hint ──────────────────────────────────────────────────────────────
     const hint = document.createElement("div");
     hint.className = "quick-react-picker__hint";
-    hint.textContent = "Tab: quick emojis · Enter: react · Esc: cancel";
+    hint.textContent = "Tab: emoji grid · Enter: react · Esc: cancel";
     this._el.appendChild(hint);
 
     // ── Event listeners ───────────────────────────────────────────────────
@@ -160,9 +165,9 @@ export class QuickReactPicker {
   // ── Private ────────────────────────────────────────────────────────────────
 
   /**
-   * Show only buttons whose emoji or search terms contain every space-separated
+   * Show only buttons whose emoji glyph or shortcode contains every space-separated
    * token in the query (case-insensitive substring match). Falls back to showing
-   * all buttons when no tokens match, so the full list stays accessible.
+   * all buttons when nothing matches, so typed text can still be sent as-is.
    */
   private _applyFilter(raw: string): void {
     // Strip a leading colon so `:party` works the same as `party`
@@ -177,10 +182,10 @@ export class QuickReactPicker {
 
     let anyVisible = false;
     for (let i = 0; i < this._buttons.length; i++) {
-      const { emoji, terms } = REACTION_DATA[i];
-      // A button matches if every token appears in the emoji char or any term
+      const { emoji, shortcode } = REACTION_DATA[i];
+      // A button matches if every token appears in the emoji glyph or shortcode
       const matches = tokens.every((tok) =>
-        emoji.includes(tok) || terms.some((t) => t.includes(tok))
+        emoji.includes(tok) || shortcode.includes(tok)
       );
       this._buttons[i].style.display = matches ? "" : "none";
       if (matches) anyVisible = true;

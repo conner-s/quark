@@ -645,12 +645,12 @@ quark/
 - [ ] Sort rooms in spaces by space-defined order.
 - [ ] Don't show rooms that are in spaces in the DM view
 - [ ] Add profile dialogue and keybind to activate it.
-- [ ] Back out of threads and replys with escape.
+- [x] Back out of threads and replies with escape — global Escape handler now calls `cancelReply()` and `closeThread()`
 - [ ] Add emoji search window
 - [ ] Show custom emojis in previews
-- [ ] Show all emojis in react picker (currently only showing a subset for some reason)
+- [x] Show all emojis in react picker — `QuickReactPicker` now loads all `BUILTIN_EMOJI` (pinned common reactions first) in a scrollable grid; filtering uses shortcode text
 - [ ] Add sticker picker dialogue
-- [ ] Add buttons on right side of compose box for attachments, emoji picker
+- [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach shows "not yet implemented" toast
 - [ ] Support pasting images into the image text box
 
 #### Hardening

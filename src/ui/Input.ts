@@ -22,6 +22,8 @@ export class Input {
   private _fieldEl: HTMLInputElement;
   private _composeBoxEl: HTMLElement;
   private _currentMode: string = "Normal";
+  private _onEmojiClick: (() => void) | null = null;
+  private _onAttachClick: (() => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -53,7 +55,43 @@ export class Input {
     this._fieldEl.placeholder = "…";
     this._composeBoxEl.appendChild(this._fieldEl);
 
+    // Action buttons on the right side of the compose box
+    const actionsEl = document.createElement("div");
+    actionsEl.className = "input-bar__actions";
+
+    const emojiBtn = document.createElement("button");
+    emojiBtn.type = "button";
+    emojiBtn.className = "input-bar__action-btn";
+    emojiBtn.setAttribute("title", "Emoji picker (Ctrl+E)");
+    emojiBtn.setAttribute("aria-label", "Open emoji picker");
+    emojiBtn.setAttribute("tabindex", "-1");
+    emojiBtn.textContent = "🙂";
+    emojiBtn.addEventListener("click", () => this._onEmojiClick?.());
+    actionsEl.appendChild(emojiBtn);
+
+    const attachBtn = document.createElement("button");
+    attachBtn.type = "button";
+    attachBtn.className = "input-bar__action-btn";
+    attachBtn.setAttribute("title", "Attach file");
+    attachBtn.setAttribute("aria-label", "Attach file");
+    attachBtn.setAttribute("tabindex", "-1");
+    attachBtn.textContent = "📎";
+    attachBtn.addEventListener("click", () => this._onAttachClick?.());
+    actionsEl.appendChild(attachBtn);
+
+    this._composeBoxEl.appendChild(actionsEl);
+
     this._el.appendChild(this._composeBoxEl);
+  }
+
+  /** Register a callback for the emoji picker button. */
+  onEmojiPickerClick(handler: () => void): void {
+    this._onEmojiClick = handler;
+  }
+
+  /** Register a callback for the attach file button. */
+  onAttachClick(handler: () => void): void {
+    this._onAttachClick = handler;
   }
 
   /** Returns the compose box element (for position measurement and animation). */
