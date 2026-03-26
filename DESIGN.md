@@ -668,8 +668,8 @@ quark/
 - [ ] Command audit - make sure all commands are fully implemented
 
 #### Bugs
-- [ ] rooms don't always load. When they do, sometimes I'm not able to scroll.
-- [ ] Some images aren't showing up
+- [ ] rooms don't always load. (scroll getting stuck fixed — cancelled scroll animation on room switch)
+- [x] Some images aren't showing up — removed lazy loading (prevented load in overflow containers); isOwn now set on loaded timeline events
 - [x] Space icons don't show up — mxc:// URLs now downloaded and resolved in background
 - [x] Timeline should always start scrolled to the bottom — scroll on render + rAF + 150ms delayed pass
 - [x] Profile pictures don't show in profile view — mxc:// resolved via getThumbnail before show
