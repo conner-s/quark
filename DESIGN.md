@@ -670,18 +670,18 @@ quark/
 #### Bugs
 - [ ] rooms don't always load. When they do, sometimes I'm not able to scroll.
 - [ ] Some images aren't showing up
-- [ ] Space icons don't show up
-- [ ] Timeline should always start scrolled to the bottom; sometimes it starts in the middle
-- [ ] Profile pictures don't show in profile view
-- [ ] Profile view always selects user, not sender of selected message
-- [ ] Profile viewer starts offset from center, then snaps into view.
-- [ ] Unable to move vim keyboard focus to room list, space list, or member list.
-- [ ] Send message animation is no longer aligned when creating a new bubble, likely something to do with margins or padding.
-- [ ] Sent messages show as from "you" rather than with the correct profile info for the user.
-- [ ] Emoji picker sometimes goes off screen.
-- [ ] Clicking in the compose box allows you to type without switching to insert mode.
-- [ ] Custom emojis are not shown in shortcode preview, emoji picker, or react picker.
-- [ ] ctrl + [ does not work as escape in all places (i.e. react emoji picker)
-- [ ] React picker and emoji picker are separate entities; probably best to combine for consistentcy and maintainability
-- [ ] Noticeable delay when swtiching rooms.
+- [x] Space icons don't show up — mxc:// URLs now downloaded and resolved in background
+- [x] Timeline should always start scrolled to the bottom — scroll on render + rAF + 150ms delayed pass
+- [x] Profile pictures don't show in profile view — mxc:// resolved via getThumbnail before show
+- [x] Profile view always selects user, not sender of selected message — now shows selected message sender (falls back to own profile)
+- [x] Profile viewer starts offset from center, then snaps into view — CSS animation conflict fixed (profile-dialog-in includes translate offset)
+- [x] Unable to move vim keyboard focus to room list, space list, or member list — ArrowLeft/Right navigates spaces ← roomlist ← timeline → members; SpaceStrip/MemberList have focusFirst/navDown/navUp
+- [x] Send message animation is no longer aligned when creating a new bubble — input-bar padding-left set to 0 to align compose box with message groups
+- [x] Sent messages show as from "you" rather than with the correct profile info — ownUserId/ownDisplayName fetched after login and stored in AppState
+- [x] Emoji picker sometimes goes off screen — added full CSS (was missing entirely); fixed position bottom-right above compose area
+- [x] Clicking in the compose box allows you to type without switching to insert mode — click handler on input field transitions to Insert mode
+- [x] Custom emojis are not shown in shortcode preview, emoji picker, or react picker — mxc:// URLs resolved to data: URLs before display (emoji picker + shortcode preview)
+- [x] ctrl + [ does not work as escape in all places (i.e. react emoji picker) — QuickReactPicker now handles Ctrl+[ in both input and grid handlers
+- [ ] React picker and emoji picker are separate entities; probably best to combine for consistency and maintainability
+- [x] Noticeable delay when switching rooms — timeline rendered immediately from getTimeline, members fetched concurrently and UI updated when ready
 
