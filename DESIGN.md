@@ -647,7 +647,7 @@ quark/
 - [x] Add profile dialogue and keybind — `ProfileDialog` overlay shows display name, user ID, and avatar; opened with `P` in normal mode or `:profile` command; `get_own_profile` IPC backed by matrix-sdk `account()` API
 - [x] Back out of threads and replies with escape — global Escape handler now calls `cancelReply()` and `closeThread()`
 - [ ] Add emoji search window
-- [ ] Show custom emojis in previews
+- [ ] Enable shortcode for custom emoji
 - [x] Show all emojis in react picker — `QuickReactPicker` now loads all `BUILTIN_EMOJI` (pinned common reactions first) in a scrollable grid; filtering uses shortcode text
 - [ ] Add sticker picker dialogue
 - [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach shows "not yet implemented" toast
@@ -661,6 +661,7 @@ quark/
 - [ ] Mouse interactions (click on profile to open profile view, react and reply buttons, etc.)
 - [ ] Pinned messages UI
 - [ ] Implement themes (command currently does nothing)
+- [ ] Make space UI bigger
 
 #### Hardening
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
@@ -684,4 +685,16 @@ quark/
 - [x] ctrl + [ does not work as escape in all places (i.e. react emoji picker) — QuickReactPicker now handles Ctrl+[ in both input and grid handlers
 - [ ] React picker and emoji picker are separate entities; probably best to combine for consistency and maintainability
 - [x] Noticeable delay when switching rooms — timeline rendered immediately from getTimeline, members fetched concurrently and UI updated when ready
+- [ ] Loading new messages scrolls to a random position
+- [ ] App does not use my KDE window bar, seems to have custom?
+- [ ] h/l don't navigate left and right.
+- [ ] Focus sometimes gets stuck/can't move to timeline
+- [ ] React picker goes off screen if message is close to the bottom
+- [ ] o should open select rooms/spaces
+- [ ] Selecting a space should move to the rooms list
+- [ ] Message recency sorting doesn't seem to be working for DMs
+- [ ] Viewing a room doesn't dismiss the unread count
+- [ ] Custom emotes still don't show up in the react or message emoji picker or in shortcode
+- [ ] Sticker previews don't render in sticker picker
+- [ ] Animated avatars don't work
 
