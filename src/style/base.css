@@ -19,8 +19,8 @@ body {
   font-family: var(--font-family);
   font-size: var(--font-size);
   line-height: var(--line-height);
-  -webkit-font-smoothing: none;
-  font-smooth: never;
+  /* -webkit-font-smoothing: none; */
+  /* font-smooth: never; */
 }
 
 
@@ -100,8 +100,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 48px;
+  height: 48px;
   border-radius: 2px;
   cursor: pointer;
   font-size: 14px;
@@ -136,6 +136,13 @@ body {
   width: 2px;
   height: 28px;
   background-color: var(--accent-primary);
+}
+
+.space-strip__icon {
+	width: 32px;
+	height: 32px;
+	object-fit: contain;
+	border-radius: 100%;
 }
 
 .space-strip__divider {
@@ -445,7 +452,7 @@ body {
 
 .message-group__header {
   position: absolute;
-  top: -2px;
+  top: -1px;
   transform: translateY(-50%);
   left: 1.5ch;
   right: 1.5ch;
@@ -456,6 +463,7 @@ body {
   white-space: nowrap;
   z-index: 1;
   pointer-events: none;
+  font-family: var(--font-family)
 }
 
 /* ── Message group wrapper (avatar + box side by side) ───────────────────── */
@@ -464,6 +472,7 @@ body {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  font-family: var(--font-family-messages);
 }
 
 .message-group-wrapper .message-group {
@@ -481,7 +490,7 @@ body {
   flex-shrink: 0;
   /* Offset down to align with the box's top border, accounting for the
      space the header label overflows above the border. */
-  margin-top: calc(var(--font-size) * 0.5 + 18px);
+  margin-top: calc(var(--font-size) * 0.5 + 15px);
 }
 
 .message-group__avatar {
@@ -512,6 +521,7 @@ body {
 
 .message-group__timestamp {
   color: var(--msg-timestamp);
+  font-family: var(--font-family);
   font-size: calc(var(--font-size) - 2px);
   flex-shrink: 0;
   margin-left: auto;
@@ -537,7 +547,7 @@ body {
 }
 
 .message-group .message {
-  padding-top: 8px;
+  padding-top: 4px;
   padding-bottom: 8px;
 }
 
