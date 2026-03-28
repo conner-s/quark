@@ -620,6 +620,7 @@ quark/
 
 #### Media
 - [ ] Authenticated media (MSC3916) — `/_matrix/client/v1/media/download/` endpoint not used; currently uses legacy `/_matrix/media/v3/download/`
+- [ ] Support video
 
 #### Messaging
 - [ ] Private read receipts (`m.read.private`) — only public receipts emitted
@@ -709,5 +710,6 @@ quark/
 - [x] Timeline disappears briefly when loading new messages, reappears if scroll again.
 - [x] Home view should be sorted by recent
 - [ ] Escape/ctrl + [ don't close profile popup
+- [ ] Clicking a message should also update the keyboard's selected message
 
 
