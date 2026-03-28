@@ -91,8 +91,19 @@ let _paginationLoading = false;
 const _memberDisplayName = new Map<string, string>();
 /** userId → mxc:// URL, populated when room members are fetched */
 const _memberAvatarMxc = new Map<string, string>();
-/** mxc:// URL → data: URL, populated as thumbnails are downloaded */
+/** mxc:// URL → blob: URL, populated as thumbnails are downloaded */
 const _avatarDataUrl = new Map<string, string>();
+
+/**
+ * Convert a downloaded media blob to a Blob URL.
+ * Blob URLs avoid synchronous base64 decoding when assigned to img.src,
+ * which can take ~5ms per image in WebKitGTK.
+ */
+function _mediaToBlobUrl(mimeType: string, base64: string): string {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const blob = new Blob([bytes], { type: mimeType });
+  return URL.createObjectURL(blob);
+}
 
 /** Resolve a user ID to its display name, falling back to the raw ID. */
 export function resolveDisplayName(userId: string): string {
@@ -1014,7 +1025,7 @@ export async function openProfileDialog(): Promise<void> {
           try {
             // Use full media (not thumbnail) so animated GIF/WEBP avatars are preserved.
             const dl = await downloadMedia(mxcUrl);
-            avatarUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+            avatarUrl = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
             _avatarDataUrl.set(mxcUrl, avatarUrl);
           } catch { /* non-critical */ }
         }
@@ -1722,9 +1733,9 @@ function _downloadMemberAvatars(members: RoomMember[], timeline: import("../ui/T
       continue;
     }
     downloadMedia(mxc).then((dl) => {
-      const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
-      _avatarDataUrl.set(mxc, dataUrl);
-      timeline.updateSenderAvatar(m.user_id, dataUrl);
+      const url = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+      _avatarDataUrl.set(mxc, url);
+      timeline.updateSenderAvatar(m.user_id, url);
     }).catch(() => { /* non-critical */ });
   }
 }
