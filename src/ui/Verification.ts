@@ -30,11 +30,11 @@ const STATE_MESSAGES: Record<VerificationState, string> = {
 
 /**
  * SAS emoji verification overlay.
- * Displays 7 emoji for comparison with another device, with confirm/deny
- * buttons and progress states.
+ * Displays as a centered modal dialog with backdrop, matching the HelpDialog style.
  */
 export class Verification {
   private _el: HTMLElement;
+  private _panelEl: HTMLElement;
   private _statusEl: HTMLElement;
   private _emojiGridEl: HTMLElement;
   private _actionsEl: HTMLElement;
@@ -52,47 +52,75 @@ export class Verification {
   private _onDismiss: VerificationCallback | null = null;
 
   constructor() {
+    // ── Backdrop ──────────────────────────────────────────────────────────
     this._el = document.createElement("div");
-    this._el.className = "verification";
+    this._el.className = "verification-dialog";
     this._el.setAttribute("role", "dialog");
     this._el.setAttribute("aria-label", "Device verification");
     this._el.setAttribute("aria-modal", "true");
     this._el.style.display = "none";
 
-    // ── Title ─────────────────────────────────────────────────────────────
-    const title = document.createElement("div");
-    title.className = "verification__title";
-    title.textContent = "Verify Device";
-    this._el.appendChild(title);
+    this._el.addEventListener("click", (e) => {
+      if (e.target === this._el) {
+        this._onDeny?.();
+        this.hide();
+      }
+    });
+
+    // ── Panel ─────────────────────────────────────────────────────────────
+    this._panelEl = document.createElement("div");
+    this._panelEl.className = "verification-dialog__panel";
+    this._el.appendChild(this._panelEl);
+
+    // ── Header ────────────────────────────────────────────────────────────
+    const header = document.createElement("div");
+    header.className = "verification-dialog__header";
+    this._panelEl.appendChild(header);
+
+    const title = document.createElement("span");
+    title.className = "verification-dialog__title";
+    title.textContent = "verify device";
+    header.appendChild(title);
+
+    const closeHint = document.createElement("span");
+    closeHint.className = "verification-dialog__close-hint";
+    closeHint.textContent = "Esc";
+    closeHint.setAttribute("aria-hidden", "true");
+    header.appendChild(closeHint);
+
+    // ── Body ──────────────────────────────────────────────────────────────
+    const body = document.createElement("div");
+    body.className = "verification-dialog__body";
+    this._panelEl.appendChild(body);
 
     // ── Incoming request subtitle (device / user info) ────────────────────
     this._incomingSubtitleEl = document.createElement("div");
-    this._incomingSubtitleEl.className = "verification__incoming-subtitle";
+    this._incomingSubtitleEl.className = "verification-dialog__incoming-subtitle";
     this._incomingSubtitleEl.style.display = "none";
-    this._el.appendChild(this._incomingSubtitleEl);
+    body.appendChild(this._incomingSubtitleEl);
 
     // ── Status message ────────────────────────────────────────────────────
     this._statusEl = document.createElement("div");
-    this._statusEl.className = "verification__status";
+    this._statusEl.className = "verification-dialog__status";
     this._statusEl.setAttribute("role", "status");
     this._statusEl.setAttribute("aria-live", "polite");
     this._statusEl.textContent = STATE_MESSAGES.waiting;
-    this._el.appendChild(this._statusEl);
+    body.appendChild(this._statusEl);
 
     // ── SAS emoji grid ────────────────────────────────────────────────────
     this._emojiGridEl = document.createElement("div");
-    this._emojiGridEl.className = "verification__emoji-grid";
+    this._emojiGridEl.className = "verification-dialog__emoji-grid";
     this._emojiGridEl.setAttribute("role", "list");
     this._emojiGridEl.setAttribute("aria-label", "Verification emoji");
-    this._el.appendChild(this._emojiGridEl);
+    body.appendChild(this._emojiGridEl);
 
     // ── Action buttons ────────────────────────────────────────────────────
     this._actionsEl = document.createElement("div");
-    this._actionsEl.className = "verification__actions";
-    this._el.appendChild(this._actionsEl);
+    this._actionsEl.className = "verification-dialog__actions";
+    body.appendChild(this._actionsEl);
 
     this._confirmBtn = document.createElement("button");
-    this._confirmBtn.className = "verification__btn verification__btn--confirm";
+    this._confirmBtn.className = "verification-dialog__btn verification-dialog__btn--confirm";
     this._confirmBtn.type = "button";
     this._confirmBtn.textContent = "[ They Match ]";
     this._confirmBtn.setAttribute("aria-label", "Confirm — emoji match");
@@ -102,7 +130,7 @@ export class Verification {
     this._actionsEl.appendChild(this._confirmBtn);
 
     this._denyBtn = document.createElement("button");
-    this._denyBtn.className = "verification__btn verification__btn--deny";
+    this._denyBtn.className = "verification-dialog__btn verification-dialog__btn--deny";
     this._denyBtn.type = "button";
     this._denyBtn.textContent = "[ They Don't Match ]";
     this._denyBtn.setAttribute("aria-label", "Deny — emoji do not match");
@@ -113,7 +141,7 @@ export class Verification {
 
     // ── Dismiss button (shown after terminal state) ───────────────────────
     this._dismissBtn = document.createElement("button");
-    this._dismissBtn.className = "verification__btn verification__btn--dismiss";
+    this._dismissBtn.className = "verification-dialog__btn verification-dialog__btn--dismiss";
     this._dismissBtn.type = "button";
     this._dismissBtn.textContent = "[ Dismiss ]";
     this._dismissBtn.setAttribute("aria-label", "Dismiss verification");
@@ -123,6 +151,13 @@ export class Verification {
       this.hide();
     });
     this._actionsEl.appendChild(this._dismissBtn);
+
+    // ── Footer hint ───────────────────────────────────────────────────────
+    const footer = document.createElement("div");
+    footer.className = "verification-dialog__footer";
+    footer.textContent = "Tab / h/l switch · Enter confirm · Esc cancel";
+    footer.setAttribute("aria-hidden", "true");
+    this._panelEl.appendChild(footer);
 
     // ── Keyboard handling ─────────────────────────────────────────────────
     this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
@@ -149,7 +184,7 @@ export class Verification {
   }
 
   show(): void {
-    this._el.style.display = "";
+    this._el.style.display = "flex";
     this._updateFocus();
   }
 
@@ -187,10 +222,10 @@ export class Verification {
     // Show subtitle only for incoming state
     this._incomingSubtitleEl.style.display = isIncoming ? "" : "none";
 
-    // Add state class to root for styling
+    // Add state class to panel for styling
     const allStates: VerificationState[] = ["incoming", "waiting", "comparing", "verified", "failed", "cancelled"];
     for (const s of allStates) {
-      this._el.classList.toggle(`verification--${s}`, state === s);
+      this._panelEl.classList.toggle(`verification-dialog__panel--${s}`, state === s);
     }
 
     if (showActions) {
@@ -223,17 +258,17 @@ export class Verification {
 
     for (const item of this._sasEmoji) {
       const cell = document.createElement("div");
-      cell.className = "verification__emoji-cell";
+      cell.className = "verification-dialog__emoji-cell";
       cell.setAttribute("role", "listitem");
 
       const glyph = document.createElement("span");
-      glyph.className = "verification__emoji-glyph";
+      glyph.className = "verification-dialog__emoji-glyph";
       glyph.textContent = item.emoji;
       glyph.setAttribute("aria-hidden", "true");
       cell.appendChild(glyph);
 
       const desc = document.createElement("span");
-      desc.className = "verification__emoji-desc";
+      desc.className = "verification-dialog__emoji-desc";
       desc.textContent = item.description;
       cell.appendChild(desc);
 
@@ -245,19 +280,18 @@ export class Verification {
     if (this._state !== "comparing" && this._state !== "incoming") return;
     if (this._focusedAction === "confirm") {
       this._confirmBtn.focus();
-      this._confirmBtn.classList.add("verification__btn--focused");
-      this._denyBtn.classList.remove("verification__btn--focused");
+      this._confirmBtn.classList.add("verification-dialog__btn--focused");
+      this._denyBtn.classList.remove("verification-dialog__btn--focused");
     } else {
       this._denyBtn.focus();
-      this._denyBtn.classList.add("verification__btn--focused");
-      this._confirmBtn.classList.remove("verification__btn--focused");
+      this._denyBtn.classList.add("verification-dialog__btn--focused");
+      this._confirmBtn.classList.remove("verification-dialog__btn--focused");
     }
   }
 
   private _handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
-    // Escape and Tab are hardcoded (not remappable)
     if (e.key === "Escape") {
       e.preventDefault();
       this._onDeny?.();

@@ -653,7 +653,7 @@ quark/
 - [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach shows "not yet implemented" toast
 - [x] Support pasting images into the compose box — clipboard image paste detected in `Input`, converted to base64, uploaded via new `send_pasted_image` IPC (Rust: decode base64 → upload → send as `m.image`)
 - [ ] Polish pass over top bar displaying room info. Take cues from the message UI.
-- [ ] Polish pass over verification UI; currently unstyled at the bottom
+- [x] Polish pass over verification UI; currently unstyled at the bottom
 - [ ] Emoji and sticker picker styling. Should show in box above compose area.
 - [ ] Threads animate open a space between message bubbles and display there.
 - [ ] Settings UI
@@ -705,4 +705,7 @@ quark/
 - [ ] Sticker previews don't render in sticker picker
 - [x] Animated avatars don't work — use downloadMedia instead of getThumbnail for avatars; Rust sniffs MIME from magic bytes
 - [x] There's currently no way to log out — :logout command revokes session, clears storage, reloads to login screen
+- [x] Timeline disappears briefly when loading new messages, reappears if scroll again.
+- [x] Home view should be sorted by recent
+
 

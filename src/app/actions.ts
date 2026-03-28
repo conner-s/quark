@@ -396,10 +396,20 @@ export async function selectSpace(spaceId: string): Promise<void> {
   spaceStrip.setActiveSpace(spaceId);
 
   if (spaceId === "__home__") {
-    // Show rooms that are NOT in any space (and include DMs)
+    // Show rooms that are NOT in any space (and include DMs), sorted by recent activity
     const allRooms = AppState.get("roomListCache");
     const spaceRoomIds = new Set(AppState.get("spaceRoomIds"));
-    const homeRooms = allRooms.filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id));
+    const homeRooms = allRooms
+      .filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id))
+      .sort((a, b) => {
+        const aTs = a.last_activity_ts ?? 0;
+        const bTs = b.last_activity_ts ?? 0;
+        if (bTs !== aTs) return bTs - aTs;
+        const aScore = a.notification_count * 2 + a.unread_count;
+        const bScore = b.notification_count * 2 + b.unread_count;
+        if (bScore !== aScore) return bScore - aScore;
+        return (a.name ?? "").localeCompare(b.name ?? "");
+      });
     roomList.setRooms(homeRooms.map(roomInfoToEntry));
     AppState.focusPanel("roomlist");
     return;
@@ -1349,7 +1359,17 @@ export async function refreshRooms(): Promise<void> {
     const spaceId = AppState.get("currentSpaceId");
     if (!spaceId || spaceId === "__home__") {
       const spaceRoomIds = new Set(AppState.get("spaceRoomIds"));
-      const homeRooms = rooms.filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id));
+      const homeRooms = rooms
+        .filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id))
+        .sort((a, b) => {
+          const aTs = a.last_activity_ts ?? 0;
+          const bTs = b.last_activity_ts ?? 0;
+          if (bTs !== aTs) return bTs - aTs;
+          const aScore = a.notification_count * 2 + a.unread_count;
+          const bScore = b.notification_count * 2 + b.unread_count;
+          if (bScore !== aScore) return bScore - aScore;
+          return (a.name ?? "").localeCompare(b.name ?? "");
+        });
       roomList.setRooms(homeRooms.map(roomInfoToEntry));
     }
   } catch (err) {

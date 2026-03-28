@@ -387,7 +387,22 @@ export class Timeline {
     const oldScrollHeight = this._el.scrollHeight;
     const oldScrollTop = this._el.scrollTop;
     this._messages = [...msgs, ...this._messages];
-    this._renderAll();
+
+    // Insert new DOM nodes at the top without clearing existing content.
+    // This avoids blanking the visible timeline while the DOM rebuilds.
+    const groups = groupMessages(msgs);
+    const fragment = document.createDocumentFragment();
+    for (const entry of groups) {
+      if (Array.isArray(entry)) {
+        fragment.appendChild(buildMessageGroup(entry));
+      } else {
+        const el = buildMessageElement(entry);
+        el.classList.add("message--ungrouped");
+        fragment.appendChild(el);
+      }
+    }
+    this._listEl.insertBefore(fragment, this._listEl.firstChild);
+
     // Restore position so the previously-visible messages stay in view
     this._el.scrollTop = oldScrollTop + (this._el.scrollHeight - oldScrollHeight);
   }
