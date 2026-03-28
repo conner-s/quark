@@ -121,7 +121,7 @@ pub async fn download_media(
     thumbnail_width: Option<u32>,
     thumbnail_height: Option<u32>,
 ) -> Result<MediaDownload, String> {
-    download_media_with_cache(client, mxc_url, allow_thumbnail, thumbnail_width, thumbnail_height, None).await
+    download_media_with_cache(client, mxc_url, allow_thumbnail, thumbnail_width, thumbnail_height, None, None).await
 }
 
 /// Sniff the MIME type of a byte slice from its magic bytes.
@@ -137,7 +137,10 @@ fn sniff_mime_type(data: &[u8]) -> &'static str {
     }
 }
 
-/// Like `download_media` but with an optional cache.
+/// Like `download_media` but with an optional cache and optional E2EE encryption info.
+///
+/// `encryption_info` is a JSON-serialized `EncryptedFile` (from `ruma_events::room`).
+/// When provided, the source is treated as E2EE-encrypted and the SDK handles decryption.
 pub async fn download_media_with_cache(
     client: &Client,
     mxc_url: &str,
@@ -145,6 +148,7 @@ pub async fn download_media_with_cache(
     thumbnail_width: Option<u32>,
     thumbnail_height: Option<u32>,
     cache: Option<&MediaCache>,
+    encryption_info: Option<&str>,
 ) -> Result<MediaDownload, String> {
     // Build a cache key that includes thumbnail dimensions so full and thumbnail
     // variants are stored independently.
@@ -179,7 +183,17 @@ pub async fn download_media_with_cache(
 
     // Cache miss (or no cache): fetch from the homeserver.
     let mxc_uri = <&MxcUri>::try_from(mxc_url).map_err(|e| format!("Invalid mxc URI: {e}"))?;
-    let source = MediaSource::Plain(mxc_uri.to_owned());
+
+    // Use an encrypted source when key material is available (E2EE rooms); the
+    // SDK will authenticate, download, and decrypt the ciphertext automatically.
+    let source = if let Some(info_json) = encryption_info {
+        use matrix_sdk::ruma::events::room::EncryptedFile;
+        let file: EncryptedFile = serde_json::from_str(info_json)
+            .map_err(|e| format!("Invalid encryption info: {e}"))?;
+        MediaSource::Encrypted(Box::new(file))
+    } else {
+        MediaSource::Plain(mxc_uri.to_owned())
+    };
 
     let format = if allow_thumbnail {
         let width = thumbnail_width.unwrap_or(320);

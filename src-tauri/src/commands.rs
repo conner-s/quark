@@ -290,6 +290,7 @@ pub async fn download_media(
     thumbnail: bool,
     thumbnail_width: Option<u32>,
     thumbnail_height: Option<u32>,
+    encryption_info: Option<String>,
 ) -> Result<MediaDownload, String> {
     let client = get_client(&state)?;
     crate::matrix::media::download_media_with_cache(
@@ -299,6 +300,7 @@ pub async fn download_media(
         thumbnail_width,
         thumbnail_height,
         Some(&cache_state.0),
+        encryption_info.as_deref(),
     )
     .await
 }

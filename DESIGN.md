@@ -619,7 +619,7 @@ quark/
 - [x] Cross-signing setup UI — `:cross-sign [password]` bootstraps keys; `:verify <user-id>` starts SAS with emoji polling
 
 #### Media
-- [ ] Authenticated media (MSC3916) — `/_matrix/client/v1/media/download/` endpoint not used; currently uses legacy `/_matrix/media/v3/download/`
+- [x] Authenticated media (MSC3916) — matrix-sdk 0.9 routes to `/_matrix/client/v1/media/download/` automatically for Matrix 1.11+ servers; E2EE media now decrypted by passing `EncryptedFile` key material through the `download_media` IPC command
 - [ ] Support video
 
 #### Messaging
@@ -664,8 +664,10 @@ quark/
 - [ ] Pinned messages UI
 - [ ] Implement themes (command currently does nothing)
 - [ ] Make space UI bigger
+- [ ] Show avatars in member list
 - [ ] Profile images should snap to the top of the visible area if the message's position would place it out of view
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
+- [ ] Add more info to profile screen
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
   - [ ] Outside of text select mode but in normal mode, 'y' should copy the full message
@@ -676,6 +678,7 @@ quark/
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
 - [ ] Performance profiling — large rooms (1000+ messages), many emoji packs
 - [ ] Command audit - make sure all commands are fully implemented
+- [ ] Use blobs rather than data URLs so the browser can cache (I think this makes sense? Tell me if it doesn't.)
 
 #### Bugs
 - [ ] rooms don't always load. (scroll getting stuck fixed — cancelled scroll animation on room switch)
@@ -711,5 +714,8 @@ quark/
 - [x] Home view should be sorted by recent
 - [ ] Escape/ctrl + [ don't close profile popup
 - [ ] Clicking a message should also update the keyboard's selected message
+- [ ] pressing P while in member list opens the profile of the currently selected message's sender rather than the selected user in the member list
+- [ ] Keyboard nav doesn't quite scroll far enough when moving to an off-screen message
+- [ ] Sometimes unable to navigate timeline
 
 

@@ -1690,7 +1690,7 @@ function _downloadMessageImages(events: TimelineEvent[], timeline: { updateMessa
     if (!e.media_url || !e.media_url.startsWith("mxc://")) continue;
     const eventId = e.event_id;
     const mxc = e.media_url;
-    downloadMedia(mxc).then((dl) => {
+    downloadMedia(mxc, e.media_encryption_info).then((dl) => {
       const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
       timeline.updateMessageMedia(eventId, dataUrl);
     }).catch(() => { /* non-critical */ });

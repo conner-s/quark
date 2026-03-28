@@ -84,6 +84,8 @@ export interface TimelineEvent {
   media_mimetype: string | null;
   media_width: number | null;
   media_height: number | null;
+  /** JSON-serialized EncryptedFile for E2EE media; absent for plain media. */
+  media_encryption_info?: string | null;
   reactions?: ReactionGroup[];
 }
 

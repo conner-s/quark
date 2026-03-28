@@ -313,12 +313,21 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
     let timestamp: u64 = ev.origin_server_ts.get().into();
     let content = &ev.content;
 
-    let (body, formatted_body, msg_type, media_url, media_mimetype, media_width, media_height) =
+    let enc_info = |source: &MediaSource| -> Option<String> {
+        if let MediaSource::Encrypted(file) = source {
+            serde_json::to_string(file.as_ref()).ok()
+        } else {
+            None
+        }
+    };
+
+    let (body, formatted_body, msg_type, media_url, media_mimetype, media_width, media_height, media_encryption_info) =
         match &content.msgtype {
             MessageType::Text(text) => (
                 text.body.clone(),
                 text.formatted.as_ref().map(|f| f.body.clone()),
                 "m.text".to_string(),
+                None,
                 None,
                 None,
                 None,
@@ -329,6 +338,7 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
                     MediaSource::Plain(uri) => Some(uri.to_string()),
                     MediaSource::Encrypted(file) => Some(file.url.to_string()),
                 };
+                let enc = enc_info(&image.source);
                 let (w, h, mime) = if let Some(info) = &image.info {
                     (
                         info.width.map(|v| v.into()),
@@ -338,13 +348,14 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
                 } else {
                     (None, None, None)
                 };
-                (image.body.clone(), None, "m.image".to_string(), url, mime, w, h)
+                (image.body.clone(), None, "m.image".to_string(), url, mime, w, h, enc)
             }
             MessageType::Video(video) => {
                 let url = match &video.source {
                     MediaSource::Plain(uri) => Some(uri.to_string()),
                     MediaSource::Encrypted(file) => Some(file.url.to_string()),
                 };
+                let enc = enc_info(&video.source);
                 let (w, h, mime) = if let Some(info) = &video.info {
                     (
                         info.width.map(|v| v.into()),
@@ -354,26 +365,29 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
                 } else {
                     (None, None, None)
                 };
-                (video.body.clone(), None, "m.video".to_string(), url, mime, w, h)
+                (video.body.clone(), None, "m.video".to_string(), url, mime, w, h, enc)
             }
             MessageType::Audio(audio) => {
                 let url = match &audio.source {
                     MediaSource::Plain(uri) => Some(uri.to_string()),
                     MediaSource::Encrypted(file) => Some(file.url.to_string()),
                 };
-                (audio.body.clone(), None, "m.audio".to_string(), url, None, None, None)
+                let enc = enc_info(&audio.source);
+                (audio.body.clone(), None, "m.audio".to_string(), url, None, None, None, enc)
             }
             MessageType::File(file) => {
                 let url = match &file.source {
                     MediaSource::Plain(uri) => Some(uri.to_string()),
                     MediaSource::Encrypted(f) => Some(f.url.to_string()),
                 };
-                (file.body.clone(), None, "m.file".to_string(), url, None, None, None)
+                let enc = enc_info(&file.source);
+                (file.body.clone(), None, "m.file".to_string(), url, None, None, None, enc)
             }
             MessageType::Emote(emote) => (
                 emote.body.clone(),
                 emote.formatted.as_ref().map(|f| f.body.clone()),
                 "m.emote".to_string(),
+                None,
                 None,
                 None,
                 None,
@@ -387,11 +401,13 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
                 None,
                 None,
                 None,
+                None,
             ),
             _ => (
                 "[unsupported message type]".to_string(),
                 None,
                 "m.unknown".to_string(),
+                None,
                 None,
                 None,
                 None,
@@ -441,6 +457,7 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
         media_mimetype,
         media_width,
         media_height,
+        media_encryption_info,
         reactions: vec![],
     })
 }

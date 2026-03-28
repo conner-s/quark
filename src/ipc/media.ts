@@ -8,14 +8,17 @@ export type { MediaDownload };
 /**
  * Download media from an mxc:// URL.
  * Returns a MediaDownload containing base64-encoded content and MIME type.
+ * Pass `encryptionInfo` (JSON-serialized EncryptedFile) for E2EE media so the
+ * backend can decrypt the content before returning it.
  * Matches the Rust `download_media` command.
  */
-export async function downloadMedia(mxcUrl: string): Promise<MediaDownload> {
+export async function downloadMedia(mxcUrl: string, encryptionInfo?: string | null): Promise<MediaDownload> {
   return invoke<MediaDownload>("download_media", {
     mxcUrl,
     thumbnail: false,
     thumbnailWidth: null,
     thumbnailHeight: null,
+    encryptionInfo: encryptionInfo ?? null,
   });
 }
 

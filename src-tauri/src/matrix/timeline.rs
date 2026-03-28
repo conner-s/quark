@@ -37,6 +37,9 @@ pub struct TimelineEvent {
     pub media_mimetype: Option<String>,
     pub media_width: Option<u64>,
     pub media_height: Option<u64>,
+    /// JSON-serialized EncryptedFile for E2EE media; None for plain (unencrypted) media.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_encryption_info: Option<String>,
     /// Aggregated reactions from the same fetch batch.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reactions: Vec<ReactionGroup>,
@@ -157,7 +160,7 @@ fn convert_sync_room_message(ev: OriginalSyncRoomMessageEvent) -> TimelineEvent 
     let sender = ev.sender.to_string();
     let event_id = ev.event_id.to_string();
 
-    let (body, formatted_body, msg_type, media_url, media_mimetype, media_width, media_height) =
+    let (body, formatted_body, msg_type, media_url, media_mimetype, media_width, media_height, media_encryption_info) =
         extract_message_content(&ev.content);
 
     let (is_edit, relates_to_event_id, in_reply_to, thread_root) =
@@ -178,6 +181,7 @@ fn convert_sync_room_message(ev: OriginalSyncRoomMessageEvent) -> TimelineEvent 
         media_mimetype,
         media_width,
         media_height,
+        media_encryption_info,
         reactions: vec![],
     }
 }
@@ -192,7 +196,18 @@ fn extract_message_content(
     Option<String>,
     Option<u64>,
     Option<u64>,
+    Option<String>,
 ) {
+    use matrix_sdk::ruma::events::room::MediaSource;
+
+    fn enc_info(source: &MediaSource) -> Option<String> {
+        if let MediaSource::Encrypted(file) = source {
+            serde_json::to_string(file.as_ref()).ok()
+        } else {
+            None
+        }
+    }
+
     match &content.msgtype {
         MessageType::Text(text) => (
             text.body.clone(),
@@ -202,13 +217,14 @@ fn extract_message_content(
             None,
             None,
             None,
+            None,
         ),
         MessageType::Image(image) => {
-            use matrix_sdk::ruma::events::room::MediaSource;
             let url = match &image.source {
                 MediaSource::Plain(uri) => Some(uri.to_string()),
                 MediaSource::Encrypted(file) => Some(file.url.to_string()),
             };
+            let enc = enc_info(&image.source);
             let (w, h, mime) = if let Some(info) = &image.info {
                 (
                     info.width.map(|v| v.into()),
@@ -218,14 +234,14 @@ fn extract_message_content(
             } else {
                 (None, None, None)
             };
-            (image.body.clone(), None, "m.image".to_string(), url, mime, w, h)
+            (image.body.clone(), None, "m.image".to_string(), url, mime, w, h, enc)
         }
         MessageType::Video(video) => {
-            use matrix_sdk::ruma::events::room::MediaSource;
             let url = match &video.source {
                 MediaSource::Plain(uri) => Some(uri.to_string()),
                 MediaSource::Encrypted(file) => Some(file.url.to_string()),
             };
+            let enc = enc_info(&video.source);
             let (w, h, mime) = if let Some(info) = &video.info {
                 (
                     info.width.map(|v| v.into()),
@@ -235,28 +251,29 @@ fn extract_message_content(
             } else {
                 (None, None, None)
             };
-            (video.body.clone(), None, "m.video".to_string(), url, mime, w, h)
+            (video.body.clone(), None, "m.video".to_string(), url, mime, w, h, enc)
         }
         MessageType::Audio(audio) => {
-            use matrix_sdk::ruma::events::room::MediaSource;
             let url = match &audio.source {
                 MediaSource::Plain(uri) => Some(uri.to_string()),
                 MediaSource::Encrypted(file) => Some(file.url.to_string()),
             };
-            (audio.body.clone(), None, "m.audio".to_string(), url, None, None, None)
+            let enc = enc_info(&audio.source);
+            (audio.body.clone(), None, "m.audio".to_string(), url, None, None, None, enc)
         }
-        MessageType::File(file) => {
-            use matrix_sdk::ruma::events::room::MediaSource;
-            let url = match &file.source {
+        MessageType::File(file_msg) => {
+            let url = match &file_msg.source {
                 MediaSource::Plain(uri) => Some(uri.to_string()),
                 MediaSource::Encrypted(f) => Some(f.url.to_string()),
             };
-            (file.body.clone(), None, "m.file".to_string(), url, None, None, None)
+            let enc = enc_info(&file_msg.source);
+            (file_msg.body.clone(), None, "m.file".to_string(), url, None, None, None, enc)
         }
         MessageType::Emote(emote) => (
             emote.body.clone(),
             emote.formatted.as_ref().map(|f| f.body.clone()),
             "m.emote".to_string(),
+            None,
             None,
             None,
             None,
@@ -270,11 +287,13 @@ fn extract_message_content(
             None,
             None,
             None,
+            None,
         ),
         _ => (
             "[unsupported message type]".to_string(),
             None,
             "m.unknown".to_string(),
+            None,
             None,
             None,
             None,
