@@ -1693,8 +1693,15 @@ function _downloadMessageImages(events: TimelineEvent[], timeline: { updateMessa
     downloadMedia(mxc, e.media_encryption_info).then((dl) => {
       const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
       timeline.updateMessageMedia(eventId, dataUrl);
-    }).catch(() => { /* non-critical */ });
+    }).catch((err) => {
+      console.error(`[media] failed to download ${mxc}:`, err);
+    });
   }
+}
+
+/** Download media for a single sync-pushed message and update the timeline. */
+export function downloadSyncMessageImage(event: TimelineEvent, timeline: { updateMessageMedia(id: string, dataUrl: string): void }): void {
+  _downloadMessageImages([event], timeline);
 }
 
 /** Public alias used by sync.ts after appending a new message. */
