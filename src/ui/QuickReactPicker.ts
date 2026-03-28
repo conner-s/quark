@@ -141,22 +141,37 @@ export class QuickReactPicker {
         left = window.innerWidth - approxWidth - 8;
       }
       this._el.style.top = `${rect.bottom + 6}px`;
+      this._el.style.bottom = "";
       this._el.style.left = `${Math.max(8, left)}px`;
       this._el.style.transform = "";
     } else {
       this._el.style.top = "50%";
+      this._el.style.bottom = "";
       this._el.style.left = "50%";
       this._el.style.transform = "translate(-50%, -50%)";
     }
 
     this._el.style.display = "flex";
-    // Defer focus so the element is rendered first
-    requestAnimationFrame(() => this._inputEl.focus());
+    // Defer focus so the element is rendered first; also check for bottom overflow.
+    requestAnimationFrame(() => {
+      if (anchor) {
+        const pickerRect = this._el.getBoundingClientRect();
+        if (pickerRect.bottom > window.innerHeight - 8) {
+          // Flip upward: position the picker above the anchor instead
+          const anchorRect = anchor.getBoundingClientRect();
+          this._el.style.top = "";
+          this._el.style.bottom = `${window.innerHeight - anchorRect.top + 6}px`;
+        }
+      }
+      this._inputEl.focus();
+    });
   }
 
   hide(): void {
     this._el.style.display = "none";
     this._el.style.transform = "";
+    this._el.style.top = "";
+    this._el.style.bottom = "";
     this._targetEventId = null;
     this._focusedBtnIndex = -1;
     this._updateBtnFocus();
