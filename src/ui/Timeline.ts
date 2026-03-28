@@ -627,6 +627,15 @@ export class Timeline {
    * Replace fallback avatars for a sender with a real image.
    * Called after an avatar thumbnail has been downloaded.
    */
+  /** Update display name text for all message groups from a given sender ID in place. */
+  updateSenderName(senderId: string, displayName: string): void {
+    const wrappers = this._listEl.querySelectorAll<HTMLElement>(`[data-sender="${CSS.escape(senderId)}"]`);
+    for (const wrapper of wrappers) {
+      const nameEl = wrapper.querySelector<HTMLElement>(".message-group__sender");
+      if (nameEl) nameEl.textContent = displayName;
+    }
+  }
+
   updateSenderAvatar(sender: string, dataUrl: string): void {
     const wrappers = this._listEl.querySelectorAll<HTMLElement>(`[data-sender="${CSS.escape(sender)}"]`);
     for (const wrapper of wrappers) {
@@ -783,16 +792,18 @@ export class Timeline {
   private _renderAll(): void {
     this._listEl.innerHTML = "";
     const groups = groupMessages(this._messages);
+    const fragment = document.createDocumentFragment();
     for (const entry of groups) {
       if (Array.isArray(entry)) {
-        this._listEl.appendChild(buildMessageGroup(entry));
+        fragment.appendChild(buildMessageGroup(entry));
       } else {
         // Ungrouped (system) message
         const el = buildMessageElement(entry);
         el.classList.add("message--ungrouped");
-        this._listEl.appendChild(el);
+        fragment.appendChild(el);
       }
     }
+    this._listEl.appendChild(fragment);
   }
 
   private _scrollToBottom(): void {

@@ -322,12 +322,14 @@ export async function selectRoom(roomId: string): Promise<void> {
       if (m.avatar_url) _memberAvatarMxc.set(m.user_id, m.avatar_url);
     }
 
-    // Re-render with fresh display names if room hasn't changed mid-load.
-    // Use preserveScroll so a user who scrolled up to read history while
-    // members were loading does not get snapped back to the bottom.
+    // Update display names in place now that member data is available.
+    // Avoids a full DOM rebuild — use targeted text swaps instead of setMessages.
     if (AppState.get("currentRoomId") === roomId) {
-      const updatedMessages = events.map((e) => timelineEventToMessage(e, events));
-      timeline.setMessages(updatedMessages, { preserveScroll: true });
+      for (const m of members) {
+        if (m.display_name) {
+          timeline.updateSenderName(m.user_id, m.display_name);
+        }
+      }
 
       // Populate the member list sidebar
       memberList.setMembers(members.map(roomMemberToEntry));
