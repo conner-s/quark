@@ -1314,7 +1314,8 @@ export async function refreshRooms(): Promise<void> {
       if (s.avatar_url?.startsWith("mxc://")) {
         const mxcUrl = s.avatar_url;
         const roomId = s.room_id;
-        getThumbnail(mxcUrl, 32, 32)
+        // Use full media (not thumbnail) so animated GIF/WEBP space avatars are preserved.
+        downloadMedia(mxcUrl)
           .then((dl) => {
             const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
             spaceStrip.updateSpaceAvatar(roomId, dataUrl);

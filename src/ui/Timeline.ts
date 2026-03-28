@@ -392,8 +392,14 @@ export class Timeline {
     this._el.scrollTop = oldScrollTop + (this._el.scrollHeight - oldScrollHeight);
   }
 
-  /** Replace the entire message list */
-  setMessages(msgs: MessageData[]): void {
+  /** Replace the entire message list.
+   *
+   * By default (preserveScroll = false) scrolls to the bottom after rendering —
+   * used when first loading a room.  Pass preserveScroll = true for async
+   * re-renders (e.g. member-data refresh) so that a user who has already
+   * scrolled up to read history keeps their position.
+   */
+  setMessages(msgs: MessageData[], opts?: { preserveScroll?: boolean }): void {
     // Cancel any in-progress scroll animation to prevent stuck transforms
     if (this._scrollAnimCleanupTimer !== null) {
       clearTimeout(this._scrollAnimCleanupTimer);
@@ -402,17 +408,32 @@ export class Timeline {
       this._listEl.style.transform = "";
     }
 
+    const preserveScroll = opts?.preserveScroll ?? false;
+    // Capture scroll state before re-render so we can restore it
+    const wasScrolledUp = this._scrolledUp;
+    const savedScrollTop = this._el.scrollTop;
+    const savedScrollHeight = this._el.scrollHeight;
+
     this._messages = [...msgs];
     this._renderAll();
-    this._scrolledUp = false;
-    this._scrollTopFired = false;
-    // Scroll immediately (for text content), then again after images may have loaded
-    this._scrollToBottom();
-    requestAnimationFrame(() => {
+
+    if (preserveScroll && wasScrolledUp) {
+      // Restore the user's reading position by compensating for any height change
+      const heightDelta = this._el.scrollHeight - savedScrollHeight;
+      this._el.scrollTop = savedScrollTop + heightDelta;
+      // Keep _scrolledUp true so incoming messages don't auto-scroll the user
+      this._scrolledUp = true;
+    } else {
+      this._scrolledUp = false;
+      this._scrollTopFired = false;
+      // Scroll immediately (for text content), then again after images may have loaded
       this._scrollToBottom();
-      // Second pass after a short delay to catch any late-loading content
-      setTimeout(() => this._scrollToBottom(), 150);
-    });
+      requestAnimationFrame(() => {
+        this._scrollToBottom();
+        // Second pass after a short delay to catch any late-loading content
+        setTimeout(() => this._scrollToBottom(), 150);
+      });
+    }
   }
 
   /** Append a single message, scrolling to bottom if not scrolled up */
