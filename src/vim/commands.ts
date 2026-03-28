@@ -16,6 +16,7 @@ const KNOWN_COMMANDS: string[] = [
   "upload",
   "quit",
   "q",
+  "logout",
   "help",
   "msg",
   "invite",

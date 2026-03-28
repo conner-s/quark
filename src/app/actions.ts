@@ -976,7 +976,8 @@ export async function openProfileDialog(): Promise<void> {
           avatarUrl = cachedDataUrl;
         } else if (mxcUrl) {
           try {
-            const dl = await getThumbnail(mxcUrl, 64, 64);
+            // Use full media (not thumbnail) so animated GIF/WEBP avatars are preserved.
+            const dl = await downloadMedia(mxcUrl);
             avatarUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
             _avatarDataUrl.set(mxcUrl, avatarUrl);
           } catch { /* non-critical */ }
@@ -990,7 +991,8 @@ export async function openProfileDialog(): Promise<void> {
     let avatarUrl: string | null = null;
     if (profile.avatar_url) {
       try {
-        const dl = await getThumbnail(profile.avatar_url, 64, 64);
+        // Use full media (not thumbnail) so animated GIF/WEBP avatars are preserved.
+        const dl = await downloadMedia(profile.avatar_url);
         avatarUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
       } catch { /* non-critical */ }
     }
