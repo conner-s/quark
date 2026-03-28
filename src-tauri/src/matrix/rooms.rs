@@ -2,6 +2,7 @@ use matrix_sdk::{
     room::RoomMemberRole,
     ruma::{
         api::client::room::create_room::v3::Request as CreateRoomRequest,
+        events::receipt::ReceiptThread,
         RoomId,
     },
     Client, RoomMemberships,
@@ -21,6 +22,9 @@ pub struct RoomInfo {
     pub is_direct: bool,
     pub is_encrypted: bool,
     pub member_count: u64,
+    /// Timestamp (ms since Unix epoch) of the most recent event in the room.
+    /// Used to sort DMs by recency. May be None if the room has no local events.
+    pub last_activity_ts: Option<u64>,
 }
 
 /// Get info for all joined rooms.
@@ -130,6 +134,32 @@ pub async fn get_room_members(client: &Client, room_id: &str) -> Result<Vec<Room
             }
         })
         .collect())
+}
+
+/// Mark a room as fully read by sending a read receipt for the latest event.
+pub async fn mark_room_read(client: &Client, room_id: &str) -> Result<(), String> {
+    use matrix_sdk::ruma::events::receipt::ReceiptType;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    // Fetch the latest event ID from the timeline to anchor the receipt
+    let opts = matrix_sdk::room::MessagesOptions::backward();
+    let messages = room
+        .messages(opts)
+        .await
+        .map_err(|e| format!("Failed to fetch messages for read receipt: {e}"))?;
+
+    if let Some(event) = messages.chunk.first() {
+        let event_id = event.event_id().ok_or("Latest event has no ID")?;
+        room.send_single_receipt(ReceiptType::Read, ReceiptThread::Unthreaded, event_id.to_owned())
+            .await
+            .map_err(|e| format!("Failed to send read receipt: {e}"))?;
+    }
+
+    Ok(())
 }
 
 /// Options for creating a new room.

@@ -51,6 +51,7 @@ pub fn run() {
             commands::join_room,
             commands::leave_room,
             commands::create_room,
+            commands::mark_room_read,
             // Timeline
             commands::get_timeline,
             commands::send_message,

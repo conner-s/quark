@@ -148,6 +148,7 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     }
     case "join_room":
     case "leave_room":
+    case "mark_room_read":
     case "send_reaction":
     case "edit_message":
     case "redact_message":

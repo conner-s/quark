@@ -35,7 +35,7 @@ export type {
 export { login, restoreSession, logout, getOwnProfile } from "./client.js";
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────
-export { getRooms, joinRoom, leaveRoom, createRoom, getRoomMembers } from "./rooms.js";
+export { getRooms, joinRoom, leaveRoom, createRoom, getRoomMembers, markRoomRead } from "./rooms.js";
 
 // ─── Timeline ─────────────────────────────────────────────────────────────────
 export {

@@ -153,6 +153,15 @@ pub async fn create_room(
     crate::matrix::rooms::create_room(&client, options).await
 }
 
+#[tauri::command]
+pub async fn mark_room_read(
+    state: State<'_, MatrixState>,
+    room_id: String,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::mark_room_read(&client, &room_id).await
+}
+
 // ─── Timeline Commands ────────────────────────────────────────────────────────
 
 #[tauri::command]
