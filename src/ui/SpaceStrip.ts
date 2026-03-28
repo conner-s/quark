@@ -64,6 +64,15 @@ export class SpaceStrip {
     prev?.focus();
   }
 
+  navFirst(): void {
+    this._el.querySelector<HTMLElement>(".space-strip__item")?.focus();
+  }
+
+  navLast(): void {
+    const items = this._el.querySelectorAll<HTMLElement>(".space-strip__item");
+    items[items.length - 1]?.focus();
+  }
+
   /** Swap in a resolved avatar data URL for a space item. */
   updateSpaceAvatar(spaceId: string, dataUrl: string): void {
     const item = this._el.querySelector<HTMLElement>(`[data-space-id="${CSS.escape(spaceId)}"]`);

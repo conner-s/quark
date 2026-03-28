@@ -95,11 +95,11 @@ function dispatchAction(action: string, components: AppComponents): void {
       break;
 
     case "jump-top":
-      if (AppState.get("activePanel") !== "roomlist") timeline.selectFirst();
+      AppState.jumpTop();
       break;
 
     case "jump-bottom":
-      if (AppState.get("activePanel") !== "roomlist") timeline.selectLast();
+      AppState.jumpBottom();
       break;
 
     // ── Message actions — operate on the selected message ───────────────

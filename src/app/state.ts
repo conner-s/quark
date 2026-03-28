@@ -36,6 +36,8 @@ export type StateChangeListener<K extends StateChangeKey = StateChangeKey> = (
 interface PanelNavCallbacks {
   navDown: () => void;
   navUp: () => void;
+  jumpTop?: () => void;
+  jumpBottom?: () => void;
   /** Called when focus moves TO this panel. Optional — no-op if absent. */
   focusActive?: () => void;
 }
@@ -122,6 +124,14 @@ class AppStateManager {
 
   navUp(): void {
     this._panelNavCallbacks.get(this._state.activePanel)?.navUp();
+  }
+
+  jumpTop(): void {
+    this._panelNavCallbacks.get(this._state.activePanel)?.jumpTop?.();
+  }
+
+  jumpBottom(): void {
+    this._panelNavCallbacks.get(this._state.activePanel)?.jumpBottom?.();
   }
 
   moveFocusLeft(): void {

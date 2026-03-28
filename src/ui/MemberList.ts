@@ -93,8 +93,16 @@ export class MemberList {
   }
 
   focusFirst(): void {
-    const first = this._scrollEl.querySelector<HTMLElement>(".member-list__item, .member-list__section-header");
-    first?.focus();
+    this._scrollEl.querySelector<HTMLElement>(".member-list__item, .member-list__section-header")?.focus();
+  }
+
+  navFirst(): void {
+    this.focusFirst();
+  }
+
+  navLast(): void {
+    const items = this._scrollEl.querySelectorAll<HTMLElement>(".member-list__item, .member-list__section-header");
+    items[items.length - 1]?.focus();
   }
 
   navDown(): void {
