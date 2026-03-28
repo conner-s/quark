@@ -21,6 +21,9 @@ import {
   handleImagePaste,
 } from "./actions.js";
 import { AppState } from "./state.js";
+import { loadQuarkrc } from "../ipc/config.js";
+import type { ParsedRc } from "../ipc/types.js";
+import type { KeyContext } from "../vim/keybindings.js";
 import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
 import { showToast } from "../ui/NotificationToast.js";
 import { filterShortcodes, type ShortcodeEntry } from "../ui/ShortcodePreview.js";
@@ -36,6 +39,10 @@ function registerDefaultBindings(): void {
   keymapManager.nmap("v", "mode-visual");
   keymapManager.nmap("j", "nav-down");
   keymapManager.nmap("k", "nav-up");
+  keymapManager.nmap("h", "nav-left");
+  keymapManager.nmap("l", "nav-right");
+  keymapManager.nmap("ArrowLeft", "nav-left");
+  keymapManager.nmap("ArrowRight", "nav-right");
   keymapManager.nmap("gg", "jump-top");
   keymapManager.nmap("G", "jump-bottom");
   keymapManager.nmap("r", "reply");
@@ -66,7 +73,7 @@ function registerDefaultBindings(): void {
 // ── Action dispatcher ─────────────────────────────────────────────────────────
 
 function dispatchAction(action: string, components: AppComponents): void {
-  const { input, commandBar, timeline, roomList } = components;
+  const { input, commandBar, timeline } = components;
 
   switch (action) {
     case "mode-insert":
@@ -83,24 +90,22 @@ function dispatchAction(action: string, components: AppComponents): void {
       modeManager.transition(Mode.Visual);
       break;
 
-    // ── Navigation — routed by active panel ────────────────────────────
-    case "nav-down": {
-      const panel = AppState.get("activePanel");
-      if (panel === "roomlist") roomList.navDown();
-      else if (panel === "spaces") components.spaceStrip.navDown();
-      else if (panel === "members") components.memberList.navDown();
-      else timeline.selectNext();
+    // ── Navigation — routed through panel registry ─────────────────────
+    case "nav-down":
+      AppState.navDown();
       break;
-    }
 
-    case "nav-up": {
-      const panel = AppState.get("activePanel");
-      if (panel === "roomlist") roomList.navUp();
-      else if (panel === "spaces") components.spaceStrip.navUp();
-      else if (panel === "members") components.memberList.navUp();
-      else timeline.selectPrev();
+    case "nav-up":
+      AppState.navUp();
       break;
-    }
+
+    case "nav-left":
+      AppState.moveFocusLeft();
+      break;
+
+    case "nav-right":
+      AppState.moveFocusRight();
+      break;
 
     case "jump-top":
       if (AppState.get("activePanel") !== "roomlist") timeline.selectFirst();
@@ -283,13 +288,69 @@ function handleInsertKeydown(e: KeyboardEvent, components: AppComponents): void 
   // Escape already handled globally
 }
 
+// ── User rc application ───────────────────────────────────────────────────────
+
+const MAP_TYPE_TO_CONTEXT: Readonly<Record<string, KeyContext>> = {
+  normal: "global",
+  insert: "insert",
+  timeline: "timeline",
+  roomlist: "roomlist",
+  picker: "picker",
+  command: "command",
+  visual: "visual",
+};
+
+function applyRcDirectives(rc: ParsedRc): void {
+  for (const directive of rc.directives) {
+    if (directive.type === "map") {
+      const context = MAP_TYPE_TO_CONTEXT[directive.map_type];
+      if (context) keymapManager.map(context, directive.key, directive.action, directive.noremap);
+    } else if (directive.type === "unmap") {
+      const context = MAP_TYPE_TO_CONTEXT[directive.map_type];
+      if (context) keymapManager.unmap(context, directive.key);
+    } else if (directive.type === "let" && directive.name === "mapleader") {
+      keymapManager.setLeaderKey(directive.value);
+    }
+  }
+  if (rc.errors.length > 0) {
+    console.warn("[quarkrc] parse errors:", rc.errors);
+  }
+}
+
 // ── Global keydown handler ────────────────────────────────────────────────────
 
 export function setupKeyboard(components: AppComponents): void {
+  const { input, commandBar, shortcodePreview, timeline, roomList,
+          emojiPicker, gifPicker, stickerPicker, verification, helpDialog, quickReactPicker, profileDialog } = components;
+
   registerDefaultBindings();
 
+  // ── Panel nav registry ────────────────────────────────────────────────────
+  AppState.registerPanelNav("spaces", {
+    navDown: () => components.spaceStrip.navDown(),
+    navUp: () => components.spaceStrip.navUp(),
+    focusActive: () => components.spaceStrip.focusActive(),
+  });
+  AppState.registerPanelNav("roomlist", {
+    navDown: () => roomList.navDown(),
+    navUp: () => roomList.navUp(),
+    focusActive: () => roomList.focusActive(),
+  });
+  AppState.registerPanelNav("timeline", {
+    navDown: () => timeline.selectNext(),
+    navUp: () => timeline.selectPrev(),
+  });
+  AppState.registerPanelNav("members", {
+    navDown: () => components.memberList.navDown(),
+    navUp: () => components.memberList.navUp(),
+    focusActive: () => components.memberList.focusFirst(),
+  });
+
+  // ── User keybindings ──────────────────────────────────────────────────────
+  void loadQuarkrc().then(applyRcDirectives).catch(() => { /* no rc file is fine */ });
+
   // Wire quick react picker → sendReaction
-  components.quickReactPicker.onReact((eventId, key) => {
+  quickReactPicker.onReact((eventId, key) => {
     void sendReaction(eventId, key);
   });
 
@@ -299,34 +360,31 @@ export function setupKeyboard(components: AppComponents): void {
   });
 
   // Clicking the input field while not in Insert mode switches to Insert mode
-  components.input.onFocusEnterInsert(() => {
+  input.onFocusEnterInsert(() => {
     if (modeManager.current !== Mode.Insert) {
       modeManager.transition(Mode.Insert);
-      components.input.focus();
+      input.focus();
     }
   });
 
   // Wire compose box action buttons
-  components.input.onEmojiPickerClick(() => {
+  input.onEmojiPickerClick(() => {
     modeManager.transition(Mode.Insert);
-    components.input.focus();
+    input.focus();
     openEmojiPicker();
   });
 
-  components.input.onAttachClick(() => {
+  input.onAttachClick(() => {
     showToast("Upload: not yet implemented", "info");
   });
 
   // Wire image paste in compose field
-  components.input.onImagePaste((blob) => {
+  input.onImagePaste((blob) => {
     void handleImagePaste(blob);
   });
 
   // Wire reaction chip clicks (bubbling custom events) → sendReaction
   setupReactionChipHandler();
-
-  const { input, commandBar, shortcodePreview, timeline,
-          emojiPicker, gifPicker, stickerPicker, verification, helpDialog, quickReactPicker, profileDialog } = components;
 
   // Sync mode indicators + blur/focus on mode change
   modeManager.on((_from, to) => {
@@ -402,7 +460,7 @@ export function setupKeyboard(components: AppComponents): void {
     // Modal overlays with their own input (QuickReactPicker, etc.) handle all
     // their own keys with stopPropagation. The check here is a belt-and-
     // suspenders guard for the case where focus escapes the overlay element.
-    if (components.quickReactPicker.isVisible()) return;
+    if (quickReactPicker.isVisible()) return;
 
     // Escape (or Ctrl+[) always resets to Normal (if not already) and clears sequences
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
@@ -435,49 +493,11 @@ export function setupKeyboard(components: AppComponents): void {
       return;
     }
 
-    // Left/Right arrows navigate between panels: spaces ← roomlist ← timeline → members
-    const activePanel = AppState.get("activePanel");
-    if (e.key === "ArrowLeft") {
-      if (activePanel === "timeline") {
-        e.preventDefault();
-        AppState.set("activePanel", "roomlist");
-        components.roomList.focusActive();
-        return;
-      }
-      if (activePanel === "roomlist") {
-        e.preventDefault();
-        AppState.set("activePanel", "spaces");
-        components.spaceStrip.focusActive();
-        return;
-      }
-      return;
-    }
-    if (e.key === "ArrowRight") {
-      if (activePanel === "spaces") {
-        e.preventDefault();
-        AppState.set("activePanel", "roomlist");
-        components.roomList.focusActive();
-        return;
-      }
-      if (activePanel === "roomlist") {
-        e.preventDefault();
-        AppState.set("activePanel", "timeline");
-        return;
-      }
-      if (activePanel === "timeline" && AppState.get("memberListVisible")) {
-        e.preventDefault();
-        AppState.set("activePanel", "members");
-        components.memberList.focusFirst();
-        return;
-      }
-      return;
-    }
-
     // Normal / Visual — resolve through keymap
-    const panelCtx = AppState.get("activePanel");
-    const activeContext = panelCtx === "timeline" ? "timeline" as const
-      : panelCtx === "roomlist" ? "roomlist" as const
-      : "global" as const;
+    const panel = AppState.get("activePanel");
+    const activeContext: KeyContext = panel === "timeline" ? "timeline"
+      : panel === "roomlist" ? "roomlist"
+      : "global";
 
     const result = keymapManager.resolveKey(e.key, activeContext);
 

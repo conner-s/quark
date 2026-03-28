@@ -31,9 +31,23 @@ export type StateChangeListener<K extends StateChangeKey = StateChangeKey> = (
   prev: AppStateSnapshot[K]
 ) => void;
 
+// ── Panel nav callback registry ──────────────────────────────────────────────
+
+interface PanelNavCallbacks {
+  navDown: () => void;
+  navUp: () => void;
+  /** Called when focus moves TO this panel. Optional — no-op if absent. */
+  focusActive?: () => void;
+}
+
 // ── AppState class ───────────────────────────────────────────────────────────
 
 class AppStateManager {
+  /** Left-to-right panel order for focus traversal. */
+  private static readonly PANEL_ORDER: readonly ActivePanel[] = [
+    "spaces", "roomlist", "timeline", "members",
+  ];
+
   private _state: AppStateSnapshot = {
     loggedIn: false,
     ownUserId: null,
@@ -51,6 +65,7 @@ class AppStateManager {
 
   private _listeners: Map<string, Set<StateChangeListener>> = new Map();
   private _anyListeners: Set<StateChangeListener> = new Set();
+  private _panelNavCallbacks: Map<ActivePanel, PanelNavCallbacks> = new Map();
 
   // ── Read ──────────────────────────────────────────────────────────────────
 
@@ -92,6 +107,45 @@ class AppStateManager {
   onAny(listener: StateChangeListener): () => void {
     this._anyListeners.add(listener);
     return () => this._anyListeners.delete(listener);
+  }
+
+  // ── Panel nav ─────────────────────────────────────────────────────────────
+
+  /** Register navigation callbacks for a panel. Called once during setup. */
+  registerPanelNav(panel: ActivePanel, callbacks: PanelNavCallbacks): void {
+    this._panelNavCallbacks.set(panel, callbacks);
+  }
+
+  navDown(): void {
+    this._panelNavCallbacks.get(this._state.activePanel)?.navDown();
+  }
+
+  navUp(): void {
+    this._panelNavCallbacks.get(this._state.activePanel)?.navUp();
+  }
+
+  moveFocusLeft(): void {
+    const order = AppStateManager.PANEL_ORDER.filter(
+      (p) => p !== "members" || this._state.memberListVisible
+    );
+    const idx = order.indexOf(this._state.activePanel);
+    if (idx > 0) {
+      const next = order[idx - 1];
+      this.set("activePanel", next);
+      this._panelNavCallbacks.get(next)?.focusActive?.();
+    }
+  }
+
+  moveFocusRight(): void {
+    const order = AppStateManager.PANEL_ORDER.filter(
+      (p) => p !== "members" || this._state.memberListVisible
+    );
+    const idx = order.indexOf(this._state.activePanel);
+    if (idx >= 0 && idx < order.length - 1) {
+      const next = order[idx + 1];
+      this.set("activePanel", next);
+      this._panelNavCallbacks.get(next)?.focusActive?.();
+    }
   }
 
   private _emit<K extends StateChangeKey>(key: K, value: AppStateSnapshot[K], prev: AppStateSnapshot[K]): void {
