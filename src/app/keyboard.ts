@@ -53,20 +53,7 @@ function registerDefaultBindings(): void {
   keymapManager.nmap("m", "toggle-members");
   keymapManager.nmap("P", "open-profile");
 
-  // Timeline context — tmap
-  keymapManager.tmap("j", "nav-down");
-  keymapManager.tmap("k", "nav-up");
-  keymapManager.tmap("gg", "jump-top");
-  keymapManager.tmap("G", "jump-bottom");
-  keymapManager.tmap("r", "reply");
-  keymapManager.tmap("e", "react");
-  keymapManager.tmap("dd", "redact");
-  keymapManager.tmap("E", "edit");
-  keymapManager.tmap("t", "open-thread");
-
-  // Room list context — rmap
-  keymapManager.rmap("j", "nav-down");
-  keymapManager.rmap("k", "nav-up");
+  // Room list context — rmap (Enter is the only binding that differs from global)
   keymapManager.rmap("Enter", "select-room");
 }
 
