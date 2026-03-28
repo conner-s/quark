@@ -38,6 +38,8 @@ interface PanelNavCallbacks {
   navUp: () => void;
   jumpTop?: () => void;
   jumpBottom?: () => void;
+  /** Activate the currently focused item (Enter/o). No-op if absent. */
+  select?: () => void;
   /** Called when focus moves TO this panel. Optional — no-op if absent. */
   focusActive?: () => void;
 }
@@ -132,6 +134,10 @@ class AppStateManager {
 
   jumpBottom(): void {
     this._panelNavCallbacks.get(this._state.activePanel)?.jumpBottom?.();
+  }
+
+  select(): void {
+    this._panelNavCallbacks.get(this._state.activePanel)?.select?.();
   }
 
   moveFocusLeft(): void {

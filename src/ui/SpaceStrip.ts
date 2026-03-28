@@ -62,6 +62,12 @@ export class SpaceStrip {
     prev?.focus();
   }
 
+  selectFocused(): void {
+    const focused = document.activeElement as HTMLElement;
+    const id = focused?.dataset.spaceId;
+    if (id) this._selectId(id);
+  }
+
   navFirst(): void {
     this._el.querySelector<HTMLElement>(".space-strip__item")?.focus();
   }

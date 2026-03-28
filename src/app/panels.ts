@@ -12,6 +12,7 @@ export function setupPanelNav(components: AppComponents): void {
     navUp: () => spaceStrip.navUp(),
     jumpTop: () => spaceStrip.navFirst(),
     jumpBottom: () => spaceStrip.navLast(),
+    select: () => spaceStrip.selectFocused(),
     focusActive: () => spaceStrip.focusActive(),
   });
 
@@ -20,6 +21,7 @@ export function setupPanelNav(components: AppComponents): void {
     navUp: () => roomList.navUp(),
     jumpTop: () => roomList.navFirst(),
     jumpBottom: () => roomList.navLast(),
+    select: () => roomList.selectFocused(),
     focusActive: () => roomList.focusActive(),
   });
 

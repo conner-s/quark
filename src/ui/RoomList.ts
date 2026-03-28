@@ -142,6 +142,12 @@ export class RoomList {
     prev?.focus();
   }
 
+  selectFocused(): void {
+    const focused = document.activeElement as HTMLElement;
+    const id = focused?.dataset.roomId;
+    if (id) this._selectId(id);
+  }
+
   navFirst(): void {
     this._scrollEl.querySelector<HTMLElement>(".room-list__item")?.focus();
   }

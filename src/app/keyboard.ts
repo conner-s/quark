@@ -55,9 +55,9 @@ function registerDefaultBindings(): void {
   keymapManager.nmap("m", "toggle-members");
   keymapManager.nmap("P", "open-profile");
 
-  // Room list context — rmap (Enter is the only binding that differs from global)
-  keymapManager.rmap("Enter", "select-room");
-  keymapManager.rmap("o", "select-room");
+  // select — activates the focused item in panels that support it (roomlist, spaces)
+  keymapManager.nmap("Enter", "select");
+  keymapManager.nmap("o", "select");
 }
 
 // ── Action dispatcher ─────────────────────────────────────────────────────────
@@ -138,9 +138,12 @@ function dispatchAction(action: string, components: AppComponents): void {
       break;
     }
 
-    case "edit":
+    case "select":
     case "select-room":
-      // Emit custom event for context-specific handlers that need more UI
+      AppState.select();
+      break;
+
+    case "edit":
       document.dispatchEvent(new CustomEvent("quark:action", { detail: { action } }));
       break;
 
