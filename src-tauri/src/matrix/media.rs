@@ -124,6 +124,19 @@ pub async fn download_media(
     download_media_with_cache(client, mxc_url, allow_thumbnail, thumbnail_width, thumbnail_height, None).await
 }
 
+/// Sniff the MIME type of a byte slice from its magic bytes.
+/// Returns the detected type, or `"application/octet-stream"` as a fallback.
+fn sniff_mime_type(data: &[u8]) -> &'static str {
+    match data {
+        [0x47, 0x49, 0x46, ..] => "image/gif",          // GIF87a / GIF89a
+        [0x52, 0x49, 0x46, 0x46, _, _, _, _, 0x57, 0x45, 0x42, 0x50, ..] => "image/webp", // RIFF....WEBP
+        [0x89, 0x50, 0x4e, 0x47, ..] => "image/png",    // PNG
+        [0xff, 0xd8, 0xff, ..] => "image/jpeg",         // JPEG
+        [0x00, 0x00, 0x00, _, 0x66, 0x74, 0x79, 0x70, ..] => "video/mp4", // ftyp box
+        _ => "application/octet-stream",
+    }
+}
+
 /// Like `download_media` but with an optional cache.
 pub async fn download_media_with_cache(
     client: &Client,
@@ -187,10 +200,13 @@ pub async fn download_media_with_cache(
         .await
         .map_err(|e| format!("Failed to download media: {e}"))?;
 
+    // Detect the actual MIME type from magic bytes so animated GIF/WEBP
+    // data URLs are constructed with the correct type and animate in the UI.
+    let mime_type = sniff_mime_type(&bytes).to_string();
+
     // Store in cache (best-effort; errors are logged but not propagated).
     if let Some(cache) = cache {
-        let mime_type = "application/octet-stream";
-        if let Err(e) = cache.put(&cache_key, &bytes, mime_type) {
+        if let Err(e) = cache.put(&cache_key, &bytes, &mime_type) {
             tracing::warn!("Failed to cache media {mxc_url}: {e}");
         } else {
             info!(url = %mxc_url, "Media cached");
@@ -200,7 +216,7 @@ pub async fn download_media_with_cache(
     let data_base64 = to_base64(&bytes);
     Ok(MediaDownload {
         data_base64,
-        mime_type: "application/octet-stream".to_string(),
+        mime_type,
         filename: None,
     })
 }

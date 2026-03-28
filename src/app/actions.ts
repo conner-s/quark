@@ -20,6 +20,7 @@ import {
   getUserSpaces,
   joinRoom,
   leaveRoom,
+  markRoomRead,
   getThreadTimeline,
   loadTheme as ipcLoadTheme,
   getCrossSigningStatus,
@@ -264,9 +265,24 @@ export async function selectRoom(roomId: string): Promise<void> {
   _paginationLoading = false;
   roomList.setActiveRoom(roomId);
 
-  // Find room info in cache
+  // Clear unread badge optimistically in local cache, then send read receipt
   const cached = AppState.get("roomListCache");
-  const roomInfo = cached.find((r) => r.room_id === roomId);
+  if (cached.some((r) => r.room_id === roomId && (r.unread_count > 0 || r.notification_count > 0))) {
+    AppState.set(
+      "roomListCache",
+      cached.map((r) =>
+        r.room_id === roomId ? { ...r, unread_count: 0, notification_count: 0 } : r
+      )
+    );
+    roomList.setRooms(
+      AppState.get("roomListCache").map(roomInfoToEntry)
+    );
+  }
+  void markRoomRead(roomId).catch(() => {/* non-fatal: badge already cleared locally */});
+
+  // Find room info in cache (re-read after potential update above)
+  const updatedCache = AppState.get("roomListCache");
+  const roomInfo = updatedCache.find((r) => r.room_id === roomId);
   const roomName = roomInfo?.name ?? roomId;
 
   roomHeader.setRoom(
