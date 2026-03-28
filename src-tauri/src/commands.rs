@@ -30,6 +30,20 @@ fn get_client(state: &State<'_, MatrixState>) -> Result<Client, String> {
     guard.as_ref().cloned().ok_or_else(|| "Not logged in".to_string())
 }
 
+/// Remove all matrix-sdk SQLite store files from the data directory.
+/// Called on logout and before a fresh login to prevent crypto store conflicts
+/// when switching accounts.
+fn clear_store(data_dir: &Path) {
+    if let Ok(entries) = std::fs::read_dir(data_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map_or(false, |e| e == "sqlite3" || e == "db") {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
+}
+
 // ─── Auth Commands ────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -42,6 +56,10 @@ pub async fn login(
 ) -> Result<SessionInfo, String> {
     let data_path = app_handle.path().app_data_dir()
         .map_err(|e| format!("Could not resolve app data dir: {e}"))?;
+
+    // Clear any leftover store from a previous session to prevent crypto store
+    // conflicts when logging in as a different account.
+    clear_store(&data_path);
 
     let client = crate::matrix::client::build_client(&homeserver_url, data_path).await?;
     let session = crate::matrix::client::login_with_password(&client, &username, &password).await?;
@@ -93,17 +111,24 @@ pub async fn start_sync(
 }
 
 #[tauri::command]
-pub async fn logout(state: State<'_, MatrixState>) -> Result<(), String> {
+pub async fn logout(
+    state: State<'_, MatrixState>,
+    app_handle: AppHandle,
+) -> Result<(), String> {
     let client = {
         let mut guard = state.0.lock().map_err(|_| "State lock poisoned")?;
         guard.take()
     };
 
     if let Some(c) = client {
-        c.matrix_auth()
-            .logout()
-            .await
-            .map_err(|e| format!("Logout failed: {e}"))?;
+        // Best-effort server-side token revocation; don't fail if the network is down.
+        let _ = c.matrix_auth().logout().await;
+    }
+
+    // Always clear the local SQLite store so the next login starts clean,
+    // regardless of whether the server-side revocation succeeded.
+    if let Ok(data_path) = app_handle.path().app_data_dir() {
+        clear_store(&data_path);
     }
 
     Ok(())
