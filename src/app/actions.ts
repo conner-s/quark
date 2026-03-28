@@ -303,10 +303,12 @@ export async function selectRoom(roomId: string): Promise<void> {
       if (m.avatar_url) _memberAvatarMxc.set(m.user_id, m.avatar_url);
     }
 
-    // Re-render with fresh display names if room hasn't changed mid-load
+    // Re-render with fresh display names if room hasn't changed mid-load.
+    // Use preserveScroll so a user who scrolled up to read history while
+    // members were loading does not get snapped back to the bottom.
     if (AppState.get("currentRoomId") === roomId) {
       const updatedMessages = events.map((e) => timelineEventToMessage(e, events));
-      timeline.setMessages(updatedMessages);
+      timeline.setMessages(updatedMessages, { preserveScroll: true });
 
       // Populate the member list sidebar
       memberList.setMembers(members.map(roomMemberToEntry));
@@ -383,6 +385,7 @@ export async function selectSpace(spaceId: string): Promise<void> {
     const spaceRoomIds = new Set(AppState.get("spaceRoomIds"));
     const homeRooms = allRooms.filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id));
     roomList.setRooms(homeRooms.map(roomInfoToEntry));
+    AppState.focusPanel("roomlist");
     return;
   }
 
@@ -399,6 +402,7 @@ export async function selectSpace(spaceId: string): Promise<void> {
       })
       .map(roomInfoToEntry);
     roomList.setRooms(dms);
+    AppState.focusPanel("roomlist");
     return;
   }
 
@@ -415,6 +419,7 @@ export async function selectSpace(spaceId: string): Promise<void> {
         return r ? [roomInfoToEntry(r)] : [];
       });
     roomList.setRooms(ordered);
+    AppState.focusPanel("roomlist");
   } catch (err) {
     showError(`Failed to load space: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -1199,6 +1204,11 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
       break;
     }
 
+    case "logout": {
+      await logout();
+      break;
+    }
+
     case "q":
     case "quit": {
       // In Tauri: close the window
@@ -1647,7 +1657,10 @@ function _downloadInlineEmoji(timeline: import("../ui/Timeline.js").Timeline): v
   }
 }
 
-/** Download uncached avatar thumbnails and update the timeline when each arrives. */
+/** Download uncached avatars and update the timeline when each arrives.
+ * Full media (not thumbnail) is used so that animated GIF/WEBP avatars
+ * are not transcoded to static images by the homeserver thumbnail endpoint.
+ */
 function _downloadMemberAvatars(members: RoomMember[], timeline: import("../ui/Timeline.js").Timeline): void {
   for (const m of members) {
     if (!m.avatar_url) continue;
@@ -1656,7 +1669,7 @@ function _downloadMemberAvatars(members: RoomMember[], timeline: import("../ui/T
       timeline.updateSenderAvatar(m.user_id, _avatarDataUrl.get(mxc)!);
       continue;
     }
-    getThumbnail(mxc, 40, 40).then((dl) => {
+    downloadMedia(mxc).then((dl) => {
       const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
       _avatarDataUrl.set(mxc, dataUrl);
       timeline.updateSenderAvatar(m.user_id, dataUrl);
