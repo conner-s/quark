@@ -5,6 +5,7 @@ import { mountApp } from "./ui/App.js";
 import { AppState } from "./app/state.js";
 import { setComponents, login, logout, attemptSessionRestore, selectRoom, selectSpace, refreshRooms } from "./app/actions.js";
 import { setupKeyboard } from "./app/keyboard.js";
+import { setupPanelNav } from "./app/panels.js";
 import { startSync } from "./app/sync.js";
 import { showError } from "./ui/NotificationToast.js";
 import { setForceMock } from "./ipc/invoke.js";
@@ -27,6 +28,9 @@ const components = mountApp(appEl);
 
 // Register components with the action dispatcher
 setComponents(components);
+
+// Wire panel navigation (must happen before any keyboard setup)
+setupPanelNav(components);
 
 // ── Debug auto-login ──────────────────────────────────────────────────────────
 

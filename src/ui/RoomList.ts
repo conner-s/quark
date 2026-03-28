@@ -142,6 +142,21 @@ export class RoomList {
     prev?.focus();
   }
 
+  selectFocused(): void {
+    const focused = document.activeElement as HTMLElement;
+    const id = focused?.dataset.roomId;
+    if (id) this._selectId(id);
+  }
+
+  navFirst(): void {
+    this._scrollEl.querySelector<HTMLElement>(".room-list__item")?.focus();
+  }
+
+  navLast(): void {
+    const items = this._scrollEl.querySelectorAll<HTMLElement>(".room-list__item");
+    items[items.length - 1]?.focus();
+  }
+
   focusActive(): void {
     const active = this._scrollEl.querySelector<HTMLElement>(".room-list__item--active");
     const first = this._scrollEl.querySelector<HTMLElement>(".room-list__item");

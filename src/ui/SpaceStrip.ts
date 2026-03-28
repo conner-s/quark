@@ -20,8 +20,6 @@ export class SpaceStrip {
     this._el.setAttribute("role", "listbox");
     this._el.setAttribute("aria-label", "Spaces");
 
-    // Keyboard navigation
-    this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
   }
 
   getElement(): HTMLElement {
@@ -40,6 +38,63 @@ export class SpaceStrip {
   setActiveSpace(id: string): void {
     this._activeId = id;
     this._updateActive();
+  }
+
+  focusActive(): void {
+    const active = this._el.querySelector<HTMLElement>(".space-strip__item--active");
+    const first = this._el.querySelector<HTMLElement>(".space-strip__item");
+    (active ?? first)?.focus();
+  }
+
+  navDown(): void {
+    const items = Array.from(this._el.querySelectorAll<HTMLElement>(".space-strip__item"));
+    const focused = document.activeElement as HTMLElement;
+    const idx = items.indexOf(focused);
+    const next = items[idx + 1] ?? items[0];
+    next?.focus();
+  }
+
+  navUp(): void {
+    const items = Array.from(this._el.querySelectorAll<HTMLElement>(".space-strip__item"));
+    const focused = document.activeElement as HTMLElement;
+    const idx = items.indexOf(focused);
+    const prev = idx <= 0 ? items[items.length - 1] : items[idx - 1];
+    prev?.focus();
+  }
+
+  selectFocused(): void {
+    const focused = document.activeElement as HTMLElement;
+    const id = focused?.dataset.spaceId;
+    if (id) this._selectId(id);
+  }
+
+  navFirst(): void {
+    this._el.querySelector<HTMLElement>(".space-strip__item")?.focus();
+  }
+
+  navLast(): void {
+    const items = this._el.querySelectorAll<HTMLElement>(".space-strip__item");
+    items[items.length - 1]?.focus();
+  }
+
+  /** Swap in a resolved avatar data URL for a space item. */
+  updateSpaceAvatar(spaceId: string, dataUrl: string): void {
+    const item = this._el.querySelector<HTMLElement>(`[data-space-id="${CSS.escape(spaceId)}"]`);
+    if (!item) return;
+    // Replace existing img or text with the resolved image
+    const existing = item.querySelector("img");
+    if (existing) {
+      existing.src = dataUrl;
+    } else {
+      item.textContent = "";
+      const img = document.createElement("img");
+      img.src = dataUrl;
+      img.alt = "";
+      img.style.width = "20px";
+      img.style.height = "20px";
+      img.style.objectFit = "cover";
+      item.appendChild(img);
+    }
   }
 
   // ── Private ──────────────────────────────────────────────────────────────
@@ -94,6 +149,10 @@ export class SpaceStrip {
     }
 
     el.addEventListener("click", () => this._selectId(item.id));
+    el.addEventListener("focus", () => {
+      // Dispatch a focusspace event so keyboard.ts can update activePanel
+      this._el.dispatchEvent(new CustomEvent("quark:space-focused", { bubbles: true }));
+    });
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -118,21 +177,6 @@ export class SpaceStrip {
     }
   }
 
-  private _handleKeydown(e: KeyboardEvent): void {
-    const items = Array.from(
-      this._el.querySelectorAll<HTMLElement>(".space-strip__item")
-    );
-    const focused = document.activeElement as HTMLElement;
-    const currentIndex = items.indexOf(focused);
-
-    if (e.key === "j" || e.key === "ArrowDown") {
-      e.preventDefault();
-      const next = items[currentIndex + 1];
-      next?.focus();
-    } else if (e.key === "k" || e.key === "ArrowUp") {
-      e.preventDefault();
-      const prev = items[currentIndex - 1];
-      prev?.focus();
-    }
-  }
+  // Navigation (j/k/arrows) is handled by the global keymap via AppState.navDown/navUp.
+  // Enter/Space activation is handled by individual item listeners in _createItem.
 }

@@ -1,5 +1,7 @@
 // SAS / QR device verification UI
 
+import { keymapManager } from "../vim/keybindings.js";
+
 export type VerificationState =
   | "incoming"   // Received a request from another device — show accept prompt
   | "waiting"    // We sent a request; waiting for the other device to respond
@@ -142,6 +144,10 @@ export class Verification {
     this._onDismiss = cb;
   }
 
+  isVisible(): boolean {
+    return this._el.style.display !== "none";
+  }
+
   show(): void {
     this._el.style.display = "";
     this._updateFocus();
@@ -249,37 +255,44 @@ export class Verification {
   }
 
   private _handleKeydown(e: KeyboardEvent): void {
-    switch (e.key) {
-      case "Escape":
+    e.stopPropagation();
+
+    // Escape and Tab are hardcoded (not remappable)
+    if (e.key === "Escape") {
+      e.preventDefault();
+      this._onDeny?.();
+      this.hide();
+      return;
+    }
+
+    if (e.key === "Enter") {
+      // Handled by button's own keydown via focus
+      return;
+    }
+
+    if (e.key === "Tab") {
+      if (this._state === "comparing" || this._state === "incoming") {
         e.preventDefault();
-        this._onDeny?.();
-        this.hide();
-        return;
+        this._focusedAction =
+          this._focusedAction === "confirm" ? "deny" : "confirm";
+        this._updateFocus();
+      }
+      return;
+    }
 
-      case "Enter":
-        // Handled by button's own keydown via focus
-        return;
+    const result = keymapManager.resolveKey(e.key, "picker");
 
-      case "h":
-      case "l":
-      case "ArrowLeft":
-      case "ArrowRight":
+    if (result.kind === "action") {
+      if (result.action === "nav-left" || result.action === "nav-right") {
         if (this._state === "comparing" || this._state === "incoming") {
           e.preventDefault();
           this._focusedAction =
             this._focusedAction === "confirm" ? "deny" : "confirm";
           this._updateFocus();
         }
-        return;
-
-      case "Tab":
-        if (this._state === "comparing" || this._state === "incoming") {
-          e.preventDefault();
-          this._focusedAction =
-            this._focusedAction === "confirm" ? "deny" : "confirm";
-          this._updateFocus();
-        }
-        return;
+      }
+    } else if (result.kind === "partial") {
+      e.preventDefault();
     }
   }
 }

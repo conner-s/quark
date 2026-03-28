@@ -74,6 +74,10 @@ export class StickerPicker {
     this._onSelect = cb;
   }
 
+  isVisible(): boolean {
+    return this._el.style.display !== "none";
+  }
+
   show(): void {
     this._el.style.display = "";
     this._focusIndex = 0;

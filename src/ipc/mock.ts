@@ -165,6 +165,9 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       ];
     case "get_space_children":
       return MOCK_ROOMS.slice(0, 2).map((r, i) => ({ room_id: r.room_id, name: r.name, avatar_url: r.avatar_url, is_space: false, topic: r.topic, member_count: r.member_count, order: String(i + 1), canonical_alias: null }));
+    case "load_quarkrc":
+      // No rc file in mock mode — return empty parsed result
+      return { directives: [], errors: [] };
     case "load_theme":
       // Return a minimal theme object so :theme commands don't crash in debug mode
       return {

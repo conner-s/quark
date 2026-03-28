@@ -7,6 +7,12 @@ Always make sure that DESIGN.md is up to date. Cross off tasks as they are compl
 When starting on a feature, always create a new git branch if currently on main unless otherwise instructed.
 Commit changes as you go when on a feature branch.
 
+Do not assume that existing patterns should always be extended. If something is scaling up and needs more
+infrastructure, do not be afraid to propose more abstraction or layers of indirection. Example: you are
+adding a panel to the UI and modifying the input manager. You notice that the input manager contains a
+switchyard for each navigation key. This worked fine for one or two panels but will grow cumbersome to
+maintain as complexity grows. You should propose to add a layer of abstraction to avoid repeated switchyards.
+
 ## Commands
 
 ```bash

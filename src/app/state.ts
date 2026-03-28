@@ -4,10 +4,14 @@ import type { RoomInfo, TimelineEvent } from "../ipc/types.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type ActivePanel = "roomlist" | "timeline" | "spaces";
+export type ActivePanel = "roomlist" | "timeline" | "spaces" | "members";
 
 export interface AppStateSnapshot {
   loggedIn: boolean;
+  /** Matrix user ID of the locally logged-in user (e.g. @alice:matrix.org). */
+  ownUserId: string | null;
+  /** Display name of the locally logged-in user. */
+  ownDisplayName: string | null;
   currentRoomId: string | null;
   currentSpaceId: string | null;
   activePanel: ActivePanel;
@@ -27,11 +31,33 @@ export type StateChangeListener<K extends StateChangeKey = StateChangeKey> = (
   prev: AppStateSnapshot[K]
 ) => void;
 
+// ── Panel nav callback registry ──────────────────────────────────────────────
+
+interface PanelNavCallbacks {
+  navDown: () => void;
+  navUp: () => void;
+  jumpTop?: () => void;
+  jumpBottom?: () => void;
+  /** Activate the currently focused item (Enter/o). No-op if absent. */
+  select?: () => void;
+  /** Called when focus moves TO this panel. Optional — no-op if absent. */
+  focusActive?: () => void;
+  /** Clear selection / cancel reply / close thread for this panel. No-op if absent. */
+  close?: () => void;
+}
+
 // ── AppState class ───────────────────────────────────────────────────────────
 
 class AppStateManager {
+  /** Left-to-right panel order for focus traversal. */
+  private static readonly PANEL_ORDER: readonly ActivePanel[] = [
+    "spaces", "roomlist", "timeline", "members",
+  ];
+
   private _state: AppStateSnapshot = {
     loggedIn: false,
+    ownUserId: null,
+    ownDisplayName: null,
     currentRoomId: null,
     currentSpaceId: null,
     activePanel: "roomlist",
@@ -45,6 +71,7 @@ class AppStateManager {
 
   private _listeners: Map<string, Set<StateChangeListener>> = new Map();
   private _anyListeners: Set<StateChangeListener> = new Set();
+  private _panelNavCallbacks: Map<ActivePanel, PanelNavCallbacks> = new Map();
 
   // ── Read ──────────────────────────────────────────────────────────────────
 
@@ -86,6 +113,61 @@ class AppStateManager {
   onAny(listener: StateChangeListener): () => void {
     this._anyListeners.add(listener);
     return () => this._anyListeners.delete(listener);
+  }
+
+  // ── Panel nav ─────────────────────────────────────────────────────────────
+
+  /** Register navigation callbacks for a panel. Called once during setup. */
+  registerPanelNav(panel: ActivePanel, callbacks: PanelNavCallbacks): void {
+    this._panelNavCallbacks.set(panel, callbacks);
+  }
+
+  navDown(): void {
+    this._panelNavCallbacks.get(this._state.activePanel)?.navDown();
+  }
+
+  navUp(): void {
+    this._panelNavCallbacks.get(this._state.activePanel)?.navUp();
+  }
+
+  jumpTop(): void {
+    this._panelNavCallbacks.get(this._state.activePanel)?.jumpTop?.();
+  }
+
+  jumpBottom(): void {
+    this._panelNavCallbacks.get(this._state.activePanel)?.jumpBottom?.();
+  }
+
+  select(): void {
+    this._panelNavCallbacks.get(this._state.activePanel)?.select?.();
+  }
+
+  close(): void {
+    this._panelNavCallbacks.get(this._state.activePanel)?.close?.();
+  }
+
+  moveFocusLeft(): void {
+    const order = AppStateManager.PANEL_ORDER.filter(
+      (p) => p !== "members" || this._state.memberListVisible
+    );
+    const idx = order.indexOf(this._state.activePanel);
+    if (idx > 0) {
+      const next = order[idx - 1];
+      this.set("activePanel", next);
+      this._panelNavCallbacks.get(next)?.focusActive?.();
+    }
+  }
+
+  moveFocusRight(): void {
+    const order = AppStateManager.PANEL_ORDER.filter(
+      (p) => p !== "members" || this._state.memberListVisible
+    );
+    const idx = order.indexOf(this._state.activePanel);
+    if (idx >= 0 && idx < order.length - 1) {
+      const next = order[idx + 1];
+      this.set("activePanel", next);
+      this._panelNavCallbacks.get(next)?.focusActive?.();
+    }
   }
 
   private _emit<K extends StateChangeKey>(key: K, value: AppStateSnapshot[K], prev: AppStateSnapshot[K]): void {

@@ -96,6 +96,7 @@ pub fn run() {
             // Config
             commands::load_theme,
             commands::parse_quarkrc,
+            commands::load_quarkrc,
             // Notifications
             commands::get_notification_config,
             commands::set_notification_config,

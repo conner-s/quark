@@ -1,5 +1,7 @@
 // Keyboard-navigable emoji / sticker / GIF tab picker
 
+import { keymapManager } from "../vim/keybindings.js";
+
 export type PickerTab = "emoji" | "sticker" | "gif";
 
 export interface EmojiEntry {
@@ -98,6 +100,10 @@ export class EmojiPicker {
     this._onTabChange = cb;
   }
 
+  isVisible(): boolean {
+    return this._el.style.display !== "none";
+  }
+
   show(): void {
     this._el.style.display = "";
     this._focusIndex = 0;
@@ -110,6 +116,7 @@ export class EmojiPicker {
     this._searchEl.value = "";
     this._searchActive = false;
     this._applyFilter("");
+    keymapManager.resetSequence();
   }
 
   /** Replace the displayed emoji entries (call again when tab changes). */
@@ -193,9 +200,12 @@ export class EmojiPicker {
   }
 
   private _handleKeydown(e: KeyboardEvent): void {
+    e.stopPropagation();
+
     const cells = this._gridEl.querySelectorAll<HTMLElement>(".emoji-picker__cell");
     const total = cells.length;
 
+    // Escape: if search active, close search; otherwise close picker
     if (this._searchActive && e.key === "Escape") {
       e.preventDefault();
       this._searchActive = false;
@@ -212,6 +222,7 @@ export class EmojiPicker {
       return;
     }
 
+    // Tab and / are overlay-specific — not remappable
     if (e.key === "Tab" && !e.shiftKey) {
       e.preventDefault();
       const tabs: PickerTab[] = ["emoji", "sticker", "gif"];
@@ -228,6 +239,7 @@ export class EmojiPicker {
       return;
     }
 
+    // Enter — select focused cell
     if (e.key === "Enter") {
       e.preventDefault();
       this._selectIndex(this._focusIndex);
@@ -236,33 +248,41 @@ export class EmojiPicker {
 
     if (total === 0) return;
 
-    let next = this._focusIndex;
+    const result = keymapManager.resolveKey(e.key, "picker");
 
-    switch (e.key) {
-      case "j":
-      case "ArrowDown":
-        e.preventDefault();
-        next = Math.min(this._focusIndex + COLS, total - 1);
-        break;
-      case "k":
-      case "ArrowUp":
-        e.preventDefault();
-        next = Math.max(this._focusIndex - COLS, 0);
-        break;
-      case "l":
-      case "ArrowRight":
-        e.preventDefault();
-        next = Math.min(this._focusIndex + 1, total - 1);
-        break;
-      case "h":
-      case "ArrowLeft":
-        e.preventDefault();
-        next = Math.max(this._focusIndex - 1, 0);
-        break;
-      default:
-        return;
+    if (result.kind === "action") {
+      let next = this._focusIndex;
+      switch (result.action) {
+        case "nav-down":
+          e.preventDefault();
+          next = Math.min(this._focusIndex + COLS, total - 1);
+          break;
+        case "nav-up":
+          e.preventDefault();
+          next = Math.max(this._focusIndex - COLS, 0);
+          break;
+        case "nav-right":
+          e.preventDefault();
+          next = Math.min(this._focusIndex + 1, total - 1);
+          break;
+        case "nav-left":
+          e.preventDefault();
+          next = Math.max(this._focusIndex - 1, 0);
+          break;
+        case "jump-top":
+          e.preventDefault();
+          next = 0;
+          break;
+        case "jump-bottom":
+          e.preventDefault();
+          next = total - 1;
+          break;
+        default:
+          return;
+      }
+      this._focusCell(next);
+    } else if (result.kind === "partial") {
+      e.preventDefault();
     }
-
-    this._focusCell(next);
   }
 }

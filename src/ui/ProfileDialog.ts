@@ -1,5 +1,7 @@
 // Profile dialog — shows the current user's own profile
 
+import { keymapManager } from "../vim/keybindings.js";
+
 export interface ProfileData {
   userId: string;
   displayName: string | null;
@@ -86,6 +88,25 @@ export class ProfileDialog {
     document.addEventListener("mousedown", (e) => {
       if (this.isVisible() && !this._el.contains(e.target as Node)) {
         this.hide();
+      }
+    });
+
+    // Keyboard handling — block global handler and support close action
+    this._el.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        this.hide();
+        return;
+      }
+
+      const result = keymapManager.resolveKey(e.key, "picker");
+      if (result.kind === "action" && result.action === "close") {
+        e.preventDefault();
+        this.hide();
+      } else if (result.kind === "partial") {
+        e.preventDefault();
       }
     });
   }

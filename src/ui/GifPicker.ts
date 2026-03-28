@@ -1,6 +1,7 @@
 // GIF search overlay
 
 import type { GifResult } from "../ipc/types.js";
+import { keymapManager } from "../vim/keybindings.js";
 export type { GifResult };
 
 type GifSelectCallback = (gif: GifResult) => void;
@@ -119,6 +120,10 @@ export class GifPicker {
     this._onLoadMore = cb;
   }
 
+  isVisible(): boolean {
+    return this._el.style.display !== "none";
+  }
+
   show(): void {
     this._el.style.display = "flex";
     this._searchEl.focus();
@@ -126,6 +131,7 @@ export class GifPicker {
 
   hide(): void {
     this._el.style.display = "none";
+    keymapManager.resetSequence();
   }
 
   setResults(results: GifResult[]): void {
@@ -203,6 +209,8 @@ export class GifPicker {
   }
 
   private _handleKeydown(e: KeyboardEvent): void {
+    e.stopPropagation();
+
     // Allow normal typing in search box — only intercept Escape
     if (document.activeElement === this._searchEl) {
       if (e.key === "Escape") {
@@ -214,50 +222,54 @@ export class GifPicker {
 
     const total = this._results.length;
 
-    switch (e.key) {
-      case "Escape":
-        e.preventDefault();
-        this.hide();
-        return;
+    // Escape, Tab, Enter, / are hardcoded (overlay-specific or not remappable)
+    if (e.key === "Escape") {
+      e.preventDefault();
+      this.hide();
+      return;
+    }
 
-      case "Tab":
-        e.preventDefault();
-        this._onLoadMore?.();
-        return;
+    if (e.key === "Tab") {
+      e.preventDefault();
+      this._onLoadMore?.();
+      return;
+    }
 
-      case "Enter":
-        e.preventDefault();
-        this._selectIndex(this._focusIndex);
-        return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      this._selectIndex(this._focusIndex);
+      return;
+    }
 
-      case "/":
-        e.preventDefault();
-        this._searchEl.focus();
-        return;
+    if (e.key === "/") {
+      e.preventDefault();
+      this._searchEl.focus();
+      return;
+    }
 
-      case "j":
-      case "ArrowDown":
-        e.preventDefault();
-        if (total > 0) this._focusCell(Math.min(this._focusIndex + GIF_COLS, total - 1));
-        return;
+    const result = keymapManager.resolveKey(e.key, "picker");
 
-      case "k":
-      case "ArrowUp":
-        e.preventDefault();
-        if (total > 0) this._focusCell(Math.max(this._focusIndex - GIF_COLS, 0));
-        return;
-
-      case "l":
-      case "ArrowRight":
-        e.preventDefault();
-        if (total > 0) this._focusCell(Math.min(this._focusIndex + 1, total - 1));
-        return;
-
-      case "h":
-      case "ArrowLeft":
-        e.preventDefault();
-        if (total > 0) this._focusCell(Math.max(this._focusIndex - 1, 0));
-        return;
+    if (result.kind === "action") {
+      switch (result.action) {
+        case "nav-down":
+          e.preventDefault();
+          if (total > 0) this._focusCell(Math.min(this._focusIndex + GIF_COLS, total - 1));
+          break;
+        case "nav-up":
+          e.preventDefault();
+          if (total > 0) this._focusCell(Math.max(this._focusIndex - GIF_COLS, 0));
+          break;
+        case "nav-right":
+          e.preventDefault();
+          if (total > 0) this._focusCell(Math.min(this._focusIndex + 1, total - 1));
+          break;
+        case "nav-left":
+          e.preventDefault();
+          if (total > 0) this._focusCell(Math.max(this._focusIndex - 1, 0));
+          break;
+      }
+    } else if (result.kind === "partial") {
+      e.preventDefault();
     }
   }
 }

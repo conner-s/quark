@@ -647,12 +647,13 @@ quark/
 - [x] Add profile dialogue and keybind — `ProfileDialog` overlay shows display name, user ID, and avatar; opened with `P` in normal mode or `:profile` command; `get_own_profile` IPC backed by matrix-sdk `account()` API
 - [x] Back out of threads and replies with escape — global Escape handler now calls `cancelReply()` and `closeThread()`
 - [ ] Add emoji search window
-- [ ] Show custom emojis in previews
+- [ ] Enable shortcode for custom emoji
 - [x] Show all emojis in react picker — `QuickReactPicker` now loads all `BUILTIN_EMOJI` (pinned common reactions first) in a scrollable grid; filtering uses shortcode text
 - [ ] Add sticker picker dialogue
 - [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach shows "not yet implemented" toast
 - [x] Support pasting images into the compose box — clipboard image paste detected in `Input`, converted to base64, uploaded via new `send_pasted_image` IPC (Rust: decode base64 → upload → send as `m.image`)
 - [ ] Polish pass over top bar displaying room info. Take cues from the message UI.
+- [ ] Polish pass over verification UI; currently unstyled at the bottom
 - [ ] Emoji and sticker picker styling. Should show in box above compose area.
 - [ ] Threads animate open a space between message bubbles and display there.
 - [ ] Settings UI
@@ -661,6 +662,13 @@ quark/
 - [ ] Mouse interactions (click on profile to open profile view, react and reply buttons, etc.)
 - [ ] Pinned messages UI
 - [ ] Implement themes (command currently does nothing)
+- [ ] Make space UI bigger
+- [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
+  - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
+  - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
+  - [ ] Outside of text select mode but in normal mode, 'y' should copy the full message
+  - [ ] Outside of text select mode but in normal mode, 'p' should paste into the compose box
+  - [ ] In text select mode in normal mode in the compose box, 'p' should paste into the compose box at the cursor position
 
 #### Hardening
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
@@ -668,20 +676,33 @@ quark/
 - [ ] Command audit - make sure all commands are fully implemented
 
 #### Bugs
-- [ ] rooms don't always load. When they do, sometimes I'm not able to scroll.
-- [ ] Some images aren't showing up
-- [ ] Space icons don't show up
-- [ ] Timeline should always start scrolled to the bottom; sometimes it starts in the middle
-- [ ] Profile pictures don't show in profile view
-- [ ] Profile view always selects user, not sender of selected message
-- [ ] Profile viewer starts offset from center, then snaps into view.
-- [ ] Unable to move vim keyboard focus to room list, space list, or member list.
-- [ ] Send message animation is no longer aligned when creating a new bubble, likely something to do with margins or padding.
-- [ ] Sent messages show as from "you" rather than with the correct profile info for the user.
-- [ ] Emoji picker sometimes goes off screen.
-- [ ] Clicking in the compose box allows you to type without switching to insert mode.
-- [ ] Custom emojis are not shown in shortcode preview, emoji picker, or react picker.
-- [ ] ctrl + [ does not work as escape in all places (i.e. react emoji picker)
-- [ ] React picker and emoji picker are separate entities; probably best to combine for consistentcy and maintainability
-- [ ] Noticeable delay when swtiching rooms.
+- [ ] rooms don't always load. (scroll getting stuck fixed — cancelled scroll animation on room switch)
+- [x] Some images aren't showing up — removed lazy loading (prevented load in overflow containers); isOwn now set on loaded timeline events
+- [x] Space icons don't show up — mxc:// URLs now downloaded and resolved in background
+- [x] Timeline should always start scrolled to the bottom — scroll on render + rAF + 150ms delayed pass
+- [x] Profile pictures don't show in profile view — mxc:// resolved via getThumbnail before show
+- [x] Profile view always selects user, not sender of selected message — now shows selected message sender (falls back to own profile)
+- [x] Profile viewer starts offset from center, then snaps into view — CSS animation conflict fixed (profile-dialog-in includes translate offset)
+- [x] Unable to move vim keyboard focus to room list, space list, or member list — ArrowLeft/Right navigates spaces ← roomlist ← timeline → members; SpaceStrip/MemberList have focusFirst/navDown/navUp
+- [x] Send message animation is no longer aligned when creating a new bubble — input-bar padding-left set to 0 to align compose box with message groups
+- [x] Sent messages show as from "you" rather than with the correct profile info — ownUserId/ownDisplayName fetched after login and stored in AppState
+- [x] Emoji picker sometimes goes off screen — added full CSS (was missing entirely); fixed position bottom-right above compose area
+- [x] Clicking in the compose box allows you to type without switching to insert mode — click handler on input field transitions to Insert mode
+- [x] Custom emojis are not shown in shortcode preview, emoji picker, or react picker — mxc:// URLs resolved to data: URLs before display (emoji picker + shortcode preview)
+- [x] ctrl + [ does not work as escape in all places (i.e. react emoji picker) — QuickReactPicker now handles Ctrl+[ in both input and grid handlers
+- [ ] React picker and emoji picker are separate entities; probably best to combine for consistency and maintainability
+- [x] Noticeable delay when switching rooms — timeline rendered immediately from getTimeline, members fetched concurrently and UI updated when ready
+- [ ] Loading new messages scrolls to a random position
+- [ ] App does not use my KDE window bar, seems to have custom?
+- [x] h/l don't navigate left and right.
+- [x] Focus sometimes gets stuck/can't move to timeline
+- [ ] React picker goes off screen if message is close to the bottom
+- [x] o should open select rooms/spaces
+- [ ] Selecting a space should move to the rooms list
+- [ ] Message recency sorting doesn't seem to be working for DMs
+- [ ] Viewing a room doesn't dismiss the unread count
+- [ ] Custom emotes still don't show up in the react or message emoji picker or in shortcode
+- [ ] Sticker previews don't render in sticker picker
+- [ ] Animated avatars don't work
+- [ ] There's currently no way to log out
 

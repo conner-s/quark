@@ -137,11 +137,14 @@ function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[]): 
     (mxcUrl && _avatarDataUrl.get(mxcUrl)) ??
     ((e as unknown as Record<string, unknown>)["_mock_avatar_url"] as string | undefined);
 
+  const ownUserId = AppState.get("ownUserId");
+
   return {
     id: e.event_id,
     senderId: e.sender,
     senderName: resolveDisplayName(e.sender),
     senderAvatarUrl,
+    isOwn: ownUserId ? e.sender === ownUserId : false,
     timestamp: new Date(e.timestamp).toISOString(),
     body: e.body,
     htmlBody: e.formatted_body ?? undefined,
@@ -172,6 +175,17 @@ function getComponents(): AppComponents {
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 
+/** Fetch own profile and store userId + displayName in AppState. Non-critical. */
+async function _loadOwnProfile(): Promise<void> {
+  try {
+    const profile = await getOwnProfile();
+    AppState.set("ownUserId", profile.user_id);
+    AppState.set("ownDisplayName", profile.display_name);
+  } catch {
+    // Non-critical — sendMessage falls back to user ID string
+  }
+}
+
 /**
  * Attempt password login. On success, transitions to main layout and loads rooms.
  */
@@ -187,6 +201,7 @@ export async function login(homeserver: string, username: string, password: stri
     showMainLayout(getComponents());
     loginScreen.hide();
 
+    void _loadOwnProfile();
     await refreshRooms();
 
     showSuccess("Connected successfully");
@@ -211,6 +226,7 @@ export async function attemptSessionRestore(components: import("../ui/App.js").A
     await ipcRestoreSession(session.homeserver_url, session);
     AppState.set("loggedIn", true);
     showMainLayout(components);
+    void _loadOwnProfile();
     await refreshRooms();
     return true;
   } catch (err) {
@@ -262,45 +278,51 @@ export async function selectRoom(roomId: string): Promise<void> {
   statusBar.setRoom(roomName);
 
   try {
-    // Fetch timeline and members in parallel — members must be ready before
-    // converting events so display names are available on first render.
-    const [page, members] = await Promise.all([
-      getTimeline(roomId, { limit: 50 }),
-      getRoomMembers(roomId).catch(() => [] as RoomMember[]),
-    ]);
+    // Fetch timeline first for fast initial render; members come in parallel
+    // but we don't wait for them before rendering (cached display names are used).
+    const timelinePromise = getTimeline(roomId, { limit: 50 });
+    const membersPromise = getRoomMembers(roomId).catch(() => [] as RoomMember[]);
 
+    const page = await timelinePromise;
     const { events, prev_batch } = page;
     _prevBatch = prev_batch;
 
     AppState.set("currentTimeline", events);
 
-    // Populate display-name and mxc caches from members (synchronous)
-    for (const m of members) {
-      if (m.display_name) _memberDisplayName.set(m.user_id, m.display_name);
-      if (m.avatar_url) _memberAvatarMxc.set(m.user_id, m.avatar_url);
-    }
-
-    // Render timeline — display names and any previously-cached avatars are now available
+    // Render with cached display names immediately — update once members arrive
     const messages = events.map((e) => timelineEventToMessage(e, events));
     timeline.setMessages(messages);
 
     // Register scroll-to-top for pagination (re-registers on each room change)
     timeline.onScrollToTop(() => void loadMoreMessages());
 
-    // Populate the member list sidebar
-    memberList.setMembers(members.map(roomMemberToEntry));
+    // Members arrive asynchronously — update display names and avatars when ready
+    const members = await membersPromise;
+    for (const m of members) {
+      if (m.display_name) _memberDisplayName.set(m.user_id, m.display_name);
+      if (m.avatar_url) _memberAvatarMxc.set(m.user_id, m.avatar_url);
+    }
 
-    // Download uncached avatar thumbnails in the background
-    _downloadMemberAvatars(members, timeline);
+    // Re-render with fresh display names if room hasn't changed mid-load
+    if (AppState.get("currentRoomId") === roomId) {
+      const updatedMessages = events.map((e) => timelineEventToMessage(e, events));
+      timeline.setMessages(updatedMessages);
 
-    // Download mxc:// image content in the background
-    _downloadMessageImages(events, timeline);
+      // Populate the member list sidebar
+      memberList.setMembers(members.map(roomMemberToEntry));
 
-    // Resolve any mxc:// custom emoji used in reaction chips
-    void _downloadReactionEmoji(events, timeline);
+      // Download uncached avatar thumbnails in the background
+      _downloadMemberAvatars(members, timeline);
 
-    // Resolve mxc:// URLs for inline custom emoji in formatted message bodies
-    _downloadInlineEmoji(timeline);
+      // Download mxc:// image content in the background
+      _downloadMessageImages(events, timeline);
+
+      // Resolve any mxc:// custom emoji used in reaction chips
+      void _downloadReactionEmoji(events, timeline);
+
+      // Resolve mxc:// URLs for inline custom emoji in formatted message bodies
+      _downloadInlineEmoji(timeline);
+    }
   } catch (err) {
     showError(`Failed to load timeline: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -420,9 +442,14 @@ export async function sendMessage(body: string): Promise<void> {
     }
   }
 
+  const ownUserId = AppState.get("ownUserId");
+  const ownDisplayName = AppState.get("ownDisplayName");
+  const ownSenderName = ownDisplayName ?? ownUserId ?? "you";
+
   const optimisticMsg: MessageData = {
     id: `optimistic-${Date.now()}`,
-    senderName: "you",
+    senderId: ownUserId ?? undefined,
+    senderName: ownSenderName,
     isOwn: true,
     timestamp: new Date().toISOString(),
     body,
@@ -893,10 +920,10 @@ export function openEmojiPicker(): void {
   emojiPicker.setEntries(builtinEntries);
   emojiPicker.show();
 
-  // Async: prepend custom emoji packs (if any) once loaded
+  // Async: prepend custom emoji packs (if any) once loaded, resolving mxc:// URLs
   const roomId = AppState.get("currentRoomId");
   getEmojiPacks(roomId ?? undefined)
-    .then((packs) => {
+    .then(async (packs) => {
       const customEntries: EmojiEntry[] = [];
       for (const pack of packs) {
         for (const e of pack.emojis) {
@@ -905,24 +932,67 @@ export function openEmojiPicker(): void {
           }
         }
       }
-      if (customEntries.length > 0) {
-        emojiPicker.setEntries([...customEntries, ...builtinEntries]);
-      }
+      if (customEntries.length === 0) return;
+
+      // Resolve mxc:// URLs to data: URLs so the browser can display them
+      await Promise.all(
+        customEntries.map(async (entry, i) => {
+          if (entry.imageUrl?.startsWith("mxc://")) {
+            try {
+              const dl = await getThumbnail(entry.imageUrl, 32, 32);
+              customEntries[i] = { ...entry, imageUrl: `data:${dl.mime_type};base64,${dl.data_base64}` };
+            } catch { /* non-critical — keep mxc:// as fallback */ }
+          }
+        })
+      );
+      emojiPicker.setEntries([...customEntries, ...builtinEntries]);
     })
     .catch(() => { /* non-critical */ });
 }
 
 /**
- * Open the profile dialog showing the current user's own profile.
+ * Open the profile dialog. Shows the selected message's sender if one is
+ * selected, otherwise shows the current user's own profile.
  */
 export async function openProfileDialog(): Promise<void> {
-  const { profileDialog } = getComponents();
+  const { profileDialog, timeline } = getComponents();
   try {
+    const selectedId = timeline.selectedMessageId;
+    if (selectedId) {
+      // Show the sender of the selected message
+      const events = AppState.get("currentTimeline");
+      const evt = events.find((e) => e.event_id === selectedId);
+      if (evt) {
+        const displayName = resolveDisplayName(evt.sender);
+        const mxcUrl = _memberAvatarMxc.get(evt.sender);
+        const cachedDataUrl = mxcUrl ? _avatarDataUrl.get(mxcUrl) : undefined;
+        let avatarUrl: string | null = null;
+        if (cachedDataUrl) {
+          avatarUrl = cachedDataUrl;
+        } else if (mxcUrl) {
+          try {
+            const dl = await getThumbnail(mxcUrl, 64, 64);
+            avatarUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+            _avatarDataUrl.set(mxcUrl, avatarUrl);
+          } catch { /* non-critical */ }
+        }
+        profileDialog.show({ userId: evt.sender, displayName, avatarUrl });
+        return;
+      }
+    }
+    // Fallback: own profile
     const profile = await getOwnProfile();
+    let avatarUrl: string | null = null;
+    if (profile.avatar_url) {
+      try {
+        const dl = await getThumbnail(profile.avatar_url, 64, 64);
+        avatarUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+      } catch { /* non-critical */ }
+    }
     profileDialog.show({
       userId: profile.user_id,
       displayName: profile.display_name,
-      avatarUrl: profile.avatar_url,
+      avatarUrl,
     });
   } catch (err) {
     showError(`Failed to load profile: ${err instanceof Error ? err.message : String(err)}`);
@@ -1220,13 +1290,26 @@ export async function refreshRooms(): Promise<void> {
     );
     AppState.set("spaceRoomIds", [...spaceRoomIdSet]);
 
-    // Populate space strip
+    // Populate space strip — without avatar URLs initially, then resolve mxc:// in background
     const spaceItems: SpaceItem[] = userSpaces.map((s) => ({
       id: s.room_id,
       name: s.name ?? s.room_id,
-      avatarUrl: s.avatar_url ?? undefined,
     }));
     spaceStrip.setSpaces(spaceItems);
+
+    // Resolve space avatar mxc:// URLs in the background
+    for (const s of userSpaces) {
+      if (s.avatar_url?.startsWith("mxc://")) {
+        const mxcUrl = s.avatar_url;
+        const roomId = s.room_id;
+        getThumbnail(mxcUrl, 32, 32)
+          .then((dl) => {
+            const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+            spaceStrip.updateSpaceAvatar(roomId, dataUrl);
+          })
+          .catch(() => { /* non-critical */ });
+      }
+    }
 
     // Refresh the current space view with fresh data
     const spaceId = AppState.get("currentSpaceId");
@@ -1464,6 +1547,10 @@ export function toggleMemberList(): void {
   const current = AppState.get("memberListVisible");
   const next = !current;
   AppState.set("memberListVisible", next);
+
+  if (!next && AppState.get("activePanel") === "members") {
+    AppState.set("activePanel", "timeline");
+  }
 
   mainLayout.classList.toggle("quark-layout--member-list-open", next);
 }

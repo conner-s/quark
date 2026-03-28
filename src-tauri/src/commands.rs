@@ -583,6 +583,24 @@ pub async fn parse_quarkrc(content: String) -> Result<ParsedRc, String> {
     Ok(crate::config::quarkrc::parse_quarkrc(&content))
 }
 
+/// Load and parse the user's quarkrc from the XDG config dir (~/.config/quark/quarkrc).
+/// Returns an empty ParsedRc if the file does not exist.
+#[tauri::command]
+pub async fn load_quarkrc() -> Result<ParsedRc, String> {
+    let dirs = directories::ProjectDirs::from("", "", "quark")
+        .ok_or_else(|| "Could not determine config directory".to_string())?;
+    let rc_path = dirs.config_dir().join("quarkrc");
+
+    if !rc_path.exists() {
+        return Ok(ParsedRc { directives: vec![], errors: vec![] });
+    }
+
+    let content = std::fs::read_to_string(&rc_path)
+        .map_err(|e| format!("Failed to read quarkrc: {}", e))?;
+
+    Ok(crate::config::quarkrc::parse_quarkrc(&content))
+}
+
 // ─── Cache Management Commands ────────────────────────────────────────────────
 
 /// Return aggregate statistics about the on-disk media cache.
