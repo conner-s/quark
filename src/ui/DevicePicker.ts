@@ -26,6 +26,7 @@ export class DevicePicker {
     this._el.setAttribute("role", "dialog");
     this._el.setAttribute("aria-label", "Choose device to verify");
     this._el.setAttribute("aria-modal", "true");
+    this._el.setAttribute("tabindex", "-1");
     this._el.style.display = "none";
 
     this._titleEl = document.createElement("div");
@@ -65,6 +66,10 @@ export class DevicePicker {
     this._render();
     this._el.style.display = "";
     this._el.focus();
+  }
+
+  isVisible(): boolean {
+    return this._el.style.display !== "none";
   }
 
   hide(): void {
@@ -122,6 +127,7 @@ export class DevicePicker {
   }
 
   private _handleKeydown(e: KeyboardEvent): void {
+    e.stopPropagation();
     switch (e.key) {
       case "j":
       case "ArrowDown":

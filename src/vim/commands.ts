@@ -25,6 +25,10 @@ const KNOWN_COMMANDS: string[] = [
   "unban",
   "nick",
   "topic",
+  "verify",
+  "cross-sign",
+  "setup-cross-signing",
+  "profile",
 ];
 
 /**

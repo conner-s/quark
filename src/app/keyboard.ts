@@ -320,7 +320,7 @@ function applyRcDirectives(rc: ParsedRc): void {
 
 export function setupKeyboard(components: AppComponents): void {
   const { input, commandBar, shortcodePreview, timeline,
-          emojiPicker, gifPicker, stickerPicker, verification, helpDialog, quickReactPicker, profileDialog } = components;
+          emojiPicker, gifPicker, stickerPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker } = components;
 
   registerDefaultBindings();
 
@@ -440,7 +440,8 @@ export function setupKeyboard(components: AppComponents): void {
     // suspenders guard for the case where focus escapes the overlay element.
     if (quickReactPicker.isVisible()) return;
     if (emojiPicker.isVisible() || gifPicker.isVisible() || stickerPicker.isVisible() ||
-        verification.isVisible() || helpDialog.isVisible() || profileDialog.isVisible()) return;
+        verification.isVisible() || helpDialog.isVisible() || profileDialog.isVisible() ||
+        devicePicker.isVisible()) return;
 
     // Escape (or Ctrl+[) always resets to Normal (if not already) and clears sequences
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {

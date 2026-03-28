@@ -1432,9 +1432,7 @@ export function handleIncomingVerificationRequest(
       await acceptVerificationRequest(fromUserId, flowId);
       verification.setState("waiting");
 
-      // Re-wire for the emoji comparison phase. We are the SAS initiator
-      // (we called start_sas), so the other side sends the accept — we must
-      // NOT call acceptSasVerification here.
+      // Re-wire for the emoji comparison phase.
       verification.onConfirm(async () => {
         try {
           await confirmSasVerification(fromUserId, flowId);
@@ -1449,7 +1447,12 @@ export function handleIncomingVerificationRequest(
         verification.setState("cancelled");
       });
 
-      pollSasEmoji(fromUserId, flowId, verification, /* skipAccept */ true);
+      // skipAccept = false: we attempt sas.accept() on each poll tick so that
+      // we handle both sides of a race — if start_sas() returned None (the
+      // other device won the start race), we'll accept their flow instead.
+      // When we ARE the initiator, accept() fails with a wrong-state error
+      // that is silently ignored.
+      pollSasEmoji(fromUserId, flowId, verification, /* skipAccept */ false);
     } catch (err) {
       showError(`Failed to accept verification: ${err instanceof Error ? err.message : String(err)}`);
       verification.setState("failed");
