@@ -663,6 +663,12 @@ quark/
 - [ ] Pinned messages UI
 - [ ] Implement themes (command currently does nothing)
 - [ ] Make space UI bigger
+- [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
+  - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
+  - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
+  - [ ] Outside of text select mode but in normal mode, 'y' should copy the full message
+  - [ ] Outside of text select mode but in normal mode, 'p' should paste into the compose box
+  - [ ] In text select mode in normal mode in the compose box, 'p' should paste into the compose box at the cursor position
 
 #### Hardening
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
