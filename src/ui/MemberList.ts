@@ -69,8 +69,6 @@ export class MemberList {
     this._scrollEl.setAttribute("role", "list");
     this._el.appendChild(this._scrollEl);
 
-    // ── Keyboard handling ────────────────────────────────────────────────
-    this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
   }
 
   getElement(): HTMLElement {
@@ -246,25 +244,6 @@ export class MemberList {
     }
   }
 
-  private _handleKeydown(e: KeyboardEvent): void {
-    const items = Array.from(
-      this._scrollEl.querySelectorAll<HTMLElement>(".member-list__item")
-    );
-    const focused = document.activeElement as HTMLElement;
-    const currentIndex = items.indexOf(focused);
-
-    if (e.key === "j" || e.key === "ArrowDown") {
-      e.preventDefault();
-      items[currentIndex + 1]?.focus();
-    } else if (e.key === "k" || e.key === "ArrowUp") {
-      e.preventDefault();
-      items[currentIndex - 1]?.focus();
-    } else if (e.key === "Enter" && currentIndex >= 0) {
-      e.preventDefault();
-      const member = this._members.find(
-        (m) => m.id === items[currentIndex].dataset.memberId
-      );
-      if (member) this._selectMember(member);
-    }
-  }
+  // Navigation (j/k/arrows) is handled by the global keymap via AppState.navDown/navUp.
+  // Enter activation is handled by individual item listeners.
 }
