@@ -42,6 +42,8 @@ interface PanelNavCallbacks {
   select?: () => void;
   /** Called when focus moves TO this panel. Optional — no-op if absent. */
   focusActive?: () => void;
+  /** Clear selection / cancel reply / close thread for this panel. No-op if absent. */
+  close?: () => void;
 }
 
 // ── AppState class ───────────────────────────────────────────────────────────
@@ -138,6 +140,10 @@ class AppStateManager {
 
   select(): void {
     this._panelNavCallbacks.get(this._state.activePanel)?.select?.();
+  }
+
+  close(): void {
+    this._panelNavCallbacks.get(this._state.activePanel)?.close?.();
   }
 
   moveFocusLeft(): void {

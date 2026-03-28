@@ -1548,6 +1548,10 @@ export function toggleMemberList(): void {
   const next = !current;
   AppState.set("memberListVisible", next);
 
+  if (!next && AppState.get("activePanel") === "members") {
+    AppState.set("activePanel", "timeline");
+  }
+
   mainLayout.classList.toggle("quark-layout--member-list-open", next);
 }
 

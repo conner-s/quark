@@ -653,6 +653,7 @@ quark/
 - [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach shows "not yet implemented" toast
 - [x] Support pasting images into the compose box — clipboard image paste detected in `Input`, converted to base64, uploaded via new `send_pasted_image` IPC (Rust: decode base64 → upload → send as `m.image`)
 - [ ] Polish pass over top bar displaying room info. Take cues from the message UI.
+- [ ] Polish pass over verification UI; currently unstyled at the bottom
 - [ ] Emoji and sticker picker styling. Should show in box above compose area.
 - [ ] Threads animate open a space between message bubbles and display there.
 - [ ] Settings UI
@@ -687,14 +688,15 @@ quark/
 - [x] Noticeable delay when switching rooms — timeline rendered immediately from getTimeline, members fetched concurrently and UI updated when ready
 - [ ] Loading new messages scrolls to a random position
 - [ ] App does not use my KDE window bar, seems to have custom?
-- [ ] h/l don't navigate left and right.
-- [ ] Focus sometimes gets stuck/can't move to timeline
+- [x] h/l don't navigate left and right.
+- [x] Focus sometimes gets stuck/can't move to timeline
 - [ ] React picker goes off screen if message is close to the bottom
-- [ ] o should open select rooms/spaces
+- [x] o should open select rooms/spaces
 - [ ] Selecting a space should move to the rooms list
 - [ ] Message recency sorting doesn't seem to be working for DMs
 - [ ] Viewing a room doesn't dismiss the unread count
 - [ ] Custom emotes still don't show up in the react or message emoji picker or in shortcode
 - [ ] Sticker previews don't render in sticker picker
 - [ ] Animated avatars don't work
+- [ ] There's currently no way to log out
 

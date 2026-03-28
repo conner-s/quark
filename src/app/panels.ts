@@ -2,6 +2,7 @@
 // Kept separate from keyboard.ts (keyboard concerns) and state.ts (no UI deps).
 
 import { AppState } from "./state.js";
+import { cancelReply } from "./actions.js";
 import type { AppComponents } from "../ui/App.js";
 
 export function setupPanelNav(components: AppComponents): void {
@@ -14,6 +15,7 @@ export function setupPanelNav(components: AppComponents): void {
     jumpBottom: () => spaceStrip.navLast(),
     select: () => spaceStrip.selectFocused(),
     focusActive: () => spaceStrip.focusActive(),
+    close: () => { /* no-op */ },
   });
 
   AppState.registerPanelNav("roomlist", {
@@ -23,6 +25,7 @@ export function setupPanelNav(components: AppComponents): void {
     jumpBottom: () => roomList.navLast(),
     select: () => roomList.selectFocused(),
     focusActive: () => roomList.focusActive(),
+    close: () => { /* no-op */ },
   });
 
   AppState.registerPanelNav("timeline", {
@@ -30,6 +33,11 @@ export function setupPanelNav(components: AppComponents): void {
     navUp: () => timeline.selectPrev(),
     jumpTop: () => timeline.selectFirst(),
     jumpBottom: () => timeline.selectLast(),
+    close: () => {
+      timeline.clearSelection();
+      cancelReply();
+      AppState.set("threadRootEventId", null);
+    },
   });
 
   AppState.registerPanelNav("members", {
@@ -38,5 +46,6 @@ export function setupPanelNav(components: AppComponents): void {
     jumpTop: () => memberList.navFirst(),
     jumpBottom: () => memberList.navLast(),
     focusActive: () => memberList.focusFirst(),
+    close: () => { /* no-op */ },
   });
 }

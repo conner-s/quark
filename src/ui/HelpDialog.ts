@@ -1,5 +1,7 @@
 // Help dialog — :commands and vim keybindings reference
 
+import { keymapManager } from "../vim/keybindings.js";
+
 interface CommandEntry {
   name: string;
   args: string;
@@ -135,6 +137,10 @@ export class HelpDialog {
     return this._el;
   }
 
+  isVisible(): boolean {
+    return this._el.style.display !== "none";
+  }
+
   show(): void {
     this._el.style.display = "flex";
     this._switchSection("bindings");
@@ -142,6 +148,7 @@ export class HelpDialog {
 
   hide(): void {
     this._el.style.display = "none";
+    keymapManager.resetSequence();
   }
 
   // ── Private ─────────────────────────────────────────────────────────────
@@ -284,38 +291,40 @@ export class HelpDialog {
     // Stop all keys from reaching the global handler while dialog is open
     e.stopPropagation();
 
-    switch (e.key) {
-      case "Escape":
-        e.preventDefault();
-        this.hide();
-        return;
+    // Tab is overlay-specific (switch sections) — not remappable
+    if (e.key === "Tab") {
+      e.preventDefault();
+      this._switchSection(this._activeSection === "bindings" ? "commands" : "bindings");
+      return;
+    }
 
-      case "Tab":
-        e.preventDefault();
-        this._switchSection(this._activeSection === "bindings" ? "commands" : "bindings");
-        return;
+    const result = keymapManager.resolveKey(e.key, "picker");
 
-      case "j":
-      case "ArrowDown":
-        e.preventDefault();
-        this._moveFocus(1);
-        return;
-
-      case "k":
-      case "ArrowUp":
-        e.preventDefault();
-        this._moveFocus(-1);
-        return;
-
-      case "g":
-        e.preventDefault();
-        this._moveFocus(-this._rows.length);
-        return;
-
-      case "G":
-        e.preventDefault();
-        this._moveFocus(this._rows.length);
-        return;
+    if (result.kind === "action") {
+      switch (result.action) {
+        case "close":
+          e.preventDefault();
+          this.hide();
+          break;
+        case "nav-down":
+          e.preventDefault();
+          this._moveFocus(1);
+          break;
+        case "nav-up":
+          e.preventDefault();
+          this._moveFocus(-1);
+          break;
+        case "jump-top":
+          e.preventDefault();
+          this._moveFocus(-this._rows.length);
+          break;
+        case "jump-bottom":
+          e.preventDefault();
+          this._moveFocus(this._rows.length);
+          break;
+      }
+    } else if (result.kind === "partial") {
+      e.preventDefault();
     }
   }
 }

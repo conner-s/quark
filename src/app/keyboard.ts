@@ -7,7 +7,6 @@ import {
   sendMessage,
   sendReaction,
   cancelReply,
-  closeThread,
   openEmojiPicker,
   openGifPicker,
   openProfileDialog,
@@ -58,6 +57,9 @@ function registerDefaultBindings(): void {
   // select — activates the focused item in panels that support it (roomlist, spaces)
   keymapManager.nmap("Enter", "select");
   keymapManager.nmap("o", "select");
+
+  // close — clears selection / reply / thread for the active panel
+  keymapManager.nmap("Escape", "close");
 }
 
 // ── Action dispatcher ─────────────────────────────────────────────────────────
@@ -153,6 +155,10 @@ function dispatchAction(action: string, components: AppComponents): void {
 
     case "open-profile":
       void openProfileDialog();
+      break;
+
+    case "close":
+      AppState.close();
       break;
 
     default:
@@ -433,22 +439,15 @@ export function setupKeyboard(components: AppComponents): void {
     // their own keys with stopPropagation. The check here is a belt-and-
     // suspenders guard for the case where focus escapes the overlay element.
     if (quickReactPicker.isVisible()) return;
+    if (emojiPicker.isVisible() || gifPicker.isVisible() || stickerPicker.isVisible() ||
+        verification.isVisible() || helpDialog.isVisible() || profileDialog.isVisible()) return;
 
     // Escape (or Ctrl+[) always resets to Normal (if not already) and clears sequences
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
       modeManager.transition(Mode.Normal);
       keymapManager.resetSequence();
       commandBar.hide();
-      emojiPicker.hide();
-      gifPicker.hide();
-      stickerPicker.hide();
-      verification.hide();
-      helpDialog.hide();
-      quickReactPicker.hide();
-      profileDialog.hide();
-      timeline.clearSelection();
-      cancelReply();
-      closeThread();
+      AppState.close();
       return;
     }
 
