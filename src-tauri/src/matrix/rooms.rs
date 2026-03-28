@@ -44,6 +44,20 @@ pub async fn get_rooms(client: &Client) -> Result<Vec<RoomInfo>, String> {
         let notification_count = unread.notification_count;
         let unread_count = unread.highlight_count;
 
+        // Fetch the timestamp of the most recent event from the local store.
+        // MessagesOptions::backward() with limit 1 reads from the sqlite cache
+        // without a network round-trip when events are already present.
+        let last_activity_ts = {
+            let mut opts = matrix_sdk::room::MessagesOptions::backward();
+            opts.limit = matrix_sdk::ruma::UInt::from(1u32);
+            room.messages(opts)
+                .await
+                .ok()
+                .and_then(|page| page.chunk.into_iter().next())
+                .and_then(|ev| ev.raw().deserialize().ok())
+                .map(|deserialized| deserialized.origin_server_ts().get().into())
+        };
+
         result.push(RoomInfo {
             room_id: room.room_id().to_string(),
             name,
@@ -54,6 +68,7 @@ pub async fn get_rooms(client: &Client) -> Result<Vec<RoomInfo>, String> {
             is_direct,
             is_encrypted,
             member_count,
+            last_activity_ts,
         });
     }
 
@@ -138,7 +153,7 @@ pub async fn get_room_members(client: &Client, room_id: &str) -> Result<Vec<Room
 
 /// Mark a room as fully read by sending a read receipt for the latest event.
 pub async fn mark_room_read(client: &Client, room_id: &str) -> Result<(), String> {
-    use matrix_sdk::ruma::events::receipt::ReceiptType;
+    use matrix_sdk::ruma::api::client::receipt::create_receipt::v3::ReceiptType;
 
     let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
     let room = client
@@ -153,7 +168,7 @@ pub async fn mark_room_read(client: &Client, room_id: &str) -> Result<(), String
         .map_err(|e| format!("Failed to fetch messages for read receipt: {e}"))?;
 
     if let Some(event) = messages.chunk.first() {
-        let event_id = event.event_id().ok_or("Latest event has no ID")?;
+        let event_id = event.kind.event_id().ok_or("Latest event has no ID")?;
         room.send_single_receipt(ReceiptType::Read, ReceiptThread::Unthreaded, event_id.to_owned())
             .await
             .map_err(|e| format!("Failed to send read receipt: {e}"))?;
@@ -260,6 +275,7 @@ mod tests {
             is_direct,
             is_encrypted,
             member_count: 2,
+            last_activity_ts: None,
         }
     }
 
@@ -277,6 +293,7 @@ mod tests {
             is_direct: false,
             is_encrypted: true,
             member_count: 42,
+            last_activity_ts: Some(1_700_000_000_000),
         };
         let json = serde_json::to_string(&info).expect("serialize");
         let back: RoomInfo = serde_json::from_str(&json).expect("deserialize");
@@ -288,6 +305,7 @@ mod tests {
         assert!(back.is_encrypted);
         assert!(!back.is_direct);
         assert_eq!(back.member_count, 42);
+        assert_eq!(back.last_activity_ts, Some(1_700_000_000_000));
     }
 
     #[test]
@@ -330,6 +348,7 @@ mod tests {
         assert!(val.get("is_direct").is_some());
         assert!(val.get("is_encrypted").is_some());
         assert!(val.get("member_count").is_some());
+        assert!(val.get("last_activity_ts").is_some());
     }
 
     // --- CreateRoomOptions serialization ---

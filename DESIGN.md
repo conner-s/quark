@@ -641,7 +641,7 @@ quark/
 - [x] **Reactions UI** — `e` key opens a floating `QuickReactPicker` for the selected message; reaction chips are click-to-toggle; both dispatch to `sendReaction`
 - [x] **Member list sidebar** — toggled with `m`; renders as a fixed right-side column (Discord-style) with presence indicators and power-level badges; populated on room select
 - [x] Handle spaces — `get_user_spaces` IPC command populates SpaceStrip with joined spaces; spaces refresh in parallel with room list load
-- [x] Sort DMs by recent — DM list sorted by notification_count × 2 + unread_count descending, then alphabetically
+- [x] Sort DMs by recent — DM list sorted by `last_activity_ts` descending (timestamp of latest event fetched from local sqlite cache), fallback to notification_count × 2 + unread_count, then alphabetically
 - [x] Sort rooms in spaces by space-defined order — `selectSpace()` preserves backend-sorted order from `getSpaceChildren()` (backend sorts by `m.space.child` `order` field, fallback alphabetical)
 - [x] Don't show rooms that are in spaces in the DM view — home view (`__home__`) filters out rooms that belong to any space; `spaceRoomIds` set built at startup by fetching each space's children
 - [x] Add profile dialogue and keybind — `ProfileDialog` overlay shows display name, user ID, and avatar; opened with `P` in normal mode or `:profile` command; `get_own_profile` IPC backed by matrix-sdk `account()` API
@@ -699,7 +699,7 @@ quark/
 - [ ] React picker goes off screen if message is close to the bottom
 - [x] o should open select rooms/spaces
 - [ ] Selecting a space should move to the rooms list
-- [ ] Message recency sorting doesn't seem to be working for DMs
+- [x] Message recency sorting doesn't seem to be working for DMs
 - [ ] Viewing a room doesn't dismiss the unread count
 - [ ] Custom emotes still don't show up in the react or message emoji picker or in shortcode
 - [ ] Sticker previews don't render in sticker picker

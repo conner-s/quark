@@ -30,6 +30,8 @@ export interface RoomInfo {
   is_direct: boolean;
   is_encrypted: boolean;
   member_count: number;
+  /** Timestamp (ms since Unix epoch) of the most recent event. Used for recency sorting. */
+  last_activity_ts?: number | null;
 }
 
 /** Options for creating a room — matches matrix::rooms::CreateRoomOptions */

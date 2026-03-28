@@ -410,10 +410,15 @@ export async function selectSpace(spaceId: string): Promise<void> {
     const dms = allRooms
       .filter((r) => r.is_direct)
       .sort((a, b) => {
-        // Sort by activity: notification count first, then unread, then alphabetical
+        // Primary: most recent activity first (last_activity_ts descending)
+        const aTs = a.last_activity_ts ?? 0;
+        const bTs = b.last_activity_ts ?? 0;
+        if (bTs !== aTs) return bTs - aTs;
+        // Fallback: unread/notification score descending
         const aScore = a.notification_count * 2 + a.unread_count;
         const bScore = b.notification_count * 2 + b.unread_count;
         if (bScore !== aScore) return bScore - aScore;
+        // Final tiebreak: alphabetical
         return (a.name ?? "").localeCompare(b.name ?? "");
       })
       .map(roomInfoToEntry);
