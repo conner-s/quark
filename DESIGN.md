@@ -692,17 +692,17 @@ quark/
 - [x] ctrl + [ does not work as escape in all places (i.e. react emoji picker) — QuickReactPicker now handles Ctrl+[ in both input and grid handlers
 - [ ] React picker and emoji picker are separate entities; probably best to combine for consistency and maintainability
 - [x] Noticeable delay when switching rooms — timeline rendered immediately from getTimeline, members fetched concurrently and UI updated when ready
-- [ ] Loading new messages scrolls to a random position
+- [x] Loading new messages scrolls to a random position — preserveScroll option in setMessages(); secondary member-data re-render no longer jumps to bottom
 - [ ] App does not use my KDE window bar, seems to have custom?
 - [x] h/l don't navigate left and right.
 - [x] Focus sometimes gets stuck/can't move to timeline
-- [ ] React picker goes off screen if message is close to the bottom
+- [x] React picker goes off screen if message is close to the bottom — picker flips upward via rAF bounding rect check when near viewport bottom
 - [x] o should open select rooms/spaces
-- [ ] Selecting a space should move to the rooms list
-- [x] Message recency sorting doesn't seem to be working for DMs
-- [ ] Viewing a room doesn't dismiss the unread count
+- [x] Selecting a space should move to the rooms list — focusPanel("roomlist") called from all selectSpace() branches
+- [x] Message recency sorting doesn't seem to be working for DMs — last_activity_ts from Rust timeline cache used as primary sort key
+- [x] Viewing a room doesn't dismiss the unread count — mark_room_read Tauri command sends read receipt; local cache zeroed optimistically
 - [ ] Custom emotes still don't show up in the react or message emoji picker or in shortcode
 - [ ] Sticker previews don't render in sticker picker
-- [ ] Animated avatars don't work
-- [ ] There's currently no way to log out
+- [x] Animated avatars don't work — use downloadMedia instead of getThumbnail for avatars; Rust sniffs MIME from magic bytes
+- [x] There's currently no way to log out — :logout command revokes session, clears storage, reloads to login screen
 
