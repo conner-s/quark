@@ -198,7 +198,11 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     "quark://sync/connected",
     (connected) => {
       statusBar.setConnected(connected);
-      if (!connected) {
+      if (connected) {
+        // Refresh rooms after the first sync completes — on first login the
+        // initial refreshRooms() fires before sync has populated joined_rooms().
+        void refreshRooms();
+      } else {
         showToast("Connection lost — reconnecting…", "error", 5000);
       }
     }
