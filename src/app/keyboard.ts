@@ -320,31 +320,10 @@ function applyRcDirectives(rc: ParsedRc): void {
 // ── Global keydown handler ────────────────────────────────────────────────────
 
 export function setupKeyboard(components: AppComponents): void {
-  const { input, commandBar, shortcodePreview, timeline, roomList,
+  const { input, commandBar, shortcodePreview, timeline,
           emojiPicker, gifPicker, stickerPicker, verification, helpDialog, quickReactPicker, profileDialog } = components;
 
   registerDefaultBindings();
-
-  // ── Panel nav registry ────────────────────────────────────────────────────
-  AppState.registerPanelNav("spaces", {
-    navDown: () => components.spaceStrip.navDown(),
-    navUp: () => components.spaceStrip.navUp(),
-    focusActive: () => components.spaceStrip.focusActive(),
-  });
-  AppState.registerPanelNav("roomlist", {
-    navDown: () => roomList.navDown(),
-    navUp: () => roomList.navUp(),
-    focusActive: () => roomList.focusActive(),
-  });
-  AppState.registerPanelNav("timeline", {
-    navDown: () => timeline.selectNext(),
-    navUp: () => timeline.selectPrev(),
-  });
-  AppState.registerPanelNav("members", {
-    navDown: () => components.memberList.navDown(),
-    navUp: () => components.memberList.navUp(),
-    focusActive: () => components.memberList.focusFirst(),
-  });
 
   // ── User keybindings ──────────────────────────────────────────────────────
   void loadQuarkrc().then(applyRcDirectives).catch(() => { /* no rc file is fine */ });
