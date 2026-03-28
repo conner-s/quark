@@ -475,8 +475,8 @@ body {
 
 .message-group__avatar,
 .message-group__avatar-fallback {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border-radius: 3px;
   flex-shrink: 0;
   /* Offset down to align with the box's top border, accounting for the

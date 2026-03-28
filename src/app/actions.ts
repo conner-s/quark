@@ -99,6 +99,9 @@ export function resolveDisplayName(userId: string): string {
   return _memberDisplayName.get(userId) ?? userId;
 }
 
+// ── Constants ────────────────────────────────────────────────────────────────
+const THUMBNAIL_SIZE = 64;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Convert IPC RoomInfo → RoomList RoomEntry */
@@ -975,7 +978,7 @@ export function openEmojiPicker(): void {
         customEntries.map(async (entry, i) => {
           if (entry.imageUrl?.startsWith("mxc://")) {
             try {
-              const dl = await getThumbnail(entry.imageUrl, 32, 32);
+              const dl = await getThumbnail(entry.imageUrl, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
               customEntries[i] = { ...entry, imageUrl: `data:${dl.mime_type};base64,${dl.data_base64}` };
             } catch { /* non-critical — keep mxc:// as fallback */ }
           }
@@ -1644,7 +1647,7 @@ async function _downloadReactionEmoji(
   }
 
   for (const mxc of mxcKeys) {
-    getThumbnail(mxc, 32, 32)
+    getThumbnail(mxc, THUMBNAIL_SIZE, THUMBNAIL_SIZE)
       .then((dl) => {
         const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
         _emojiImageCache.set(mxc, dataUrl);
@@ -1694,7 +1697,7 @@ function _downloadInlineEmoji(timeline: import("../ui/Timeline.js").Timeline): v
       timeline.resolveInlineEmoji(mxc, _emojiImageCache.get(mxc)!);
       continue;
     }
-    getThumbnail(mxc, 32, 32)
+    getThumbnail(mxc, THUMBNAIL_SIZE, THUMBNAIL_SIZE)
       .then((dl) => {
         const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
         _emojiImageCache.set(mxc, dataUrl);

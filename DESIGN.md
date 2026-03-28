@@ -663,6 +663,7 @@ quark/
 - [ ] Pinned messages UI
 - [ ] Implement themes (command currently does nothing)
 - [ ] Make space UI bigger
+- [ ] Profile images should snap to the top of the visible area if the message's position would place it out of view
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
@@ -707,5 +708,6 @@ quark/
 - [x] There's currently no way to log out — :logout command revokes session, clears storage, reloads to login screen
 - [x] Timeline disappears briefly when loading new messages, reappears if scroll again.
 - [x] Home view should be sorted by recent
+- [ ] Escape/ctrl + [ don't close profile popup
 
 
