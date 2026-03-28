@@ -20,8 +20,6 @@ export class SpaceStrip {
     this._el.setAttribute("role", "listbox");
     this._el.setAttribute("aria-label", "Spaces");
 
-    // Keyboard navigation
-    this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
   }
 
   getElement(): HTMLElement {
@@ -173,25 +171,6 @@ export class SpaceStrip {
     }
   }
 
-  private _handleKeydown(e: KeyboardEvent): void {
-    const items = Array.from(
-      this._el.querySelectorAll<HTMLElement>(".space-strip__item")
-    );
-    const focused = document.activeElement as HTMLElement;
-    const currentIndex = items.indexOf(focused);
-
-    if (e.key === "j" || e.key === "ArrowDown") {
-      e.preventDefault();
-      e.stopPropagation();
-      const next = items[currentIndex + 1];
-      next?.focus();
-    } else if (e.key === "k" || e.key === "ArrowUp") {
-      e.preventDefault();
-      e.stopPropagation();
-      const prev = items[currentIndex - 1];
-      prev?.focus();
-    } else if (e.key === "Enter" || e.key === " ") {
-      // Handled by individual item click listeners
-    }
-  }
+  // Navigation (j/k/arrows) is handled by the global keymap via AppState.navDown/navUp.
+  // Enter/Space activation is handled by individual item listeners in _createItem.
 }

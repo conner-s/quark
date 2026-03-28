@@ -43,6 +43,8 @@ function registerDefaultBindings(): void {
   keymapManager.nmap("l", "nav-right");
   keymapManager.nmap("ArrowLeft", "nav-left");
   keymapManager.nmap("ArrowRight", "nav-right");
+  keymapManager.nmap("ArrowUp", "nav-up");
+  keymapManager.nmap("ArrowDown", "nav-down");
   keymapManager.nmap("gg", "jump-top");
   keymapManager.nmap("G", "jump-bottom");
   keymapManager.nmap("r", "reply");
@@ -55,6 +57,7 @@ function registerDefaultBindings(): void {
 
   // Room list context — rmap (Enter is the only binding that differs from global)
   keymapManager.rmap("Enter", "select-room");
+  keymapManager.rmap("o", "select-room");
 }
 
 // ── Action dispatcher ─────────────────────────────────────────────────────────
