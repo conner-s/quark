@@ -322,6 +322,8 @@ export class Timeline {
   /** The last element appended via appendMessageHidden, pending reveal */
   private _lastHiddenEl: HTMLElement | null = null;
   private _onScrollTopCallback: (() => void) | null = null;
+  /** Fired when the user clicks inside the timeline area (used to update activePanel). */
+  private _onFocusCallback: (() => void) | null = null;
   private _scrollTopFired = false;
   /** Handle for the cleanup timeout of the scroll animation, so we can cancel it */
   private _scrollAnimCleanupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -360,6 +362,13 @@ export class Timeline {
       const { eventId } = (e as CustomEvent<{ eventId: string }>).detail;
       this.scrollToMessage(eventId);
     });
+
+    // Clicking inside the timeline notifies panels.ts so that activePanel is
+    // updated to "timeline". This ensures keyboard navigation (j/k) works
+    // immediately after a mouse click without needing to press l first.
+    this._el.addEventListener("click", () => {
+      this._onFocusCallback?.();
+    });
   }
 
   getElement(): HTMLElement {
@@ -369,6 +378,14 @@ export class Timeline {
   /** Register a callback fired when the user scrolls near the top (once per approach). */
   onScrollToTop(cb: () => void): void {
     this._onScrollTopCallback = cb;
+  }
+
+  /**
+   * Register a callback fired when the user clicks inside the timeline.
+   * Use this to update activePanel so keyboard nav immediately works.
+   */
+  onFocus(cb: () => void): void {
+    this._onFocusCallback = cb;
   }
 
   /** Show a "Loading…" indicator above the message list. */
@@ -422,6 +439,12 @@ export class Timeline {
       this._listEl.style.transition = "";
       this._listEl.style.transform = "";
     }
+
+    // Reset selection so _selectedIndex can't be out-of-range for the new message list.
+    // Without this, navigating after a room switch can get stuck because _selectedIndex
+    // still holds an index from the previous room's (longer) message list, making
+    // selectNext/selectPrev think the selection is already at the boundary.
+    this._selectedIndex = -1;
 
     const preserveScroll = opts?.preserveScroll ?? false;
     // Capture scroll state before re-render so we can restore it
@@ -509,7 +532,7 @@ export class Timeline {
   /** Move selection down by one message. Enters selection at the bottom if nothing selected. */
   selectNext(): void {
     if (this._messages.length === 0) return;
-    if (this._selectedIndex < 0) {
+    if (this._selectedIndex < 0 || this._selectedIndex >= this._messages.length) {
       this._setSelected(this._messages.length - 1);
     } else if (this._selectedIndex < this._messages.length - 1) {
       this._setSelected(this._selectedIndex + 1);
@@ -519,7 +542,7 @@ export class Timeline {
   /** Move selection up by one message. Enters selection at the bottom if nothing selected. */
   selectPrev(): void {
     if (this._messages.length === 0) return;
-    if (this._selectedIndex < 0) {
+    if (this._selectedIndex < 0 || this._selectedIndex >= this._messages.length) {
       this._setSelected(this._messages.length - 1);
     } else if (this._selectedIndex > 0) {
       this._setSelected(this._selectedIndex - 1);
@@ -777,9 +800,35 @@ export class Timeline {
         el.classList.add("message--selected");
         const group = el.closest<HTMLElement>(".message-group");
         if (group) group.classList.add("message-group--selected");
-        el.scrollIntoView({ block: "nearest" });
+        this._scrollIntoViewWithScrolloff(el);
       }
     }
+  }
+
+  /**
+   * Scroll the selected message element into view with a "scrolloff" margin,
+   * similar to vim's scrolloff option. Ensures the target element has at least
+   * SCROLLOFF_PX of padding on the near edge within the scrollable container,
+   * so the selected message is never flush against the viewport edge.
+   * If the element is already fully within the scrolloff zone, no scroll occurs.
+   */
+  private _scrollIntoViewWithScrolloff(el: HTMLElement): void {
+    const SCROLLOFF_PX = 80; // ~2-3 message rows of padding
+    const containerRect = this._el.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+
+    const topEdge = elRect.top - containerRect.top;
+    const bottomEdge = elRect.bottom - containerRect.top;
+    const containerHeight = containerRect.height;
+
+    if (topEdge < SCROLLOFF_PX) {
+      // Element is too close to (or above) the top — scroll up
+      this._el.scrollTop -= SCROLLOFF_PX - topEdge;
+    } else if (bottomEdge > containerHeight - SCROLLOFF_PX) {
+      // Element is too close to (or below) the bottom — scroll down
+      this._el.scrollTop += bottomEdge - (containerHeight - SCROLLOFF_PX);
+    }
+    // If already within the scrolloff zone, no adjustment needed
   }
 
   /** Find the DOM element for a message by its index in _messages. */

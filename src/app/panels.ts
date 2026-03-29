@@ -33,11 +33,20 @@ export function setupPanelNav(components: AppComponents): void {
     navUp: () => timeline.selectPrev(),
     jumpTop: () => timeline.selectFirst(),
     jumpBottom: () => timeline.selectLast(),
+    // focusActive: no DOM focus needed — activePanel state alone drives keyboard routing
     close: () => {
       timeline.clearSelection();
       cancelReply();
       AppState.set("threadRootEventId", null);
     },
+  });
+
+  // Clicking in the timeline should immediately route j/k there, even if the
+  // user hasn't explicitly pressed l to move focus from the room list.
+  timeline.onFocus(() => {
+    if (AppState.get("activePanel") !== "timeline") {
+      AppState.set("activePanel", "timeline");
+    }
   });
 
   AppState.registerPanelNav("members", {
