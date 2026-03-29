@@ -683,7 +683,7 @@ quark/
 - [ ] Use blobs rather than data URLs so the browser can cache (I think this makes sense? Tell me if it doesn't.)
 
 #### Bugs
-- [ ] rooms don't always load. (scroll getting stuck fixed — cancelled scroll animation on room switch)
+- [x] rooms don't always load. (scroll getting stuck fixed — cancelled scroll animation on room switch)
 - [x] Some images aren't showing up — removed lazy loading (prevented load in overflow containers); isOwn now set on loaded timeline events
 - [x] Space icons don't show up — mxc:// URLs now downloaded and resolved in background
 - [x] Timeline should always start scrolled to the bottom — scroll on render + rAF + 150ms delayed pass
@@ -700,7 +700,7 @@ quark/
 - [ ] React picker and emoji picker are separate entities; probably best to combine for consistency and maintainability
 - [x] Noticeable delay when switching rooms — timeline rendered immediately from getTimeline, members fetched concurrently and UI updated when ready
 - [x] Loading new messages scrolls to a random position — preserveScroll option in setMessages(); secondary member-data re-render no longer jumps to bottom
-- [ ] App does not use my KDE window bar, seems to have custom?
+- [x] App does not use my KDE window bar, seems to have custom?
 - [x] h/l don't navigate left and right.
 - [x] Focus sometimes gets stuck/can't move to timeline
 - [x] React picker goes off screen if message is close to the bottom — picker flips upward via rAF bounding rect check when near viewport bottom
@@ -714,10 +714,10 @@ quark/
 - [x] There's currently no way to log out — :logout command revokes session, clears storage, reloads to login screen
 - [x] Timeline disappears briefly when loading new messages, reappears if scroll again.
 - [x] Home view should be sorted by recent
-- [ ] Escape/ctrl + [ don't close profile popup
+- [x] Escape/ctrl + [ don't close profile popup — added tabindex="-1" to dialog element, call focus() on show(), and handle Ctrl+[ in keydown handler
 - [ ] Clicking a message should also update the keyboard's selected message
 - [ ] pressing P while in member list opens the profile of the currently selected message's sender rather than the selected user in the member list
-- [ ] Keyboard nav doesn't quite scroll far enough when moving to an off-screen message
-- [ ] Sometimes unable to navigate timeline
+- [x] Keyboard nav doesn't quite scroll far enough when moving to an off-screen message — replaced scrollIntoView({block:"nearest"}) with a custom _scrollIntoViewWithScrolloff() that keeps 80px margin on both edges (vim-style scrolloff)
+- [x] Sometimes unable to navigate timeline — fixed two root causes: (1) _selectedIndex not reset on room switch left it out-of-range, making selectNext/selectPrev think the boundary was reached; (2) clicking the timeline now fires an onFocus callback that updates activePanel to "timeline" so j/k immediately routes there
 
 
