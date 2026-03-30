@@ -666,10 +666,10 @@ quark/
 - [ ] Make space UI bigger
 - [ ] Show avatars in member list
 - [ ] Profile images should snap to the top of the visible area if the message's position would place it out of view
-- [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
 - [ ] Pause gif animation while not focused
 - [ ] Detect links
 - [ ] Add more info to profile screen
+- [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
   - [ ] Outside of text select mode but in normal mode, 'y' should copy the full message
