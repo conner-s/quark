@@ -667,7 +667,7 @@ quark/
 - [ ] Show avatars in member list
 - [ ] Profile images should snap to the top of the visible area if the message's position would place it out of view
 - [ ] Pause gif animation while not focused
-- [ ] Detect links
+- [x] Detect links
 - [ ] Add more info to profile screen
 - [ ] Split up messages more than 30 minutes apart
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.

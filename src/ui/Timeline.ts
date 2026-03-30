@@ -1,6 +1,46 @@
 // Message timeline
 
 import { createReactionBar, updateReactionBar, type ReactionGroup } from "./Reactions.js";
+import { invoke } from "../ipc/invoke.js";
+
+// ── URL linkification ─────────────────────────────────────────────────────────
+
+const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/g;
+
+/**
+ * Render plain text with http/https URLs as clickable anchor elements.
+ * Splits the text on URL boundaries and appends text nodes + <a> tags.
+ */
+function appendLinkifiedText(container: HTMLElement, text: string): void {
+  let last = 0;
+  let match: RegExpExecArray | null;
+  URL_REGEX.lastIndex = 0;
+  while ((match = URL_REGEX.exec(text)) !== null) {
+    if (match.index > last) {
+      container.appendChild(document.createTextNode(text.slice(last, match.index)));
+    }
+    const url = match[0].replace(/[.,;:!?]+$/, ""); // strip trailing punctuation
+    const a = document.createElement("a");
+    a.href = "#";
+    a.textContent = url;
+    a.className = "message__link";
+    a.title = url;
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      // Only open safe http/https URLs (already guaranteed by regex, but double-check)
+      if (url.startsWith("http://") || url.startsWith("https://")) {
+        void invoke("plugin:shell|open", { path: url }).catch(() => {
+          window.open(url, "_blank", "noopener,noreferrer");
+        });
+      }
+    });
+    container.appendChild(a);
+    last = match.index + url.length;
+  }
+  if (last < text.length) {
+    container.appendChild(document.createTextNode(text.slice(last)));
+  }
+}
 
 // ── Avatar generation ─────────────────────────────────────────────────────────
 
@@ -202,7 +242,7 @@ function buildMessageElement(msg: MessageData): HTMLElement {
         }
       }
     } else {
-      body.textContent = msg.body;
+      appendLinkifiedText(body, msg.body);
     }
 
     row.appendChild(body);

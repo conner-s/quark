@@ -2315,3 +2315,16 @@ a:hover {
   white-space: nowrap;
   border-width: 0;
 }
+
+/* ── Message links ───────────────────────────────────────────────────────── */
+
+.message__link {
+  color: var(--accent-link, var(--accent-secondary, #00aaff));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.message__link:hover {
+  opacity: 0.8;
+}
