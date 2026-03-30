@@ -721,14 +721,14 @@ quark/
 - [x] pressing P while in member list opens the profile of the currently selected message's sender rather than the selected user in the member list — openProfileDialog() checks activePanel==="members" first and uses memberList.getFocusedMember()
 - [x] Keyboard nav doesn't quite scroll far enough when moving to an off-screen message — replaced scrollIntoView({block:"nearest"}) with a custom _scrollIntoViewWithScrolloff() that keeps 80px margin on both edges (vim-style scrolloff)
 - [x] Sometimes unable to navigate timeline — fixed two root causes: (1) _selectedIndex not reset on room switch left it out-of-range, making selectNext/selectPrev think the boundary was reached; (2) clicking the timeline now fires an onFocus callback that updates activePanel to "timeline" so j/k immediately routes there
-- [ ] timeline navigation broken after loading more messages
+- [x] timeline navigation broken after loading more messages — _scrollTopFired was not reset in prependMessages, blocking keyboard nav from triggering further page loads; reset to false after scroll restoration (_paginationLoading guard prevents immediate double-fire)
 - [x] Still can't see custom emotes, only getting stickers
 - [ ] Emoji and sticker pickers are separate dom elements; just recreate the content box, don't recreate the whole popup
-- [ ] Emoji and sticker pickers initially appear in the wrong position
+- [x] Emoji and sticker pickers initially appear in the wrong position — both used profile-dialog-in animation (centering transform) instead of a simple picker-in fade/slide; added @keyframes picker-in
 - [ ] Custom emoji tabs pop in after emoji picker load; should probably cache these? May need a way to invalidate the cache if stickers/emoji are added...
 - [ ] Show emoji categories in react picker
-- [ ] When sending a message, break into new bubble on the same condition as loading existing messages.
-- [ ] Redacted messages don't disappear until reloading the chat
-- [ ] Selecting a room in some spaces returns the room list to the home view
+- [x] When sending a message, break into new bubble on the same condition as loading existing messages — appendMessage/appendMessageHidden now check 30-minute time gap before merging into existing group, inserting a time separator when needed
+- [x] Redacted messages don't disappear until reloading the chat — redactMessage now calls timeline.removeMessage() after successful IPC; removes from DOM and _messages array, collapses single-message groups
+- [x] Selecting a room in some spaces returns the room list to the home view — selectRoom was calling roomList.setRooms() with all cached rooms when clearing unread badge; now uses updateRoomBadge() to update only the specific room item in place
 
 

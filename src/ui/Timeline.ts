@@ -536,6 +536,13 @@ export class Timeline {
 
     // Restore position so the previously-visible messages stay in view
     this._el.scrollTop = oldScrollTop + (this._el.scrollHeight - oldScrollHeight);
+
+    // Reset _scrollTopFired so future keyboard navigation or scrolling can
+    // trigger another page load. The _paginationLoading guard in loadMoreMessages
+    // prevents a double-fire during the current load (which is still in progress
+    // when prependMessages runs). Without this reset, _scrollTopFired can stay
+    // true after restoration and block subsequent loads via keyboard nav.
+    this._scrollTopFired = false;
   }
 
   /** Replace the entire message list.
@@ -593,26 +600,39 @@ export class Timeline {
     this._messages.push(msg);
     const animate = opts?.animate ?? false;
 
-    // Check if this message can be merged into the last group on screen
-    const lastWrapper = this._listEl.lastElementChild;
-    if (
-      lastWrapper &&
-      lastWrapper.classList.contains("message-group-wrapper") &&
-      isGroupable(msg)
-    ) {
-      // Check sender of the existing group (compare by Matrix user ID, not display name)
-      const wrapperSenderId = (lastWrapper as HTMLElement).dataset.sender;
-      if (wrapperSenderId === (msg.senderId ?? msg.senderName) && !msg.replyTo) {
-        // Append into existing group (replies always start a new group)
-        const innerGroup = lastWrapper.querySelector<HTMLElement>(".message-group");
-        if (!innerGroup) return;
-        const el = buildMessageElement(msg);
-        const msgHeader = el.querySelector(".message__header");
-        if (msgHeader) (msgHeader as HTMLElement).style.display = "none";
-        if (animate) el.classList.add("message--entering");
-        innerGroup.appendChild(el);
-        if (!this._scrolledUp) this._scrollToBottom();
-        return;
+    // Check 30-minute time gap from the previous message
+    const prevMsg = this._messages[this._messages.length - 2];
+    const prevTs = prevMsg?.timestamp ? new Date(prevMsg.timestamp).getTime() : 0;
+    const newTs = msg.timestamp ? new Date(msg.timestamp).getTime() : 0;
+    const bigGap = prevTs > 0 && newTs - prevTs > TIME_SEPARATOR_GAP_MS;
+
+    if (bigGap) {
+      this._listEl.appendChild(buildTimeSeparator(msg.timestamp));
+    }
+
+    // Check if this message can be merged into the last group on screen.
+    // Never merge across a time gap — same condition as groupMessages().
+    if (!bigGap) {
+      const lastWrapper = this._listEl.lastElementChild;
+      if (
+        lastWrapper &&
+        lastWrapper.classList.contains("message-group-wrapper") &&
+        isGroupable(msg)
+      ) {
+        // Check sender of the existing group (compare by Matrix user ID, not display name)
+        const wrapperSenderId = (lastWrapper as HTMLElement).dataset.sender;
+        if (wrapperSenderId === (msg.senderId ?? msg.senderName) && !msg.replyTo) {
+          // Append into existing group (replies always start a new group)
+          const innerGroup = lastWrapper.querySelector<HTMLElement>(".message-group");
+          if (!innerGroup) return;
+          const el = buildMessageElement(msg);
+          const msgHeader = el.querySelector(".message__header");
+          if (msgHeader) (msgHeader as HTMLElement).style.display = "none";
+          if (animate) el.classList.add("message--entering");
+          innerGroup.appendChild(el);
+          if (!this._scrolledUp) this._scrollToBottom();
+          return;
+        }
       }
     }
 
@@ -689,23 +709,35 @@ export class Timeline {
   appendMessageHidden(msg: MessageData): void {
     this._messages.push(msg);
 
-    const lastWrapper = this._listEl.lastElementChild;
-    if (
-      lastWrapper &&
-      lastWrapper.classList.contains("message-group-wrapper") &&
-      isGroupable(msg)
-    ) {
-      const innerGroup = lastWrapper.querySelector<HTMLElement>(".message-group");
-      const groupSender = innerGroup?.querySelector(".message-group__sender");
-      if (groupSender && groupSender.textContent === msg.senderName && !msg.replyTo) {
-        const el = buildMessageElement(msg);
-        const msgHeader = el.querySelector(".message__header");
-        if (msgHeader) (msgHeader as HTMLElement).style.display = "none";
-        el.style.opacity = "0";
-        innerGroup!.appendChild(el);
-        this._lastHiddenEl = el;
-        if (!this._scrolledUp) this._scrollAnimated();
-        return;
+    // Check 30-minute time gap from the previous message
+    const prevMsg = this._messages[this._messages.length - 2];
+    const prevTs = prevMsg?.timestamp ? new Date(prevMsg.timestamp).getTime() : 0;
+    const newTs = msg.timestamp ? new Date(msg.timestamp).getTime() : 0;
+    const bigGap = prevTs > 0 && newTs - prevTs > TIME_SEPARATOR_GAP_MS;
+
+    if (bigGap) {
+      this._listEl.appendChild(buildTimeSeparator(msg.timestamp));
+    }
+
+    if (!bigGap) {
+      const lastWrapper = this._listEl.lastElementChild;
+      if (
+        lastWrapper &&
+        lastWrapper.classList.contains("message-group-wrapper") &&
+        isGroupable(msg)
+      ) {
+        const innerGroup = lastWrapper.querySelector<HTMLElement>(".message-group");
+        const groupSender = innerGroup?.querySelector(".message-group__sender");
+        if (groupSender && groupSender.textContent === msg.senderName && !msg.replyTo) {
+          const el = buildMessageElement(msg);
+          const msgHeader = el.querySelector(".message__header");
+          if (msgHeader) (msgHeader as HTMLElement).style.display = "none";
+          el.style.opacity = "0";
+          innerGroup!.appendChild(el);
+          this._lastHiddenEl = el;
+          if (!this._scrolledUp) this._scrollAnimated();
+          return;
+        }
       }
     }
 
@@ -815,6 +847,45 @@ export class Timeline {
     if (!el) return;
     const img = el.querySelector<HTMLImageElement>(".message__image, .message__sticker");
     if (img) img.src = dataUrl;
+  }
+
+  /**
+   * Remove a message from the timeline by event ID.
+   * Used for optimistic redaction — removes from both the DOM and _messages array.
+   * If the message was the only one in its group, the whole group wrapper is removed.
+   * Adjusts _selectedIndex if needed.
+   */
+  removeMessage(eventId: string): void {
+    const idx = this._messages.findIndex((m) => m.id === eventId);
+    if (idx < 0) return;
+
+    // Adjust selection so it stays on the same logical position
+    if (this._selectedIndex > idx) {
+      this._selectedIndex--;
+    } else if (this._selectedIndex === idx) {
+      this._selectedIndex = -1;
+    }
+
+    this._messages.splice(idx, 1);
+
+    const el = this.getMessageElementById(eventId);
+    if (!el) return;
+
+    const group = el.closest<HTMLElement>(".message-group");
+    const wrapper = el.closest<HTMLElement>(".message-group-wrapper");
+
+    if (wrapper && group) {
+      const remaining = group.querySelectorAll<HTMLElement>("[data-message-id]");
+      if (remaining.length <= 1) {
+        // Last message in group — remove the whole wrapper
+        wrapper.remove();
+      } else {
+        el.remove();
+      }
+    } else {
+      // Ungrouped (system) message
+      el.remove();
+    }
   }
 
   /**

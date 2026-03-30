@@ -51,6 +51,38 @@ export class RoomList {
     this._updateActive();
   }
 
+  /**
+   * Update a single room's unread/mention badge without re-rendering the whole list.
+   * Used to clear badges after marking a room as read without losing the current
+   * space filter (which would happen if setRooms were called with the full cache).
+   */
+  updateRoomBadge(id: string, unreadCount: number, mentionCount: number): void {
+    const idx = this._rooms.findIndex((r) => r.id === id);
+    if (idx < 0) return;
+    this._rooms[idx] = { ...this._rooms[idx], unreadCount, mentionCount };
+
+    const el = this._scrollEl.querySelector<HTMLElement>(`[data-room-id="${CSS.escape(id)}"]`);
+    if (!el) return;
+
+    el.classList.toggle("room-list__item--unread", unreadCount > 0 && !this._rooms[idx].muted);
+    el.querySelector(".room-list__item-badge")?.remove();
+
+    if (mentionCount > 0) {
+      const badge = document.createElement("span");
+      badge.className = "room-list__item-badge";
+      badge.textContent = String(mentionCount);
+      badge.setAttribute("aria-label", `${mentionCount} mentions`);
+      el.appendChild(badge);
+    } else if (unreadCount > 0 && !this._rooms[idx].muted) {
+      const badge = document.createElement("span");
+      badge.className = "room-list__item-badge";
+      badge.style.color = "var(--roomlist-unread)";
+      badge.textContent = "●";
+      badge.setAttribute("aria-label", `${unreadCount} unread`);
+      el.appendChild(badge);
+    }
+  }
+
   // ── Private ──────────────────────────────────────────────────────────────
 
   private _render(): void {
