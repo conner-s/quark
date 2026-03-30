@@ -691,18 +691,12 @@ export async function sendMessage(body: string): Promise<void> {
         background: getComputedStyle(composeBoxEl).backgroundColor || "var(--bg)",
       });
       document.body.appendChild(clone);
-      const clonePaddingTop = getComputedStyle(clone).paddingTop;
       composeBoxEl.style.opacity = "0";
 
       const anim = clone.animate(
         [
-          { transform: "translate(0,0)", opacity: "1", borderRadius: "0px 8px 8px 0px",
-            width: `${composeRect.width}px`, height: `${composeRect.height}px`,
-            paddingTop: clonePaddingTop },
-          { transform: `translate(0,${deltaY}px)`, opacity: "1", borderRadius: "8px",
-            width: `${targetRect?.width ?? composeRect.width}px`,
-            height: `${targetRect?.height ?? composeRect.height}px`,
-            paddingTop: "10px" },
+          { transform: "translate(0,0)", borderRadius: "0px 8px 8px 0px" },
+          { transform: `translate(0,${deltaY}px)`, borderRadius: "8px" },
         ],
         { duration: 260, easing: "cubic-bezier(0.25, 0.46, 0.45, 0.94)", fill: "forwards" }
       );

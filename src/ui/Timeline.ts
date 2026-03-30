@@ -859,7 +859,9 @@ export class Timeline {
     const idx = this._messages.findIndex((m) => m.id === eventId);
     if (idx < 0) return;
 
-    // Adjust selection so it stays on the same logical position
+    const wasSelected = this._selectedIndex === idx;
+
+    // Adjust selection index accounting for the removal
     if (this._selectedIndex > idx) {
       this._selectedIndex--;
     } else if (this._selectedIndex === idx) {
@@ -885,6 +887,19 @@ export class Timeline {
     } else {
       // Ungrouped (system) message
       el.remove();
+    }
+
+    // Remove any time separators that now have no messages following them
+    for (const sep of Array.from(this._listEl.querySelectorAll<HTMLElement>(".time-separator"))) {
+      const next = sep.nextElementSibling;
+      if (!next || next.classList.contains("time-separator")) {
+        sep.remove();
+      }
+    }
+
+    // If the deleted message was selected, move cursor to the next valid message
+    if (wasSelected && this._messages.length > 0) {
+      this._setSelected(Math.min(idx, this._messages.length - 1));
     }
   }
 
