@@ -6,7 +6,7 @@ import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
  *  common reactions shown first so frequently-used emoji are always at the top. */
 const PINNED_EMOJI = new Set(["👍", "👎", "❤️", "😂", "🎉", "🚀", "👀", "🤔", "💯", "✅", "😮", "😢"]);
 
-const REACTION_DATA: { emoji: string; shortcode: string }[] = [
+const BUILTIN_REACTION_DATA: { key: string; shortcode: string; imageUrl?: string }[] = [
   // Pinned common reactions first
   ...BUILTIN_EMOJI
     .filter((e) => PINNED_EMOJI.has(e.key))
@@ -14,12 +14,20 @@ const REACTION_DATA: { emoji: string; shortcode: string }[] = [
       const order = [...PINNED_EMOJI];
       return order.indexOf(a.key) - order.indexOf(b.key);
     })
-    .map((e) => ({ emoji: e.key, shortcode: e.shortcode })),
+    .map((e) => ({ key: e.key, shortcode: e.shortcode })),
   // Then the rest of the emoji set
   ...BUILTIN_EMOJI
     .filter((e) => !PINNED_EMOJI.has(e.key))
-    .map((e) => ({ emoji: e.key, shortcode: e.shortcode })),
+    .map((e) => ({ key: e.key, shortcode: e.shortcode })),
 ];
+
+export interface CustomEmojiEntry {
+  /** Reaction key — for custom emoji this is `:shortcode:` */
+  key: string;
+  shortcode: string;
+  /** Resolved data: or https: URL for the thumbnail image */
+  imageUrl: string;
+}
 
 type ReactCallback = (eventId: string, key: string) => void;
 
@@ -39,10 +47,13 @@ export class QuickReactPicker {
   private _inputEl: HTMLInputElement;
   private _gridEl: HTMLElement;
   private _buttons: HTMLButtonElement[] = [];
+  /** Parallel data array — one entry per button, same order as _buttons */
+  private _allData: { key: string; shortcode: string; imageUrl?: string }[] = [];
   /** Index of the focused button, or -1 when the text input is focused */
   private _focusedBtnIndex = -1;
   private _targetEventId: string | null = null;
   private _onReact: ReactCallback | null = null;
+  private _customEmoji: CustomEmojiEntry[] = [];
 
   constructor() {
     this._el = document.createElement("div");
@@ -77,17 +88,8 @@ export class QuickReactPicker {
     this._gridEl.className = "quick-react-picker__grid";
     this._gridEl.setAttribute("aria-label", "Quick reactions");
 
-    for (const { emoji, shortcode } of REACTION_DATA) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "quick-react-picker__btn";
-      btn.textContent = emoji;
-      btn.setAttribute("title", `:${shortcode}:`);
-      btn.setAttribute("tabindex", "-1"); // managed manually
-      btn.addEventListener("click", () => this._pick(emoji));
-      this._buttons.push(btn);
-      this._gridEl.appendChild(btn);
-    }
+    // Initial build with built-in emoji only; custom added via setCustomEmoji()
+    this._rebuildButtons();
 
     this._el.appendChild(this._gridEl);
 
@@ -118,6 +120,16 @@ export class QuickReactPicker {
     this._onReact = cb;
   }
 
+  /**
+   * Prepend custom emoji from MSC2545 packs to the grid.
+   * Pass an empty array to remove custom emoji.
+   */
+  setCustomEmoji(entries: CustomEmojiEntry[]): void {
+    this._customEmoji = entries;
+    this._rebuildButtons();
+    this._applyFilter(this._inputEl.value);
+  }
+
   isVisible(): boolean {
     return this._el.style.display !== "none";
   }
@@ -141,28 +153,78 @@ export class QuickReactPicker {
         left = window.innerWidth - approxWidth - 8;
       }
       this._el.style.top = `${rect.bottom + 6}px`;
+      this._el.style.bottom = "";
       this._el.style.left = `${Math.max(8, left)}px`;
       this._el.style.transform = "";
     } else {
       this._el.style.top = "50%";
+      this._el.style.bottom = "";
       this._el.style.left = "50%";
       this._el.style.transform = "translate(-50%, -50%)";
     }
 
     this._el.style.display = "flex";
-    // Defer focus so the element is rendered first
-    requestAnimationFrame(() => this._inputEl.focus());
+    // Defer focus so the element is rendered first; also check for bottom overflow.
+    requestAnimationFrame(() => {
+      if (anchor) {
+        const pickerRect = this._el.getBoundingClientRect();
+        if (pickerRect.bottom > window.innerHeight - 8) {
+          // Flip upward: position the picker above the anchor instead
+          const anchorRect = anchor.getBoundingClientRect();
+          this._el.style.top = "";
+          this._el.style.bottom = `${window.innerHeight - anchorRect.top + 6}px`;
+        }
+      }
+      this._inputEl.focus();
+    });
   }
 
   hide(): void {
     this._el.style.display = "none";
     this._el.style.transform = "";
+    this._el.style.top = "";
+    this._el.style.bottom = "";
     this._targetEventId = null;
     this._focusedBtnIndex = -1;
     this._updateBtnFocus();
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
+
+  /** Rebuild the grid buttons from _customEmoji + built-in data. */
+  private _rebuildButtons(): void {
+    for (const btn of this._buttons) btn.remove();
+    this._buttons = [];
+
+    this._allData = [
+      ...this._customEmoji,
+      ...BUILTIN_REACTION_DATA,
+    ];
+
+    for (const entry of this._allData) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "quick-react-picker__btn";
+      btn.setAttribute("title", `:${entry.shortcode}:`);
+      btn.setAttribute("tabindex", "-1");
+      btn.dataset.key = entry.key;
+
+      if (entry.imageUrl) {
+        const img = document.createElement("img");
+        img.src = entry.imageUrl;
+        img.alt = entry.key;
+        img.className = "quick-react-picker__custom-img";
+        btn.appendChild(img);
+      } else {
+        btn.textContent = entry.key;
+      }
+
+      const capturedKey = entry.key;
+      btn.addEventListener("click", () => this._pick(capturedKey));
+      this._buttons.push(btn);
+      this._gridEl.appendChild(btn);
+    }
+  }
 
   /**
    * Show only buttons whose emoji glyph or shortcode contains every space-separated
@@ -182,10 +244,10 @@ export class QuickReactPicker {
 
     let anyVisible = false;
     for (let i = 0; i < this._buttons.length; i++) {
-      const { emoji, shortcode } = REACTION_DATA[i];
-      // A button matches if every token appears in the emoji glyph or shortcode
+      const { key, shortcode } = this._allData[i];
+      // A button matches if every token appears in the key glyph or shortcode
       const matches = tokens.every((tok) =>
-        emoji.includes(tok) || shortcode.includes(tok)
+        key.includes(tok) || shortcode.includes(tok)
       );
       this._buttons[i].style.display = matches ? "" : "none";
       if (matches) anyVisible = true;
@@ -311,8 +373,9 @@ export class QuickReactPicker {
     }
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      const emoji = this._buttons[this._focusedBtnIndex]?.textContent ?? "";
-      if (emoji) this._pick(emoji);
+      const btn = this._buttons[this._focusedBtnIndex];
+      const key = btn?.dataset.key ?? btn?.textContent ?? "";
+      if (key) this._pick(key);
       return;
     }
   }

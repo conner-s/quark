@@ -30,6 +30,8 @@ export interface RoomInfo {
   is_direct: boolean;
   is_encrypted: boolean;
   member_count: number;
+  /** Timestamp (ms since Unix epoch) of the most recent event. Used for recency sorting. */
+  last_activity_ts?: number | null;
 }
 
 /** Options for creating a room — matches matrix::rooms::CreateRoomOptions */
@@ -82,6 +84,8 @@ export interface TimelineEvent {
   media_mimetype: string | null;
   media_width: number | null;
   media_height: number | null;
+  /** JSON-serialized EncryptedFile for E2EE media; absent for plain media. */
+  media_encryption_info?: string | null;
   reactions?: ReactionGroup[];
 }
 

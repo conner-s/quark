@@ -16,6 +16,7 @@ const KNOWN_COMMANDS: string[] = [
   "upload",
   "quit",
   "q",
+  "logout",
   "help",
   "msg",
   "invite",
@@ -24,6 +25,10 @@ const KNOWN_COMMANDS: string[] = [
   "unban",
   "nick",
   "topic",
+  "verify",
+  "cross-sign",
+  "setup-cross-signing",
+  "profile",
 ];
 
 /**

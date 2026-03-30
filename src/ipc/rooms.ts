@@ -44,3 +44,11 @@ export async function createRoom(options: CreateRoomOptions): Promise<string> {
 export async function getRoomMembers(roomId: string): Promise<RoomMember[]> {
   return invoke<RoomMember[]>("get_room_members", { roomId });
 }
+
+/**
+ * Send a read receipt for the latest event in a room, clearing the unread count.
+ * Matches the Rust `mark_room_read` command.
+ */
+export async function markRoomRead(roomId: string): Promise<void> {
+  return invoke<void>("mark_room_read", { roomId });
+}

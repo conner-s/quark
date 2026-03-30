@@ -23,6 +23,7 @@ export class ProfileDialog {
     this._el.className = "profile-dialog";
     this._el.setAttribute("role", "dialog");
     this._el.setAttribute("aria-label", "Your profile");
+    this._el.setAttribute("tabindex", "-1");
     this._el.style.display = "none";
 
     // ── Header ────────────────────────────────────────────────────────────
@@ -95,7 +96,7 @@ export class ProfileDialog {
     this._el.addEventListener("keydown", (e) => {
       e.stopPropagation();
 
-      if (e.key === "Escape") {
+      if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
         e.preventDefault();
         this.hide();
         return;
@@ -138,6 +139,7 @@ export class ProfileDialog {
     }
 
     this._el.style.display = "flex";
+    this._el.focus();
   }
 
   hide(): void {

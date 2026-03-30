@@ -187,17 +187,21 @@ async function refreshCustomEmoji(): Promise<void> {
     _customEmoji = [];
     for (const pack of packs) {
       for (const entry of pack.emojis) {
-        const idx = _customEmoji.length;
-        _customEmoji.push({
+        const customEntry: ShortcodeEntry = {
           key: `:${entry.shortcode}:`,
           shortcode: entry.shortcode,
           imageUrl: entry.url, // may be mxc://, replaced below if so
-        });
+        };
+        _customEmoji.push(customEntry);
         if (entry.url.startsWith("mxc://")) {
+          // Capture by object reference to avoid stale-index bugs if the room
+          // switches (and _customEmoji is rebuilt) before the download finishes.
+          const captured = customEntry;
           getThumbnail(entry.url, 32, 32).then((dl) => {
-            if (_customEmoji[idx]) {
-              _customEmoji[idx] = {
-                ..._customEmoji[idx],
+            const i = _customEmoji.indexOf(captured);
+            if (i >= 0) {
+              _customEmoji[i] = {
+                ...captured,
                 imageUrl: `data:${dl.mime_type};base64,${dl.data_base64}`,
               };
             }
@@ -320,7 +324,7 @@ function applyRcDirectives(rc: ParsedRc): void {
 
 export function setupKeyboard(components: AppComponents): void {
   const { input, commandBar, shortcodePreview, timeline,
-          emojiPicker, gifPicker, stickerPicker, verification, helpDialog, quickReactPicker, profileDialog } = components;
+          emojiPicker, gifPicker, stickerPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker } = components;
 
   registerDefaultBindings();
 
@@ -440,7 +444,8 @@ export function setupKeyboard(components: AppComponents): void {
     // suspenders guard for the case where focus escapes the overlay element.
     if (quickReactPicker.isVisible()) return;
     if (emojiPicker.isVisible() || gifPicker.isVisible() || stickerPicker.isVisible() ||
-        verification.isVisible() || helpDialog.isVisible() || profileDialog.isVisible()) return;
+        verification.isVisible() || helpDialog.isVisible() || profileDialog.isVisible() ||
+        devicePicker.isVisible()) return;
 
     // Escape (or Ctrl+[) always resets to Normal (if not already) and clears sequences
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {

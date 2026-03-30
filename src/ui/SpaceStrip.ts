@@ -88,11 +88,9 @@ export class SpaceStrip {
     } else {
       item.textContent = "";
       const img = document.createElement("img");
+	  img.className = "space-strip__icon";
       img.src = dataUrl;
       img.alt = "";
-      img.style.width = "20px";
-      img.style.height = "20px";
-      img.style.objectFit = "cover";
       item.appendChild(img);
     }
   }

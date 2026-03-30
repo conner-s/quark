@@ -10,12 +10,13 @@ export interface CacheStats {
   usage_percent: number;
 }
 
+const _now = Date.now();
 const MOCK_ROOMS: RoomInfo[] = [
-  { room_id: "!general:matrix.org", name: "general", topic: "General discussion", avatar_url: null, unread_count: 3, notification_count: 1, is_direct: false, is_encrypted: true, member_count: 42 },
-  { room_id: "!dev:matrix.org", name: "dev", topic: "Development talk", avatar_url: null, unread_count: 0, notification_count: 0, is_direct: false, is_encrypted: true, member_count: 18 },
-  { room_id: "!random:matrix.org", name: "random", topic: "Off-topic banter", avatar_url: null, unread_count: 12, notification_count: 0, is_direct: false, is_encrypted: false, member_count: 35 },
-  { room_id: "!dm-alice:matrix.org", name: "Alice", topic: null, avatar_url: null, unread_count: 1, notification_count: 0, is_direct: true, is_encrypted: true, member_count: 2 },
-  { room_id: "!dm-bob:matrix.org", name: "Bob", topic: null, avatar_url: null, unread_count: 0, notification_count: 0, is_direct: true, is_encrypted: true, member_count: 2 },
+  { room_id: "!general:matrix.org", name: "general", topic: "General discussion", avatar_url: null, unread_count: 3, notification_count: 1, is_direct: false, is_encrypted: true, member_count: 42, last_activity_ts: _now - 5 * 60_000 },
+  { room_id: "!dev:matrix.org", name: "dev", topic: "Development talk", avatar_url: null, unread_count: 0, notification_count: 0, is_direct: false, is_encrypted: true, member_count: 18, last_activity_ts: _now - 2 * 60 * 60_000 },
+  { room_id: "!random:matrix.org", name: "random", topic: "Off-topic banter", avatar_url: null, unread_count: 12, notification_count: 0, is_direct: false, is_encrypted: false, member_count: 35, last_activity_ts: _now - 30 * 60_000 },
+  { room_id: "!dm-alice:matrix.org", name: "Alice", topic: null, avatar_url: null, unread_count: 1, notification_count: 0, is_direct: true, is_encrypted: true, member_count: 2, last_activity_ts: _now - 10 * 60_000 },
+  { room_id: "!dm-bob:matrix.org", name: "Bob", topic: null, avatar_url: null, unread_count: 0, notification_count: 0, is_direct: true, is_encrypted: true, member_count: 2, last_activity_ts: _now - 3 * 60 * 60_000 },
 ];
 
 let msgCounter = 100;
@@ -148,6 +149,7 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     }
     case "join_room":
     case "leave_room":
+    case "mark_room_read":
     case "send_reaction":
     case "edit_message":
     case "redact_message":
@@ -292,6 +294,17 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
         emoji: MOCK_EMOJIS,
         decimals: null,
       };
+    }
+
+    case "download_media": {
+      // Return a placeholder SVG so emoji/sticker previews render in mock mode.
+      const label = ((args?.mxcUrl as string) ?? "").split("/").pop()?.slice(0, 8) ?? "media";
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">` +
+        `<rect width="64" height="64" rx="8" fill="#00ff41" opacity="0.15"/>` +
+        `<rect width="64" height="64" rx="8" fill="none" stroke="#00ff41" stroke-width="1.5" opacity="0.6"/>` +
+        `<text x="32" y="38" text-anchor="middle" font-family="monospace" font-size="9" fill="#00ff41">${label}</text>` +
+        `</svg>`;
+      return { data_base64: btoa(svg), mime_type: "image/svg+xml", filename: null };
     }
 
     default:

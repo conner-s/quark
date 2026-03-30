@@ -98,6 +98,29 @@ export class StickerPicker {
     this._updatePackLabel();
   }
 
+  /**
+   * Update the resolved thumbnail URL for a sticker after async download.
+   * Patches the live DOM cell and both the canonical + filtered entry lists
+   * so re-renders pick up the resolved URL.
+   */
+  updateStickerThumbnail(id: string, thumbnailUrl: string): void {
+    const canonical = this._allStickers.find((s) => s.id === id);
+    if (canonical) canonical.thumbnailUrl = thumbnailUrl;
+    const filtered = this._filteredStickers.find((s) => s.id === id);
+    if (filtered) filtered.thumbnailUrl = thumbnailUrl;
+
+    // Patch live img src without a full re-render
+    const cells = this._gridEl.querySelectorAll<HTMLElement>(".sticker-picker__cell");
+    for (const cell of cells) {
+      const idx = Number(cell.dataset.index);
+      if (this._filteredStickers[idx]?.id === id) {
+        const img = cell.querySelector<HTMLImageElement>("img");
+        if (img) img.src = thumbnailUrl;
+        break;
+      }
+    }
+  }
+
   // ── Private ────────────────────────────────────────────────────────────
 
   private _updatePackLabel(): void {

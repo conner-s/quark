@@ -146,6 +146,12 @@ class AppStateManager {
     this._panelNavCallbacks.get(this._state.activePanel)?.close?.();
   }
 
+  /** Programmatically move focus to a specific panel, calling its focusActive callback. */
+  focusPanel(panel: ActivePanel): void {
+    this.set("activePanel", panel);
+    this._panelNavCallbacks.get(panel)?.focusActive?.();
+  }
+
   moveFocusLeft(): void {
     const order = AppStateManager.PANEL_ORDER.filter(
       (p) => p !== "members" || this._state.memberListVisible

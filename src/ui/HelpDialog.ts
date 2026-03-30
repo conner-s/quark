@@ -28,6 +28,7 @@ const COMMANDS: CommandEntry[] = [
   { name: "upload",   args: "<path>",            description: "Upload a file to the current room" },
   { name: "verify",   args: "<user-id>",         description: "Start SAS verification with a user" },
   { name: "help",     args: "",                  description: "Show this help dialog" },
+  { name: "logout",   args: "",                  description: "Log out and return to login screen" },
   { name: "q / quit", args: "",                  description: "Close the application" },
 ];
 

@@ -90,6 +90,15 @@ export class MemberList {
     this._updateActive();
   }
 
+  /** Return the currently focused MemberEntry, or null if no member item is focused. */
+  getFocusedMember(): MemberEntry | null {
+    const focused = document.activeElement as HTMLElement | null;
+    if (!focused || !this._scrollEl.contains(focused)) return null;
+    const memberId = focused.dataset.memberId;
+    if (!memberId) return null;
+    return this._members.find((m) => m.id === memberId) ?? null;
+  }
+
   focusFirst(): void {
     this._scrollEl.querySelector<HTMLElement>(".member-list__item, .member-list__section-header")?.focus();
   }

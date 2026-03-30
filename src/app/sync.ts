@@ -3,7 +3,7 @@
 import { AppState } from "./state.js";
 import type { AppComponents } from "../ui/App.js";
 import type { TimelineEvent, RoomInfo } from "../ipc/types.js";
-import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest } from "./actions.js";
+import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage } from "./actions.js";
 import { showToast } from "../ui/NotificationToast.js";
 import { handleIncomingMessage } from "./notifications.js";
 
@@ -117,6 +117,7 @@ export async function startSync(components: AppComponents): Promise<() => void> 
         const alreadyInDom = !!timeline.getMessageElementById(payload.event.event_id);
         if (!alreadyInState && !alreadyInDom && !consumeOwnSentEvent(payload.event.event_id)) {
           timeline.appendMessage(timelineEventToMessage(payload.event));
+          downloadSyncMessageImage(payload.event, timeline);
           resolveInlineEmojiForTimeline(timeline);
         }
       } else {
@@ -198,7 +199,11 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     "quark://sync/connected",
     (connected) => {
       statusBar.setConnected(connected);
-      if (!connected) {
+      if (connected) {
+        // Refresh rooms after the first sync completes — on first login the
+        // initial refreshRooms() fires before sync has populated joined_rooms().
+        void refreshRooms();
+      } else {
         showToast("Connection lost — reconnecting…", "error", 5000);
       }
     }

@@ -20,6 +20,7 @@ import {
   getUserSpaces,
   joinRoom,
   leaveRoom,
+  markRoomRead,
   getThreadTimeline,
   loadTheme as ipcLoadTheme,
   getCrossSigningStatus,
@@ -57,6 +58,7 @@ import type { MemberEntry } from "../ui/MemberList.js";
 import type { SpaceItem } from "../ui/SpaceStrip.js";
 import type { EmojiEntry } from "../ui/EmojiPicker.js";
 import type { StickerEntry } from "../ui/StickerPicker.js";
+import type { CustomEmojiEntry } from "../ui/QuickReactPicker.js";
 import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
 
 // ── Own-sent event deduplication ─────────────────────────────────────────────
@@ -90,13 +92,27 @@ let _paginationLoading = false;
 const _memberDisplayName = new Map<string, string>();
 /** userId → mxc:// URL, populated when room members are fetched */
 const _memberAvatarMxc = new Map<string, string>();
-/** mxc:// URL → data: URL, populated as thumbnails are downloaded */
+/** mxc:// URL → blob: URL, populated as thumbnails are downloaded */
 const _avatarDataUrl = new Map<string, string>();
+
+/**
+ * Convert a downloaded media blob to a Blob URL.
+ * Blob URLs avoid synchronous base64 decoding when assigned to img.src,
+ * which can take ~5ms per image in WebKitGTK.
+ */
+function _mediaToBlobUrl(mimeType: string, base64: string): string {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const blob = new Blob([bytes], { type: mimeType });
+  return URL.createObjectURL(blob);
+}
 
 /** Resolve a user ID to its display name, falling back to the raw ID. */
 export function resolveDisplayName(userId: string): string {
   return _memberDisplayName.get(userId) ?? userId;
 }
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const THUMBNAIL_SIZE = 64;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -264,9 +280,24 @@ export async function selectRoom(roomId: string): Promise<void> {
   _paginationLoading = false;
   roomList.setActiveRoom(roomId);
 
-  // Find room info in cache
+  // Clear unread badge optimistically in local cache, then send read receipt
   const cached = AppState.get("roomListCache");
-  const roomInfo = cached.find((r) => r.room_id === roomId);
+  if (cached.some((r) => r.room_id === roomId && (r.unread_count > 0 || r.notification_count > 0))) {
+    AppState.set(
+      "roomListCache",
+      cached.map((r) =>
+        r.room_id === roomId ? { ...r, unread_count: 0, notification_count: 0 } : r
+      )
+    );
+    roomList.setRooms(
+      AppState.get("roomListCache").map(roomInfoToEntry)
+    );
+  }
+  void markRoomRead(roomId).catch(() => {/* non-fatal: badge already cleared locally */});
+
+  // Find room info in cache (re-read after potential update above)
+  const updatedCache = AppState.get("roomListCache");
+  const roomInfo = updatedCache.find((r) => r.room_id === roomId);
   const roomName = roomInfo?.name ?? roomId;
 
   roomHeader.setRoom(
@@ -303,10 +334,14 @@ export async function selectRoom(roomId: string): Promise<void> {
       if (m.avatar_url) _memberAvatarMxc.set(m.user_id, m.avatar_url);
     }
 
-    // Re-render with fresh display names if room hasn't changed mid-load
+    // Update display names in place now that member data is available.
+    // Avoids a full DOM rebuild — use targeted text swaps instead of setMessages.
     if (AppState.get("currentRoomId") === roomId) {
-      const updatedMessages = events.map((e) => timelineEventToMessage(e, events));
-      timeline.setMessages(updatedMessages);
+      for (const m of members) {
+        if (m.display_name) {
+          timeline.updateSenderName(m.user_id, m.display_name);
+        }
+      }
 
       // Populate the member list sidebar
       memberList.setMembers(members.map(roomMemberToEntry));
@@ -378,11 +413,22 @@ export async function selectSpace(spaceId: string): Promise<void> {
   spaceStrip.setActiveSpace(spaceId);
 
   if (spaceId === "__home__") {
-    // Show rooms that are NOT in any space (and include DMs)
+    // Show rooms that are NOT in any space (and include DMs), sorted by recent activity
     const allRooms = AppState.get("roomListCache");
     const spaceRoomIds = new Set(AppState.get("spaceRoomIds"));
-    const homeRooms = allRooms.filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id));
+    const homeRooms = allRooms
+      .filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id))
+      .sort((a, b) => {
+        const aTs = a.last_activity_ts ?? 0;
+        const bTs = b.last_activity_ts ?? 0;
+        if (bTs !== aTs) return bTs - aTs;
+        const aScore = a.notification_count * 2 + a.unread_count;
+        const bScore = b.notification_count * 2 + b.unread_count;
+        if (bScore !== aScore) return bScore - aScore;
+        return (a.name ?? "").localeCompare(b.name ?? "");
+      });
     roomList.setRooms(homeRooms.map(roomInfoToEntry));
+    AppState.focusPanel("roomlist");
     return;
   }
 
@@ -391,14 +437,20 @@ export async function selectSpace(spaceId: string): Promise<void> {
     const dms = allRooms
       .filter((r) => r.is_direct)
       .sort((a, b) => {
-        // Sort by activity: notification count first, then unread, then alphabetical
+        // Primary: most recent activity first (last_activity_ts descending)
+        const aTs = a.last_activity_ts ?? 0;
+        const bTs = b.last_activity_ts ?? 0;
+        if (bTs !== aTs) return bTs - aTs;
+        // Fallback: unread/notification score descending
         const aScore = a.notification_count * 2 + a.unread_count;
         const bScore = b.notification_count * 2 + b.unread_count;
         if (bScore !== aScore) return bScore - aScore;
+        // Final tiebreak: alphabetical
         return (a.name ?? "").localeCompare(b.name ?? "");
       })
       .map(roomInfoToEntry);
     roomList.setRooms(dms);
+    AppState.focusPanel("roomlist");
     return;
   }
 
@@ -415,6 +467,7 @@ export async function selectSpace(spaceId: string): Promise<void> {
         return r ? [roomInfoToEntry(r)] : [];
       });
     roomList.setRooms(ordered);
+    AppState.focusPanel("roomlist");
   } catch (err) {
     showError(`Failed to load space: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -939,7 +992,7 @@ export function openEmojiPicker(): void {
         customEntries.map(async (entry, i) => {
           if (entry.imageUrl?.startsWith("mxc://")) {
             try {
-              const dl = await getThumbnail(entry.imageUrl, 32, 32);
+              const dl = await getThumbnail(entry.imageUrl, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
               customEntries[i] = { ...entry, imageUrl: `data:${dl.mime_type};base64,${dl.data_base64}` };
             } catch { /* non-critical — keep mxc:// as fallback */ }
           }
@@ -955,8 +1008,30 @@ export function openEmojiPicker(): void {
  * selected, otherwise shows the current user's own profile.
  */
 export async function openProfileDialog(): Promise<void> {
-  const { profileDialog, timeline } = getComponents();
+  const { profileDialog, timeline, memberList } = getComponents();
   try {
+    // When the member list is focused, show that member's profile instead of
+    // the selected message's sender.
+    if (AppState.get("activePanel") === "members") {
+      const focused = memberList.getFocusedMember();
+      if (focused) {
+        const mxcUrl = _memberAvatarMxc.get(focused.userId);
+        const cachedDataUrl = mxcUrl ? _avatarDataUrl.get(mxcUrl) : undefined;
+        let avatarUrl: string | null = null;
+        if (cachedDataUrl) {
+          avatarUrl = cachedDataUrl;
+        } else if (mxcUrl) {
+          try {
+            const dl = await downloadMedia(mxcUrl);
+            avatarUrl = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+            _avatarDataUrl.set(mxcUrl, avatarUrl);
+          } catch { /* non-critical */ }
+        }
+        profileDialog.show({ userId: focused.userId, displayName: focused.name, avatarUrl });
+        return;
+      }
+    }
+
     const selectedId = timeline.selectedMessageId;
     if (selectedId) {
       // Show the sender of the selected message
@@ -971,8 +1046,9 @@ export async function openProfileDialog(): Promise<void> {
           avatarUrl = cachedDataUrl;
         } else if (mxcUrl) {
           try {
-            const dl = await getThumbnail(mxcUrl, 64, 64);
-            avatarUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+            // Use full media (not thumbnail) so animated GIF/WEBP avatars are preserved.
+            const dl = await downloadMedia(mxcUrl);
+            avatarUrl = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
             _avatarDataUrl.set(mxcUrl, avatarUrl);
           } catch { /* non-critical */ }
         }
@@ -985,7 +1061,8 @@ export async function openProfileDialog(): Promise<void> {
     let avatarUrl: string | null = null;
     if (profile.avatar_url) {
       try {
-        const dl = await getThumbnail(profile.avatar_url, 64, 64);
+        // Use full media (not thumbnail) so animated GIF/WEBP avatars are preserved.
+        const dl = await downloadMedia(profile.avatar_url);
         avatarUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
       } catch { /* non-critical */ }
     }
@@ -1110,11 +1187,31 @@ export async function openStickerPicker(): Promise<void> {
           id: `${pack.pack_id}::${e.shortcode}`,
           name: e.body ?? e.shortcode,
           url: e.url,
+          // mxc:// URLs are not directly displayable — resolved below
+          thumbnailUrl: e.url.startsWith("mxc://") ? undefined : e.url,
           packName: pack.display_name ?? pack.pack_id,
         });
       }
     }
     stickerPicker.setStickers(stickers);
+
+    // Resolve mxc:// thumbnails asynchronously and patch cells as each arrives
+    for (const sticker of stickers) {
+      if (!sticker.url.startsWith("mxc://")) continue;
+      const mxc = sticker.url;
+      if (_emojiImageCache.has(mxc)) {
+        stickerPicker.updateStickerThumbnail(sticker.id, _emojiImageCache.get(mxc)!);
+        continue;
+      }
+      const capturedId = sticker.id;
+      getThumbnail(mxc, 96, 96)
+        .then((dl) => {
+          const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+          _emojiImageCache.set(mxc, dataUrl);
+          stickerPicker.updateStickerThumbnail(capturedId, dataUrl);
+        })
+        .catch(() => { /* non-critical */ });
+    }
   } catch {
     stickerPicker.setStickers([]);
   }
@@ -1196,6 +1293,11 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
         return;
       }
       await loadTheme(themeName);
+      break;
+    }
+
+    case "logout": {
+      await logout();
       break;
     }
 
@@ -1302,7 +1404,8 @@ export async function refreshRooms(): Promise<void> {
       if (s.avatar_url?.startsWith("mxc://")) {
         const mxcUrl = s.avatar_url;
         const roomId = s.room_id;
-        getThumbnail(mxcUrl, 32, 32)
+        // Use full media (not thumbnail) so animated GIF/WEBP space avatars are preserved.
+        downloadMedia(mxcUrl)
           .then((dl) => {
             const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
             spaceStrip.updateSpaceAvatar(roomId, dataUrl);
@@ -1315,7 +1418,17 @@ export async function refreshRooms(): Promise<void> {
     const spaceId = AppState.get("currentSpaceId");
     if (!spaceId || spaceId === "__home__") {
       const spaceRoomIds = new Set(AppState.get("spaceRoomIds"));
-      const homeRooms = rooms.filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id));
+      const homeRooms = rooms
+        .filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id))
+        .sort((a, b) => {
+          const aTs = a.last_activity_ts ?? 0;
+          const bTs = b.last_activity_ts ?? 0;
+          if (bTs !== aTs) return bTs - aTs;
+          const aScore = a.notification_count * 2 + a.unread_count;
+          const bScore = b.notification_count * 2 + b.unread_count;
+          if (bScore !== aScore) return bScore - aScore;
+          return (a.name ?? "").localeCompare(b.name ?? "");
+        });
       roomList.setRooms(homeRooms.map(roomInfoToEntry));
     }
   } catch (err) {
@@ -1378,9 +1491,7 @@ export function handleIncomingVerificationRequest(
       await acceptVerificationRequest(fromUserId, flowId);
       verification.setState("waiting");
 
-      // Re-wire for the emoji comparison phase. We are the SAS initiator
-      // (we called start_sas), so the other side sends the accept — we must
-      // NOT call acceptSasVerification here.
+      // Re-wire for the emoji comparison phase.
       verification.onConfirm(async () => {
         try {
           await confirmSasVerification(fromUserId, flowId);
@@ -1395,7 +1506,12 @@ export function handleIncomingVerificationRequest(
         verification.setState("cancelled");
       });
 
-      pollSasEmoji(fromUserId, flowId, verification, /* skipAccept */ true);
+      // skipAccept = false: we attempt sas.accept() on each poll tick so that
+      // we handle both sides of a race — if start_sas() returned None (the
+      // other device won the start race), we'll accept their flow instead.
+      // When we ARE the initiator, accept() fails with a wrong-state error
+      // that is silently ignored.
+      pollSasEmoji(fromUserId, flowId, verification, /* skipAccept */ false);
     } catch (err) {
       showError(`Failed to accept verification: ${err instanceof Error ? err.message : String(err)}`);
       verification.setState("failed");
@@ -1587,7 +1703,7 @@ async function _downloadReactionEmoji(
   }
 
   for (const mxc of mxcKeys) {
-    getThumbnail(mxc, 32, 32)
+    getThumbnail(mxc, THUMBNAIL_SIZE, THUMBNAIL_SIZE)
       .then((dl) => {
         const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
         _emojiImageCache.set(mxc, dataUrl);
@@ -1617,11 +1733,18 @@ function _downloadMessageImages(events: TimelineEvent[], timeline: { updateMessa
     if (!e.media_url || !e.media_url.startsWith("mxc://")) continue;
     const eventId = e.event_id;
     const mxc = e.media_url;
-    downloadMedia(mxc).then((dl) => {
+    downloadMedia(mxc, e.media_encryption_info).then((dl) => {
       const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
       timeline.updateMessageMedia(eventId, dataUrl);
-    }).catch(() => { /* non-critical */ });
+    }).catch((err) => {
+      console.error(`[media] failed to download ${mxc}:`, err);
+    });
   }
+}
+
+/** Download media for a single sync-pushed message and update the timeline. */
+export function downloadSyncMessageImage(event: TimelineEvent, timeline: { updateMessageMedia(id: string, dataUrl: string): void }): void {
+  _downloadMessageImages([event], timeline);
 }
 
 /** Public alias used by sync.ts after appending a new message. */
@@ -1637,7 +1760,7 @@ function _downloadInlineEmoji(timeline: import("../ui/Timeline.js").Timeline): v
       timeline.resolveInlineEmoji(mxc, _emojiImageCache.get(mxc)!);
       continue;
     }
-    getThumbnail(mxc, 32, 32)
+    getThumbnail(mxc, THUMBNAIL_SIZE, THUMBNAIL_SIZE)
       .then((dl) => {
         const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
         _emojiImageCache.set(mxc, dataUrl);
@@ -1647,7 +1770,10 @@ function _downloadInlineEmoji(timeline: import("../ui/Timeline.js").Timeline): v
   }
 }
 
-/** Download uncached avatar thumbnails and update the timeline when each arrives. */
+/** Download uncached avatars and update the timeline when each arrives.
+ * Full media (not thumbnail) is used so that animated GIF/WEBP avatars
+ * are not transcoded to static images by the homeserver thumbnail endpoint.
+ */
 function _downloadMemberAvatars(members: RoomMember[], timeline: import("../ui/Timeline.js").Timeline): void {
   for (const m of members) {
     if (!m.avatar_url) continue;
@@ -1656,10 +1782,10 @@ function _downloadMemberAvatars(members: RoomMember[], timeline: import("../ui/T
       timeline.updateSenderAvatar(m.user_id, _avatarDataUrl.get(mxc)!);
       continue;
     }
-    getThumbnail(mxc, 40, 40).then((dl) => {
-      const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
-      _avatarDataUrl.set(mxc, dataUrl);
-      timeline.updateSenderAvatar(m.user_id, dataUrl);
+    downloadMedia(mxc).then((dl) => {
+      const url = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+      _avatarDataUrl.set(mxc, url);
+      timeline.updateSenderAvatar(m.user_id, url);
     }).catch(() => { /* non-critical */ });
   }
 }
@@ -1689,6 +1815,41 @@ export function openQuickReactPicker(eventId: string): void {
   const { timeline, quickReactPicker } = getComponents();
   const anchor = timeline.getMessageElementById(eventId);
   quickReactPicker.show(eventId, anchor);
+
+  // Load custom emoji for current room and inject into the picker
+  const roomId = AppState.get("currentRoomId");
+  getEmojiPacks(roomId ?? undefined)
+    .then((packs) => {
+      const custom: CustomEmojiEntry[] = [];
+      for (const pack of packs) {
+        for (const entry of pack.emojis) {
+          const mxc = entry.url;
+          const cached = _emojiImageCache.get(mxc);
+          if (cached) {
+            custom.push({ key: `:${entry.shortcode}:`, shortcode: entry.shortcode, imageUrl: cached });
+          } else if (mxc.startsWith("mxc://")) {
+            // Resolve then update picker once available
+            getThumbnail(mxc, 32, 32).then((dl) => {
+              const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+              _emojiImageCache.set(mxc, dataUrl);
+              // Re-build if picker is still open
+              if (quickReactPicker.isVisible()) {
+                quickReactPicker.setCustomEmoji(
+                  custom.map((c) => c.key === `:${entry.shortcode}:` ? { ...c, imageUrl: dataUrl } : c)
+                );
+              }
+            }).catch(() => { /* non-critical */ });
+            custom.push({ key: `:${entry.shortcode}:`, shortcode: entry.shortcode, imageUrl: "" });
+          } else {
+            custom.push({ key: `:${entry.shortcode}:`, shortcode: entry.shortcode, imageUrl: mxc });
+          }
+        }
+      }
+      if (quickReactPicker.isVisible()) {
+        quickReactPicker.setCustomEmoji(custom.filter((c) => c.imageUrl));
+      }
+    })
+    .catch(() => { /* non-critical */ });
 }
 
 /**

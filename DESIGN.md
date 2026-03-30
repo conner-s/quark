@@ -619,7 +619,8 @@ quark/
 - [x] Cross-signing setup UI — `:cross-sign [password]` bootstraps keys; `:verify <user-id>` starts SAS with emoji polling
 
 #### Media
-- [ ] Authenticated media (MSC3916) — `/_matrix/client/v1/media/download/` endpoint not used; currently uses legacy `/_matrix/media/v3/download/`
+- [x] Authenticated media (MSC3916) — matrix-sdk 0.9 routes to `/_matrix/client/v1/media/download/` automatically for Matrix 1.11+ servers; E2EE media now decrypted by passing `EncryptedFile` key material through the `download_media` IPC command
+- [ ] Support video
 
 #### Messaging
 - [ ] Private read receipts (`m.read.private`) — only public receipts emitted
@@ -641,7 +642,7 @@ quark/
 - [x] **Reactions UI** — `e` key opens a floating `QuickReactPicker` for the selected message; reaction chips are click-to-toggle; both dispatch to `sendReaction`
 - [x] **Member list sidebar** — toggled with `m`; renders as a fixed right-side column (Discord-style) with presence indicators and power-level badges; populated on room select
 - [x] Handle spaces — `get_user_spaces` IPC command populates SpaceStrip with joined spaces; spaces refresh in parallel with room list load
-- [x] Sort DMs by recent — DM list sorted by notification_count × 2 + unread_count descending, then alphabetically
+- [x] Sort DMs by recent — DM list sorted by `last_activity_ts` descending (timestamp of latest event fetched from local sqlite cache), fallback to notification_count × 2 + unread_count, then alphabetically
 - [x] Sort rooms in spaces by space-defined order — `selectSpace()` preserves backend-sorted order from `getSpaceChildren()` (backend sorts by `m.space.child` `order` field, fallback alphabetical)
 - [x] Don't show rooms that are in spaces in the DM view — home view (`__home__`) filters out rooms that belong to any space; `spaceRoomIds` set built at startup by fetching each space's children
 - [x] Add profile dialogue and keybind — `ProfileDialog` overlay shows display name, user ID, and avatar; opened with `P` in normal mode or `:profile` command; `get_own_profile` IPC backed by matrix-sdk `account()` API
@@ -653,7 +654,7 @@ quark/
 - [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach shows "not yet implemented" toast
 - [x] Support pasting images into the compose box — clipboard image paste detected in `Input`, converted to base64, uploaded via new `send_pasted_image` IPC (Rust: decode base64 → upload → send as `m.image`)
 - [ ] Polish pass over top bar displaying room info. Take cues from the message UI.
-- [ ] Polish pass over verification UI; currently unstyled at the bottom
+- [x] Polish pass over verification UI; currently unstyled at the bottom
 - [ ] Emoji and sticker picker styling. Should show in box above compose area.
 - [ ] Threads animate open a space between message bubbles and display there.
 - [ ] Settings UI
@@ -663,7 +664,12 @@ quark/
 - [ ] Pinned messages UI
 - [ ] Implement themes (command currently does nothing)
 - [ ] Make space UI bigger
+- [ ] Show avatars in member list
+- [ ] Profile images should snap to the top of the visible area if the message's position would place it out of view
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
+- [ ] Pause gif animation while not focused
+- [ ] Detect links
+- [ ] Add more info to profile screen
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
   - [ ] Outside of text select mode but in normal mode, 'y' should copy the full message
@@ -674,9 +680,10 @@ quark/
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
 - [ ] Performance profiling — large rooms (1000+ messages), many emoji packs
 - [ ] Command audit - make sure all commands are fully implemented
+- [ ] Use blobs rather than data URLs so the browser can cache (I think this makes sense? Tell me if it doesn't.)
 
 #### Bugs
-- [ ] rooms don't always load. (scroll getting stuck fixed — cancelled scroll animation on room switch)
+- [x] rooms don't always load. (scroll getting stuck fixed — cancelled scroll animation on room switch)
 - [x] Some images aren't showing up — removed lazy loading (prevented load in overflow containers); isOwn now set on loaded timeline events
 - [x] Space icons don't show up — mxc:// URLs now downloaded and resolved in background
 - [x] Timeline should always start scrolled to the bottom — scroll on render + rAF + 150ms delayed pass
@@ -690,19 +697,27 @@ quark/
 - [x] Clicking in the compose box allows you to type without switching to insert mode — click handler on input field transitions to Insert mode
 - [x] Custom emojis are not shown in shortcode preview, emoji picker, or react picker — mxc:// URLs resolved to data: URLs before display (emoji picker + shortcode preview)
 - [x] ctrl + [ does not work as escape in all places (i.e. react emoji picker) — QuickReactPicker now handles Ctrl+[ in both input and grid handlers
-- [ ] React picker and emoji picker are separate entities; probably best to combine for consistency and maintainability
+- [x] React picker and emoji picker are separate entities; probably best to combine for consistency and maintainability — QuickReactPicker refactored: _allData + _rebuildButtons() replaces hardcoded REACTION_DATA; setCustomEmoji() prepends MSC2545 custom emoji with img thumbnails
 - [x] Noticeable delay when switching rooms — timeline rendered immediately from getTimeline, members fetched concurrently and UI updated when ready
-- [ ] Loading new messages scrolls to a random position
-- [ ] App does not use my KDE window bar, seems to have custom?
+- [x] Loading new messages scrolls to a random position — preserveScroll option in setMessages(); secondary member-data re-render no longer jumps to bottom
+- [x] App does not use my KDE window bar, seems to have custom?
 - [x] h/l don't navigate left and right.
 - [x] Focus sometimes gets stuck/can't move to timeline
-- [ ] React picker goes off screen if message is close to the bottom
+- [x] React picker goes off screen if message is close to the bottom — picker flips upward via rAF bounding rect check when near viewport bottom
 - [x] o should open select rooms/spaces
-- [ ] Selecting a space should move to the rooms list
-- [ ] Message recency sorting doesn't seem to be working for DMs
-- [ ] Viewing a room doesn't dismiss the unread count
-- [ ] Custom emotes still don't show up in the react or message emoji picker or in shortcode
-- [ ] Sticker previews don't render in sticker picker
-- [ ] Animated avatars don't work
-- [ ] There's currently no way to log out
+- [x] Selecting a space should move to the rooms list — focusPanel("roomlist") called from all selectSpace() branches
+- [x] Message recency sorting doesn't seem to be working for DMs — last_activity_ts from Rust timeline cache used as primary sort key
+- [x] Viewing a room doesn't dismiss the unread count — mark_room_read Tauri command sends read receipt; local cache zeroed optimistically
+- [x] Custom emotes still don't show up in the react or message emoji picker or in shortcode — fixed race condition in refreshCustomEmoji (capture by object ref, not index); custom emoji injected into QuickReactPicker via openQuickReactPicker(); mock download_media handler added
+- [x] Sticker previews don't render in sticker picker — async getThumbnail() resolves mxc:// URLs per sticker; updateStickerThumbnail() patches live img src without full re-render
+- [x] Animated avatars don't work — use downloadMedia instead of getThumbnail for avatars; Rust sniffs MIME from magic bytes
+- [x] There's currently no way to log out — :logout command revokes session, clears storage, reloads to login screen
+- [x] Timeline disappears briefly when loading new messages, reappears if scroll again.
+- [x] Home view should be sorted by recent
+- [x] Escape/ctrl + [ don't close profile popup — added tabindex="-1" to dialog element, call focus() on show(), and handle Ctrl+[ in keydown handler
+- [x] Clicking a message should also update the keyboard's selected message — click handler on _el uses closest("[data-message-id]") to find index and calls _setSelected()
+- [x] pressing P while in member list opens the profile of the currently selected message's sender rather than the selected user in the member list — openProfileDialog() checks activePanel==="members" first and uses memberList.getFocusedMember()
+- [x] Keyboard nav doesn't quite scroll far enough when moving to an off-screen message — replaced scrollIntoView({block:"nearest"}) with a custom _scrollIntoViewWithScrolloff() that keeps 80px margin on both edges (vim-style scrolloff)
+- [x] Sometimes unable to navigate timeline — fixed two root causes: (1) _selectedIndex not reset on room switch left it out-of-range, making selectNext/selectPrev think the boundary was reached; (2) clicking the timeline now fires an onFocus callback that updates activePanel to "timeline" so j/k immediately routes there
+
 
