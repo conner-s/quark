@@ -669,6 +669,7 @@ quark/
 - [ ] Pause gif animation while not focused
 - [ ] Detect links
 - [ ] Add more info to profile screen
+- [ ] Split up messages more than 30 minutes apart
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
@@ -719,5 +720,7 @@ quark/
 - [x] pressing P while in member list opens the profile of the currently selected message's sender rather than the selected user in the member list — openProfileDialog() checks activePanel==="members" first and uses memberList.getFocusedMember()
 - [x] Keyboard nav doesn't quite scroll far enough when moving to an off-screen message — replaced scrollIntoView({block:"nearest"}) with a custom _scrollIntoViewWithScrolloff() that keeps 80px margin on both edges (vim-style scrolloff)
 - [x] Sometimes unable to navigate timeline — fixed two root causes: (1) _selectedIndex not reset on room switch left it out-of-range, making selectNext/selectPrev think the boundary was reached; (2) clicking the timeline now fires an onFocus callback that updates activePanel to "timeline" so j/k immediately routes there
+- [ ] timeline navigation broken after loading more messages
+- [ ] Still can't see custom emotes, only getting stickers
 
 
