@@ -126,6 +126,47 @@ function formatTimestamp(isoString: string): string {
   }
 }
 
+const TIME_SEPARATOR_GAP_MS = 30 * 60 * 1000; // 30 minutes
+
+interface TimeSeparator {
+  type: "time-separator";
+  timestamp: string;
+}
+
+function formatSeparatorLabel(isoString: string): string {
+  try {
+    const date = new Date(isoString);
+    const now = new Date();
+    const h = date.getHours();
+    const m = date.getMinutes().toString().padStart(2, "0");
+    const ampm = h >= 12 ? "PM" : "AM";
+    const hour12 = ((h % 12) || 12).toString();
+    const time = `${hour12}:${m} ${ampm}`;
+
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 86400000);
+    const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+    if (msgDay.getTime() === today.getTime()) return `Today at ${time}`;
+    if (msgDay.getTime() === yesterday.getTime()) return `Yesterday at ${time}`;
+
+    const weekday = date.toLocaleDateString(undefined, { weekday: "long" });
+    const dateStr = date.toLocaleDateString(undefined, { month: "long", day: "numeric" });
+    return `${weekday}, ${dateStr} at ${time}`;
+  } catch {
+    return "";
+  }
+}
+
+function buildTimeSeparator(isoString: string): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "time-separator";
+  el.setAttribute("role", "separator");
+  const label = formatSeparatorLabel(isoString);
+  el.textContent = label;
+  return el;
+}
+
 /**
  * Build the inner content of a single message (body, media, reactions) —
  * does NOT include the sender/timestamp header (that lives on the group).
@@ -311,22 +352,35 @@ function isGroupable(msg: MessageData): boolean {
 
 /**
  * Group consecutive messages from the same sender into arrays.
- * System messages, sender changes, and reply messages break the group —
- * replies always start their own bubble so the reply preview is visually
- * attached to the message that uses it.
+ * System messages, sender changes, reply messages, and 30-minute time gaps
+ * break the group. Time gaps also insert a TimeSeparator into the output.
  */
-function groupMessages(msgs: MessageData[]): (MessageData | MessageData[])[] {
-  const result: (MessageData | MessageData[])[] = [];
+function groupMessages(msgs: MessageData[]): (MessageData | MessageData[] | TimeSeparator)[] {
+  const result: (MessageData | MessageData[] | TimeSeparator)[] = [];
   let currentGroup: MessageData[] = [];
+  let prevTimestamp = 0;
+
+  const flushGroup = () => {
+    if (currentGroup.length > 0) {
+      result.push(currentGroup);
+      currentGroup = [];
+    }
+  };
 
   for (const msg of msgs) {
+    const ts = msg.timestamp ? new Date(msg.timestamp).getTime() : 0;
+    const gap = ts - prevTimestamp;
+    const bigGap = prevTimestamp > 0 && gap > TIME_SEPARATOR_GAP_MS;
+
     if (!isGroupable(msg)) {
-      // Flush any pending group
-      if (currentGroup.length > 0) {
-        result.push(currentGroup);
-        currentGroup = [];
-      }
-      result.push(msg); // ungrouped system message
+      flushGroup();
+      if (bigGap) result.push({ type: "time-separator", timestamp: msg.timestamp });
+      result.push(msg);
+    } else if (bigGap) {
+      // Time gap — flush, insert separator, start new group
+      flushGroup();
+      result.push({ type: "time-separator", timestamp: msg.timestamp });
+      currentGroup = [msg];
     } else if (
       currentGroup.length > 0 &&
       (currentGroup[0].senderId ?? currentGroup[0].senderName) === (msg.senderId ?? msg.senderName) &&
@@ -334,18 +388,15 @@ function groupMessages(msgs: MessageData[]): (MessageData | MessageData[])[] {
     ) {
       currentGroup.push(msg);
     } else {
-      // Different sender, reply message, or first message — flush previous group
-      if (currentGroup.length > 0) {
-        result.push(currentGroup);
-      }
+      // Different sender or reply message — flush and start new group
+      flushGroup();
       currentGroup = [msg];
     }
+
+    if (ts > 0) prevTimestamp = ts;
   }
 
-  if (currentGroup.length > 0) {
-    result.push(currentGroup);
-  }
-
+  flushGroup();
   return result;
 }
 
@@ -464,10 +515,21 @@ export class Timeline {
     for (const entry of groups) {
       if (Array.isArray(entry)) {
         fragment.appendChild(buildMessageGroup(entry));
+      } else if ("type" in entry && entry.type === "time-separator") {
+        fragment.appendChild(buildTimeSeparator(entry.timestamp));
       } else {
-        const el = buildMessageElement(entry);
+        const el = buildMessageElement(entry as MessageData);
         el.classList.add("message--ungrouped");
         fragment.appendChild(el);
+      }
+    }
+    // Check for a time gap at the junction between prepended and existing messages
+    const lastPrepended = msgs[msgs.length - 1];
+    const firstExisting = this._messages[msgs.length];
+    if (lastPrepended && firstExisting && firstExisting.timestamp && lastPrepended.timestamp) {
+      const gap = new Date(firstExisting.timestamp).getTime() - new Date(lastPrepended.timestamp).getTime();
+      if (gap > TIME_SEPARATOR_GAP_MS) {
+        fragment.appendChild(buildTimeSeparator(firstExisting.timestamp));
       }
     }
     this._listEl.insertBefore(fragment, this._listEl.firstChild);
@@ -897,9 +959,11 @@ export class Timeline {
     for (const entry of groups) {
       if (Array.isArray(entry)) {
         fragment.appendChild(buildMessageGroup(entry));
+      } else if ("type" in entry && entry.type === "time-separator") {
+        fragment.appendChild(buildTimeSeparator(entry.timestamp));
       } else {
         // Ungrouped (system) message
-        const el = buildMessageElement(entry);
+        const el = buildMessageElement(entry as MessageData);
         el.classList.add("message--ungrouped");
         fragment.appendChild(el);
       }
