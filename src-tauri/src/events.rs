@@ -502,6 +502,7 @@ mod tests {
             media_mimetype: None,
             media_width: None,
             media_height: None,
+            media_encryption_info: None,
             reactions: vec![],
         }
     }
