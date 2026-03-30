@@ -105,6 +105,11 @@ fn parse_ponies_pack(
 }
 
 /// Load all emoji packs visible to the user.
+///
+/// Loads from three sources in priority order:
+/// 1. `im.ponies.user_emotes` — the user's personal packs
+/// 2. `im.ponies.emote_rooms` — globally subscribed room packs (community packs)
+/// 3. `im.ponies.room_emotes` on the current room — all state keys, not just ""
 pub async fn get_emoji_packs(
     client: &Client,
     room_id: Option<&str>,
@@ -144,7 +149,81 @@ pub async fn get_emoji_packs(
         }
     }
 
-    // 2. Room state events: im.ponies.room_emotes
+    // 2. Globally subscribed room packs: im.ponies.emote_rooms
+    //
+    // Structure: { "rooms": { "!room:server": { "": {}, "pack-key": {} } } }
+    // Each entry is a room whose im.ponies.room_emotes state events (at the
+    // listed state keys) the user has subscribed to globally.
+    match client
+        .account()
+        .fetch_account_data(
+            matrix_sdk::ruma::events::GlobalAccountDataEventType::from("im.ponies.emote_rooms"),
+        )
+        .await
+    {
+        Ok(Some(raw)) => {
+            if let Ok(value) = raw.deserialize_as::<Value>() {
+                if let Some(rooms_map) = value.get("rooms").and_then(|r| r.as_object()) {
+                    for (subscribed_rid, state_keys_val) in rooms_map {
+                        let Ok(rid_parsed) = RoomId::parse(subscribed_rid) else { continue };
+                        let Some(room) = client.get_room(&rid_parsed) else { continue };
+
+                        // state_keys_val is a map of state_key → {}
+                        let state_keys: Vec<String> = state_keys_val
+                            .as_object()
+                            .map(|obj| obj.keys().cloned().collect())
+                            .unwrap_or_else(|| vec!["".to_string()]);
+
+                        for state_key in &state_keys {
+                            let event_type = StateEventType::from("im.ponies.room_emotes");
+                            match room.get_state_event(event_type, state_key).await {
+                                Ok(Some(raw_ev)) => {
+                                    let raw_json: Option<Value> = match raw_ev {
+                                        matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState::Sync(r) => {
+                                            r.deserialize_as::<Value>().ok()
+                                        }
+                                        matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState::Stripped(r) => {
+                                            r.deserialize_as::<Value>().ok()
+                                        }
+                                    };
+                                    if let Some(v) = raw_json {
+                                        let content = v.get("content").unwrap_or(&v);
+                                        let pack_id = if state_key.is_empty() {
+                                            format!("emote_rooms_{}", subscribed_rid)
+                                        } else {
+                                            format!("emote_rooms_{}_{}", subscribed_rid, state_key)
+                                        };
+                                        if let Some(pack) = parse_ponies_pack(
+                                            &pack_id, "room", Some(subscribed_rid), content,
+                                        ) {
+                                            packs.push(pack);
+                                        }
+                                    }
+                                }
+                                Ok(None) => {}
+                                Err(e) => {
+                                    warn!(
+                                        "Failed to fetch emote_rooms pack {}/{}: {}",
+                                        subscribed_rid, state_key, e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(None) => {}
+        Err(e) => {
+            warn!("Failed to fetch im.ponies.emote_rooms: {e}");
+        }
+    }
+
+    // 3. Current room state: im.ponies.room_emotes — all state keys
+    //
+    // A room can have multiple packs under different state keys (e.g. "" for
+    // the main pack, "blobpack" for a secondary one). Previously only "" was
+    // fetched; now we use get_state_events() to retrieve all of them.
     if let Some(rid) = room_id {
         let room_id_parsed =
             RoomId::parse(rid).map_err(|e| format!("Invalid room ID: {e}"))?;
@@ -152,30 +231,36 @@ pub async fn get_emoji_packs(
         if let Some(room) = client.get_room(&room_id_parsed) {
             let event_type = StateEventType::from("im.ponies.room_emotes");
 
-            match room.get_state_event(event_type, "").await {
-                Ok(Some(raw)) => {
-                    // Extract JSON from the inner Raw<_> depending on the variant
-                    let raw_json: Option<Value> = match raw {
-                        matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState::Sync(r) => {
-                            r.deserialize_as::<Value>().ok()
-                        }
-                        matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState::Stripped(r) => {
-                            r.deserialize_as::<Value>().ok()
-                        }
-                    };
-                    if let Some(value) = raw_json {
-                        let content = value.get("content").unwrap_or(&value);
-                        if let Some(pack) = parse_ponies_pack(
-                            &format!("room_{}", rid),
-                            "room",
-                            Some(rid),
-                            content,
-                        ) {
-                            packs.push(pack);
+            match room.get_state_events(event_type).await {
+                Ok(raw_events) => {
+                    for raw_ev in raw_events {
+                        let raw_json: Option<Value> = match raw_ev {
+                            matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState::Sync(r) => {
+                                r.deserialize_as::<Value>().ok()
+                            }
+                            matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState::Stripped(r) => {
+                                r.deserialize_as::<Value>().ok()
+                            }
+                        };
+                        if let Some(v) = raw_json {
+                            let state_key = v
+                                .get("state_key")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("");
+                            let content = v.get("content").unwrap_or(&v);
+                            let pack_id = if state_key.is_empty() {
+                                format!("room_{}", rid)
+                            } else {
+                                format!("room_{}_{}", rid, state_key)
+                            };
+                            if let Some(pack) =
+                                parse_ponies_pack(&pack_id, "room", Some(rid), content)
+                            {
+                                packs.push(pack);
+                            }
                         }
                     }
                 }
-                Ok(None) => {}
                 Err(e) => {
                     warn!("Failed to fetch room emotes for {}: {}", rid, e);
                 }
