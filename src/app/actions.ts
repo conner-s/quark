@@ -520,10 +520,14 @@ export async function sendMessage(body: string): Promise<void> {
   const ownDisplayName = AppState.get("ownDisplayName");
   const ownSenderName = ownDisplayName ?? ownUserId ?? "you";
 
+  const ownAvatarMxc = ownUserId ? _memberAvatarMxc.get(ownUserId) : undefined;
+  const ownAvatarUrl = (ownAvatarMxc && _avatarDataUrl.get(ownAvatarMxc)) ?? undefined;
+
   const optimisticMsg: MessageData = {
     id: `optimistic-${Date.now()}`,
     senderId: ownUserId ?? undefined,
     senderName: ownSenderName,
+    senderAvatarUrl: ownAvatarUrl,
     isOwn: true,
     timestamp: new Date().toISOString(),
     body,

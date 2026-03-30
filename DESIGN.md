@@ -731,5 +731,6 @@ quark/
 - [x] When sending a message, break into new bubble on the same condition as loading existing messages — appendMessage/appendMessageHidden now check 30-minute time gap before merging into existing group, inserting a time separator when needed
 - [x] Redacted messages don't disappear until reloading the chat — redactMessage now calls timeline.removeMessage() after successful IPC; removes from DOM and _messages array, collapses single-message groups
 - [x] Selecting a room in some spaces returns the room list to the home view — selectRoom was calling roomList.setRooms() with all cached rooms when clearing unread badge; now uses updateRoomBadge() to update only the specific room item in place
+- [x] Newly sent messages don't have a profile picture — optimistic message in sendMessage was missing senderAvatarUrl; now resolved from _memberAvatarMxc/_avatarDataUrl cache using ownUserId
 
 
