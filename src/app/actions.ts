@@ -56,10 +56,10 @@ import type { RoomEntry } from "../ui/RoomList.js";
 import type { MessageData, ReplyPreviewData } from "../ui/Timeline.js";
 import type { MemberEntry } from "../ui/MemberList.js";
 import type { SpaceItem } from "../ui/SpaceStrip.js";
-import type { EmojiEntry } from "../ui/EmojiPicker.js";
+import type { EmojiEntry, EmojiPickerCategory } from "../ui/EmojiPicker.js";
 import type { StickerEntry } from "../ui/StickerPicker.js";
 import type { CustomEmojiEntry } from "../ui/QuickReactPicker.js";
-import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
+import { BUILTIN_EMOJI, EMOJI_CATEGORIES } from "../data/unicode-emoji.js";
 
 // ── Own-sent event deduplication ─────────────────────────────────────────────
 
@@ -965,40 +965,50 @@ export function openEmojiPicker(): void {
     });
   }
 
-  // Show builtin emoji immediately so the picker opens without waiting
-  const builtinEntries: EmojiEntry[] = BUILTIN_EMOJI.map((e) => ({
-    key: e.key,
-    shortcode: e.shortcode,
+  // Show builtin categories immediately so the picker opens without waiting
+  const builtinCategories: EmojiPickerCategory[] = EMOJI_CATEGORIES.map((cat) => ({
+    id: cat.id,
+    icon: cat.icon,
+    name: cat.name,
+    entries: cat.entries.map(([shortcode, glyph]) => ({ key: glyph, shortcode })),
   }));
-  emojiPicker.setEntries(builtinEntries);
+  emojiPicker.setCategories(builtinCategories);
   emojiPicker.show();
 
-  // Async: prepend custom emoji packs (if any) once loaded, resolving mxc:// URLs
+  // Async: load custom emoji packs and prepend them as categories
   const roomId = AppState.get("currentRoomId");
   getEmojiPacks(roomId ?? undefined)
     .then(async (packs) => {
-      const customEntries: EmojiEntry[] = [];
+      const customCategories: EmojiPickerCategory[] = [];
       for (const pack of packs) {
-        for (const e of pack.emojis) {
-          if (e.usage.includes("emoticon")) {
-            customEntries.push({ key: `:${e.shortcode}:`, shortcode: e.shortcode, imageUrl: e.url });
-          }
-        }
-      }
-      if (customEntries.length === 0) return;
+        const entries: EmojiEntry[] = pack.emojis
+          .filter((e) => e.usage.includes("emoticon"))
+          .map((e) => ({ key: `:${e.shortcode}:`, shortcode: e.shortcode, imageUrl: e.url }));
+        if (entries.length === 0) continue;
 
-      // Resolve mxc:// URLs to data: URLs so the browser can display them
-      await Promise.all(
-        customEntries.map(async (entry, i) => {
-          if (entry.imageUrl?.startsWith("mxc://")) {
-            try {
-              const dl = await getThumbnail(entry.imageUrl, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
-              customEntries[i] = { ...entry, imageUrl: `data:${dl.mime_type};base64,${dl.data_base64}` };
-            } catch { /* non-critical — keep mxc:// as fallback */ }
-          }
-        })
-      );
-      emojiPicker.setEntries([...customEntries, ...builtinEntries]);
+        // Resolve mxc:// URLs to data: URLs
+        await Promise.all(
+          entries.map(async (entry, i) => {
+            if (entry.imageUrl?.startsWith("mxc://")) {
+              try {
+                const dl = await getThumbnail(entry.imageUrl, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+                entries[i] = { ...entry, imageUrl: `data:${dl.mime_type};base64,${dl.data_base64}` };
+              } catch { /* non-critical */ }
+            }
+          })
+        );
+
+        customCategories.push({
+          id: `pack:${pack.pack_id}`,
+          icon: entries[0].imageUrl ?? entries[0].key,
+          name: pack.display_name ?? pack.pack_id,
+          entries,
+        });
+      }
+
+      if (customCategories.length > 0) {
+        emojiPicker.prependCategories(customCategories);
+      }
     })
     .catch(() => { /* non-critical */ });
 }

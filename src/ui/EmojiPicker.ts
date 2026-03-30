@@ -7,10 +7,17 @@ export type PickerTab = "emoji" | "sticker" | "gif";
 export interface EmojiEntry {
   /** Unicode glyph or :shortcode: */
   key: string;
-  /** Optional mxc:// URL for custom emoji */
+  /** Optional resolved image URL for custom emoji */
   imageUrl?: string;
   /** Shortcode label, e.g. "partyblob" */
   shortcode: string;
+}
+
+export interface EmojiPickerCategory {
+  id: string;
+  icon: string;
+  name: string;
+  entries: EmojiEntry[];
 }
 
 type SelectCallback = (entry: EmojiEntry) => void;
@@ -22,10 +29,13 @@ const COLS = 8;
 export class EmojiPicker {
   private _el: HTMLElement;
   private _tabBarEl: HTMLElement;
+  private _categoryBarEl: HTMLElement;
   private _searchEl: HTMLInputElement;
   private _gridEl: HTMLElement;
 
-  private _allEntries: EmojiEntry[] = [];
+  private _categories: EmojiPickerCategory[] = [];
+  private _activeCategoryId: string | null = null;
+  private _allEntries: EmojiEntry[] = [];       // entries for the active category (or all)
   private _filteredEntries: EmojiEntry[] = [];
   private _currentTab: PickerTab = "emoji";
   private _focusIndex = 0;
@@ -40,6 +50,7 @@ export class EmojiPicker {
     this._el.setAttribute("role", "dialog");
     this._el.setAttribute("aria-label", "Emoji picker");
     this._el.setAttribute("aria-modal", "true");
+    this._el.setAttribute("tabindex", "-1"); // allows focus for keyboard events when grid is empty
     this._el.style.display = "none";
 
     // ── Tab bar ──────────────────────────────────────────────────────────
@@ -64,6 +75,12 @@ export class EmojiPicker {
       btn.addEventListener("click", () => this._switchTab(tab.id));
       this._tabBarEl.appendChild(btn);
     }
+
+    // ── Category bar (hidden until categories are set) ─────────────────
+    this._categoryBarEl = document.createElement("div");
+    this._categoryBarEl.className = "emoji-picker__categories";
+    this._categoryBarEl.style.display = "none";
+    this._el.appendChild(this._categoryBarEl);
 
     // ── Search bar ───────────────────────────────────────────────────────
     this._searchEl = document.createElement("input");
@@ -107,7 +124,13 @@ export class EmojiPicker {
   show(): void {
     this._el.style.display = "";
     this._focusIndex = 0;
-    this._focusCell(0);
+    const cells = this._gridEl.querySelectorAll<HTMLElement>(".emoji-picker__cell");
+    if (cells.length > 0) {
+      this._focusCell(0);
+    } else {
+      // Grid not populated yet — focus the container so Escape still works
+      this._el.focus();
+    }
   }
 
   hide(): void {
@@ -119,10 +142,52 @@ export class EmojiPicker {
     keymapManager.resetSequence();
   }
 
-  /** Replace the displayed emoji entries (call again when tab changes). */
+  /** Set categorised emoji entries for the emoji tab. Builds the category bar. */
+  setCategories(categories: EmojiPickerCategory[]): void {
+    this._categories = categories;
+    this._rebuildCategoryBar();
+    // Select first category by default
+    if (categories.length > 0) {
+      this._selectCategory(categories[0].id, false);
+    }
+  }
+
+  /**
+   * Prepend additional categories (e.g. custom emoji packs loaded async).
+   * If a category with the same id already exists it is replaced.
+   */
+  prependCategories(categories: EmojiPickerCategory[]): void {
+    for (const cat of categories) {
+      const idx = this._categories.findIndex((c) => c.id === cat.id);
+      if (idx >= 0) {
+        this._categories[idx] = cat;
+      } else {
+        this._categories.unshift(cat);
+      }
+    }
+    this._rebuildCategoryBar();
+    // Re-render active category in case it was updated
+    if (this._activeCategoryId) {
+      const active = this._categories.find((c) => c.id === this._activeCategoryId);
+      if (active) {
+        this._allEntries = active.entries;
+        this._applyFilter(this._searchEl.value);
+      }
+    }
+    // If we just added the first categories, select the first one
+    if (!this._activeCategoryId && this._categories.length > 0) {
+      this._selectCategory(this._categories[0].id, false);
+    }
+  }
+
+  /** Replace the displayed emoji entries (flat list, no categories). */
   setEntries(entries: EmojiEntry[]): void {
     this._allEntries = entries;
     this._applyFilter(this._searchEl.value);
+    // Focus first cell if picker is currently shown but focus was on the container
+    if (this.isVisible() && document.activeElement === this._el) {
+      this._focusCell(0);
+    }
   }
 
   setTab(tab: PickerTab): void {
@@ -130,6 +195,58 @@ export class EmojiPicker {
   }
 
   // ── Private ────────────────────────────────────────────────────────────
+
+  private _rebuildCategoryBar(): void {
+    this._categoryBarEl.innerHTML = "";
+    if (this._categories.length === 0) {
+      this._categoryBarEl.style.display = "none";
+      return;
+    }
+    this._categoryBarEl.style.display = "";
+
+    for (const cat of this._categories) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "emoji-picker__category-btn";
+      btn.dataset.categoryId = cat.id;
+      btn.title = cat.name;
+      btn.setAttribute("tabindex", "-1");
+
+      if (cat.icon.startsWith("data:") || cat.icon.startsWith("mxc://")) {
+        const img = document.createElement("img");
+        img.src = cat.icon;
+        img.alt = cat.name;
+        img.className = "emoji-picker__category-img";
+        btn.appendChild(img);
+      } else {
+        btn.textContent = cat.icon;
+      }
+
+      btn.addEventListener("click", () => this._selectCategory(cat.id, true));
+      this._categoryBarEl.appendChild(btn);
+    }
+
+    this._updateCategoryHighlight();
+  }
+
+  private _selectCategory(id: string, focusGrid: boolean): void {
+    const cat = this._categories.find((c) => c.id === id);
+    if (!cat) return;
+    this._activeCategoryId = id;
+    this._updateCategoryHighlight();
+    this._allEntries = cat.entries;
+    this._applyFilter(this._searchEl.value);
+    if (focusGrid) this._focusCell(0);
+  }
+
+  private _updateCategoryHighlight(): void {
+    for (const btn of this._categoryBarEl.querySelectorAll<HTMLElement>(".emoji-picker__category-btn")) {
+      btn.classList.toggle(
+        "emoji-picker__category-btn--active",
+        btn.dataset.categoryId === this._activeCategoryId
+      );
+    }
+  }
 
   private _switchTab(tab: PickerTab): void {
     this._currentTab = tab;
@@ -143,11 +260,17 @@ export class EmojiPicker {
 
   private _applyFilter(query: string): void {
     const q = query.toLowerCase().trim();
-    this._filteredEntries = q
-      ? this._allEntries.filter(
-          (e) => e.shortcode.toLowerCase().includes(q) || e.key.includes(q)
-        )
-      : this._allEntries;
+    if (q) {
+      // Search across ALL categories when a query is active
+      const allEntries = this._categories.length > 0
+        ? this._categories.flatMap((c) => c.entries)
+        : this._allEntries;
+      this._filteredEntries = allEntries.filter(
+        (e) => e.shortcode.toLowerCase().includes(q) || e.key.includes(q)
+      );
+    } else {
+      this._filteredEntries = this._allEntries;
+    }
     this._renderGrid();
     this._focusIndex = 0;
   }
@@ -183,7 +306,10 @@ export class EmojiPicker {
 
   private _focusCell(index: number): void {
     const cells = this._gridEl.querySelectorAll<HTMLElement>(".emoji-picker__cell");
-    if (cells.length === 0) return;
+    if (cells.length === 0) {
+      this._el.focus();
+      return;
+    }
     this._focusIndex = Math.max(0, Math.min(index, cells.length - 1));
     for (let i = 0; i < cells.length; i++) {
       cells[i].setAttribute("tabindex", i === this._focusIndex ? "0" : "-1");
@@ -202,11 +328,10 @@ export class EmojiPicker {
   private _handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
-    const cells = this._gridEl.querySelectorAll<HTMLElement>(".emoji-picker__cell");
-    const total = cells.length;
+    const isEscape = e.key === "Escape" || (e.ctrlKey && e.key === "[");
 
     // Escape: if search active, close search; otherwise close picker
-    if (this._searchActive && e.key === "Escape") {
+    if (this._searchActive && isEscape) {
       e.preventDefault();
       this._searchActive = false;
       this._searchEl.style.display = "none";
@@ -216,13 +341,13 @@ export class EmojiPicker {
       return;
     }
 
-    if (e.key === "Escape") {
+    if (isEscape) {
       e.preventDefault();
       this.hide();
       return;
     }
 
-    // Tab and / are overlay-specific — not remappable
+    // Tab — cycle emoji/sticker/gif tabs
     if (e.key === "Tab" && !e.shiftKey) {
       e.preventDefault();
       const tabs: PickerTab[] = ["emoji", "sticker", "gif"];
@@ -231,6 +356,19 @@ export class EmojiPicker {
       return;
     }
 
+    // [ / ] — cycle emoji categories
+    if (e.key === "[" && this._categories.length > 0) {
+      e.preventDefault();
+      this._cycleCategory(-1);
+      return;
+    }
+    if (e.key === "]" && this._categories.length > 0) {
+      e.preventDefault();
+      this._cycleCategory(1);
+      return;
+    }
+
+    // / — open search
     if (e.key === "/" && !this._searchActive) {
       e.preventDefault();
       this._searchActive = true;
@@ -246,6 +384,8 @@ export class EmojiPicker {
       return;
     }
 
+    const cells = this._gridEl.querySelectorAll<HTMLElement>(".emoji-picker__cell");
+    const total = cells.length;
     if (total === 0) return;
 
     const result = keymapManager.resolveKey(e.key, "picker");
@@ -284,5 +424,12 @@ export class EmojiPicker {
     } else if (result.kind === "partial") {
       e.preventDefault();
     }
+  }
+
+  private _cycleCategory(dir: -1 | 1): void {
+    if (this._categories.length === 0) return;
+    const idx = this._categories.findIndex((c) => c.id === this._activeCategoryId);
+    const next = (idx + dir + this._categories.length) % this._categories.length;
+    this._selectCategory(this._categories[next].id, true);
   }
 }
