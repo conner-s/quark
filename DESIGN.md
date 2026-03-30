@@ -682,6 +682,7 @@ quark/
 - [ ] Performance profiling — large rooms (1000+ messages), many emoji packs
 - [ ] Command audit - make sure all commands are fully implemented
 - [ ] Use blobs rather than data URLs so the browser can cache (I think this makes sense? Tell me if it doesn't.)
+- [ ] Unload messages far out of view in timeline when adding new messages to prevent overloading the timeline
 
 #### Bugs
 - [x] rooms don't always load. (scroll getting stuck fixed — cancelled scroll animation on room switch)
@@ -722,5 +723,12 @@ quark/
 - [x] Sometimes unable to navigate timeline — fixed two root causes: (1) _selectedIndex not reset on room switch left it out-of-range, making selectNext/selectPrev think the boundary was reached; (2) clicking the timeline now fires an onFocus callback that updates activePanel to "timeline" so j/k immediately routes there
 - [ ] timeline navigation broken after loading more messages
 - [x] Still can't see custom emotes, only getting stickers
+- [ ] Emoji and sticker pickers are separate dom elements; just recreate the content box, don't recreate the whole popup
+- [ ] Emoji and sticker pickers initially appear in the wrong position
+- [ ] Custom emoji tabs pop in after emoji picker load; should probably cache these? May need a way to invalidate the cache if stickers/emoji are added...
+- [ ] Show emoji categories in react picker
+- [ ] When sending a message, break into new bubble on the same condition as loading existing messages.
+- [ ] Redacted messages don't disappear until reloading the chat
+- [ ] Selecting a room in some spaces returns the room list to the home view
 
 
