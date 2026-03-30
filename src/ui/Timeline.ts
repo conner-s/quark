@@ -366,8 +366,16 @@ export class Timeline {
     // Clicking inside the timeline notifies panels.ts so that activePanel is
     // updated to "timeline". This ensures keyboard navigation (j/k) works
     // immediately after a mouse click without needing to press l first.
-    this._el.addEventListener("click", () => {
+    // Also sync _selectedIndex so subsequent keyboard actions (r/e/dd) target
+    // the clicked message.
+    this._el.addEventListener("click", (e) => {
       this._onFocusCallback?.();
+      const msgEl = (e.target as HTMLElement).closest<HTMLElement>("[data-message-id]");
+      if (msgEl) {
+        const eventId = msgEl.dataset.messageId;
+        const idx = this._messages.findIndex((m) => m.id === eventId);
+        if (idx >= 0) this._setSelected(idx);
+      }
     });
   }
 

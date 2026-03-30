@@ -58,6 +58,7 @@ import type { MemberEntry } from "../ui/MemberList.js";
 import type { SpaceItem } from "../ui/SpaceStrip.js";
 import type { EmojiEntry } from "../ui/EmojiPicker.js";
 import type { StickerEntry } from "../ui/StickerPicker.js";
+import type { CustomEmojiEntry } from "../ui/QuickReactPicker.js";
 import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
 
 // ── Own-sent event deduplication ─────────────────────────────────────────────
@@ -1007,8 +1008,30 @@ export function openEmojiPicker(): void {
  * selected, otherwise shows the current user's own profile.
  */
 export async function openProfileDialog(): Promise<void> {
-  const { profileDialog, timeline } = getComponents();
+  const { profileDialog, timeline, memberList } = getComponents();
   try {
+    // When the member list is focused, show that member's profile instead of
+    // the selected message's sender.
+    if (AppState.get("activePanel") === "members") {
+      const focused = memberList.getFocusedMember();
+      if (focused) {
+        const mxcUrl = _memberAvatarMxc.get(focused.userId);
+        const cachedDataUrl = mxcUrl ? _avatarDataUrl.get(mxcUrl) : undefined;
+        let avatarUrl: string | null = null;
+        if (cachedDataUrl) {
+          avatarUrl = cachedDataUrl;
+        } else if (mxcUrl) {
+          try {
+            const dl = await downloadMedia(mxcUrl);
+            avatarUrl = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+            _avatarDataUrl.set(mxcUrl, avatarUrl);
+          } catch { /* non-critical */ }
+        }
+        profileDialog.show({ userId: focused.userId, displayName: focused.name, avatarUrl });
+        return;
+      }
+    }
+
     const selectedId = timeline.selectedMessageId;
     if (selectedId) {
       // Show the sender of the selected message
@@ -1164,11 +1187,31 @@ export async function openStickerPicker(): Promise<void> {
           id: `${pack.pack_id}::${e.shortcode}`,
           name: e.body ?? e.shortcode,
           url: e.url,
+          // mxc:// URLs are not directly displayable — resolved below
+          thumbnailUrl: e.url.startsWith("mxc://") ? undefined : e.url,
           packName: pack.display_name ?? pack.pack_id,
         });
       }
     }
     stickerPicker.setStickers(stickers);
+
+    // Resolve mxc:// thumbnails asynchronously and patch cells as each arrives
+    for (const sticker of stickers) {
+      if (!sticker.url.startsWith("mxc://")) continue;
+      const mxc = sticker.url;
+      if (_emojiImageCache.has(mxc)) {
+        stickerPicker.updateStickerThumbnail(sticker.id, _emojiImageCache.get(mxc)!);
+        continue;
+      }
+      const capturedId = sticker.id;
+      getThumbnail(mxc, 96, 96)
+        .then((dl) => {
+          const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+          _emojiImageCache.set(mxc, dataUrl);
+          stickerPicker.updateStickerThumbnail(capturedId, dataUrl);
+        })
+        .catch(() => { /* non-critical */ });
+    }
   } catch {
     stickerPicker.setStickers([]);
   }
@@ -1772,6 +1815,41 @@ export function openQuickReactPicker(eventId: string): void {
   const { timeline, quickReactPicker } = getComponents();
   const anchor = timeline.getMessageElementById(eventId);
   quickReactPicker.show(eventId, anchor);
+
+  // Load custom emoji for current room and inject into the picker
+  const roomId = AppState.get("currentRoomId");
+  getEmojiPacks(roomId ?? undefined)
+    .then((packs) => {
+      const custom: CustomEmojiEntry[] = [];
+      for (const pack of packs) {
+        for (const entry of pack.emojis) {
+          const mxc = entry.url;
+          const cached = _emojiImageCache.get(mxc);
+          if (cached) {
+            custom.push({ key: `:${entry.shortcode}:`, shortcode: entry.shortcode, imageUrl: cached });
+          } else if (mxc.startsWith("mxc://")) {
+            // Resolve then update picker once available
+            getThumbnail(mxc, 32, 32).then((dl) => {
+              const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+              _emojiImageCache.set(mxc, dataUrl);
+              // Re-build if picker is still open
+              if (quickReactPicker.isVisible()) {
+                quickReactPicker.setCustomEmoji(
+                  custom.map((c) => c.key === `:${entry.shortcode}:` ? { ...c, imageUrl: dataUrl } : c)
+                );
+              }
+            }).catch(() => { /* non-critical */ });
+            custom.push({ key: `:${entry.shortcode}:`, shortcode: entry.shortcode, imageUrl: "" });
+          } else {
+            custom.push({ key: `:${entry.shortcode}:`, shortcode: entry.shortcode, imageUrl: mxc });
+          }
+        }
+      }
+      if (quickReactPicker.isVisible()) {
+        quickReactPicker.setCustomEmoji(custom.filter((c) => c.imageUrl));
+      }
+    })
+    .catch(() => { /* non-critical */ });
 }
 
 /**

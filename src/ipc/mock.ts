@@ -296,6 +296,17 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       };
     }
 
+    case "download_media": {
+      // Return a placeholder SVG so emoji/sticker previews render in mock mode.
+      const label = ((args?.mxcUrl as string) ?? "").split("/").pop()?.slice(0, 8) ?? "media";
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">` +
+        `<rect width="64" height="64" rx="8" fill="#00ff41" opacity="0.15"/>` +
+        `<rect width="64" height="64" rx="8" fill="none" stroke="#00ff41" stroke-width="1.5" opacity="0.6"/>` +
+        `<text x="32" y="38" text-anchor="middle" font-family="monospace" font-size="9" fill="#00ff41">${label}</text>` +
+        `</svg>`;
+      return { data_base64: btoa(svg), mime_type: "image/svg+xml", filename: null };
+    }
+
     default:
       console.warn(`[mock] unhandled command: ${cmd}`, args);
       return null;

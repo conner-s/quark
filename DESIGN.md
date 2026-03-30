@@ -697,7 +697,7 @@ quark/
 - [x] Clicking in the compose box allows you to type without switching to insert mode — click handler on input field transitions to Insert mode
 - [x] Custom emojis are not shown in shortcode preview, emoji picker, or react picker — mxc:// URLs resolved to data: URLs before display (emoji picker + shortcode preview)
 - [x] ctrl + [ does not work as escape in all places (i.e. react emoji picker) — QuickReactPicker now handles Ctrl+[ in both input and grid handlers
-- [ ] React picker and emoji picker are separate entities; probably best to combine for consistency and maintainability
+- [x] React picker and emoji picker are separate entities; probably best to combine for consistency and maintainability — QuickReactPicker refactored: _allData + _rebuildButtons() replaces hardcoded REACTION_DATA; setCustomEmoji() prepends MSC2545 custom emoji with img thumbnails
 - [x] Noticeable delay when switching rooms — timeline rendered immediately from getTimeline, members fetched concurrently and UI updated when ready
 - [x] Loading new messages scrolls to a random position — preserveScroll option in setMessages(); secondary member-data re-render no longer jumps to bottom
 - [x] App does not use my KDE window bar, seems to have custom?
@@ -708,15 +708,15 @@ quark/
 - [x] Selecting a space should move to the rooms list — focusPanel("roomlist") called from all selectSpace() branches
 - [x] Message recency sorting doesn't seem to be working for DMs — last_activity_ts from Rust timeline cache used as primary sort key
 - [x] Viewing a room doesn't dismiss the unread count — mark_room_read Tauri command sends read receipt; local cache zeroed optimistically
-- [ ] Custom emotes still don't show up in the react or message emoji picker or in shortcode
-- [ ] Sticker previews don't render in sticker picker
+- [x] Custom emotes still don't show up in the react or message emoji picker or in shortcode — fixed race condition in refreshCustomEmoji (capture by object ref, not index); custom emoji injected into QuickReactPicker via openQuickReactPicker(); mock download_media handler added
+- [x] Sticker previews don't render in sticker picker — async getThumbnail() resolves mxc:// URLs per sticker; updateStickerThumbnail() patches live img src without full re-render
 - [x] Animated avatars don't work — use downloadMedia instead of getThumbnail for avatars; Rust sniffs MIME from magic bytes
 - [x] There's currently no way to log out — :logout command revokes session, clears storage, reloads to login screen
 - [x] Timeline disappears briefly when loading new messages, reappears if scroll again.
 - [x] Home view should be sorted by recent
 - [x] Escape/ctrl + [ don't close profile popup — added tabindex="-1" to dialog element, call focus() on show(), and handle Ctrl+[ in keydown handler
-- [ ] Clicking a message should also update the keyboard's selected message
-- [ ] pressing P while in member list opens the profile of the currently selected message's sender rather than the selected user in the member list
+- [x] Clicking a message should also update the keyboard's selected message — click handler on _el uses closest("[data-message-id]") to find index and calls _setSelected()
+- [x] pressing P while in member list opens the profile of the currently selected message's sender rather than the selected user in the member list — openProfileDialog() checks activePanel==="members" first and uses memberList.getFocusedMember()
 - [x] Keyboard nav doesn't quite scroll far enough when moving to an off-screen message — replaced scrollIntoView({block:"nearest"}) with a custom _scrollIntoViewWithScrolloff() that keeps 80px margin on both edges (vim-style scrolloff)
 - [x] Sometimes unable to navigate timeline — fixed two root causes: (1) _selectedIndex not reset on room switch left it out-of-range, making selectNext/selectPrev think the boundary was reached; (2) clicking the timeline now fires an onFocus callback that updates activePanel to "timeline" so j/k immediately routes there
 
