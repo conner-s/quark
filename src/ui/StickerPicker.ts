@@ -1,5 +1,7 @@
 // Sticker grid browser
 
+import type { PickerTab } from "./EmojiPicker.js";
+
 export interface StickerEntry {
   id: string;
   /** Display name / shortcode */
@@ -13,12 +15,14 @@ export interface StickerEntry {
 }
 
 type StickerSelectCallback = (sticker: StickerEntry) => void;
+type TabChangeCallback = (tab: PickerTab) => void;
 
 const STICKER_COLS = 4;
 
 /** Keyboard-navigable sticker pack browser. */
 export class StickerPicker {
   private _el: HTMLElement;
+  private _tabBarEl: HTMLElement;
   private _searchEl: HTMLInputElement;
   private _packLabelEl: HTMLElement;
   private _gridEl: HTMLElement;
@@ -29,6 +33,7 @@ export class StickerPicker {
   private _searchActive = false;
 
   private _onSelect: StickerSelectCallback | null = null;
+  private _onTabChange: TabChangeCallback | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -37,6 +42,32 @@ export class StickerPicker {
     this._el.setAttribute("aria-label", "Sticker picker");
     this._el.setAttribute("aria-modal", "true");
     this._el.style.display = "none";
+
+    // ── Tab bar ───────────────────────────────────────────────────────────
+    this._tabBarEl = document.createElement("div");
+    this._tabBarEl.className = "emoji-picker__tabs";
+    this._tabBarEl.setAttribute("role", "tablist");
+    this._el.appendChild(this._tabBarEl);
+
+    const tabs: Array<{ id: PickerTab; label: string }> = [
+      { id: "emoji", label: "Emoji" },
+      { id: "sticker", label: "Stickers" },
+      { id: "gif", label: "GIF" },
+    ];
+    for (const tab of tabs) {
+      const btn = document.createElement("button");
+      btn.className = "emoji-picker__tab";
+      btn.dataset.tab = tab.id;
+      btn.textContent = tab.label;
+      btn.setAttribute("role", "tab");
+      btn.setAttribute("type", "button");
+      btn.setAttribute("aria-selected", tab.id === "sticker" ? "true" : "false");
+      if (tab.id === "sticker") btn.classList.add("emoji-picker__tab--active");
+      btn.addEventListener("click", () => {
+        if (tab.id !== "sticker") this._onTabChange?.(tab.id);
+      });
+      this._tabBarEl.appendChild(btn);
+    }
 
     // ── Pack label ───────────────────────────────────────────────────────
     this._packLabelEl = document.createElement("div");
@@ -64,6 +95,13 @@ export class StickerPicker {
 
     // ── Keyboard handling ────────────────────────────────────────────────
     this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
+
+    // ── Click outside closes ─────────────────────────────────────────────
+    document.addEventListener("mousedown", (e) => {
+      if (this.isVisible() && !this._el.contains(e.target as Node)) {
+        this.hide();
+      }
+    });
   }
 
   getElement(): HTMLElement {
@@ -72,6 +110,10 @@ export class StickerPicker {
 
   onSelect(cb: StickerSelectCallback): void {
     this._onSelect = cb;
+  }
+
+  onTabChange(cb: TabChangeCallback): void {
+    this._onTabChange = cb;
   }
 
   isVisible(): boolean {
@@ -196,7 +238,9 @@ export class StickerPicker {
     const cells = this._gridEl.querySelectorAll<HTMLElement>(".sticker-picker__cell");
     const total = cells.length;
 
-    if (this._searchActive && e.key === "Escape") {
+    const isEscape = e.key === "Escape" || (e.ctrlKey && e.key === "[");
+
+    if (this._searchActive && isEscape) {
       e.preventDefault();
       this._searchActive = false;
       this._searchEl.style.display = "none";
@@ -206,7 +250,7 @@ export class StickerPicker {
       return;
     }
 
-    if (e.key === "Escape") {
+    if (isEscape) {
       e.preventDefault();
       this.hide();
       return;

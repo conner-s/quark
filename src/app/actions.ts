@@ -1168,6 +1168,15 @@ export async function openStickerPicker(): Promise<void> {
   if (!_stickerPickerWired) {
     _stickerPickerWired = true;
 
+    stickerPicker.onTabChange((tab) => {
+      stickerPicker.hide();
+      if (tab === "emoji") {
+        openEmojiPicker();
+      } else if (tab === "gif") {
+        openGifPicker();
+      }
+    });
+
     stickerPicker.onSelect(async (sticker) => {
       const roomId = AppState.get("currentRoomId");
       if (!roomId) {

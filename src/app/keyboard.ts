@@ -451,9 +451,15 @@ export function setupKeyboard(components: AppComponents): void {
       }
       return;
     }
-    if (gifPicker.isVisible() || stickerPicker.isVisible() ||
-        verification.isVisible() || helpDialog.isVisible() || profileDialog.isVisible() ||
-        devicePicker.isVisible()) return;
+    if (stickerPicker.isVisible()) {
+      if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
+        e.preventDefault();
+        stickerPicker.hide();
+      }
+      return;
+    }
+    if (gifPicker.isVisible() || verification.isVisible() || helpDialog.isVisible() ||
+        profileDialog.isVisible() || devicePicker.isVisible()) return;
 
     // Escape (or Ctrl+[) always resets to Normal (if not already) and clears sequences
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {

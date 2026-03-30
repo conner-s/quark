@@ -1126,7 +1126,7 @@ span.reaction__emoji {
   bottom: 80px;
   right: 16px;
   width: 340px;
-  max-height: min(420px, calc(100vh - 100px));
+  height: min(420px, calc(100vh - 100px));
   background-color: var(--bg);
   border: var(--border-width) solid var(--accent-primary);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
