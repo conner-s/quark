@@ -412,6 +412,10 @@ export class Timeline {
     const oldScrollHeight = this._el.scrollHeight;
     const oldScrollTop = this._el.scrollTop;
     this._messages = [...msgs, ...this._messages];
+    // Shift selection forward so it still points at the same message after prepend.
+    if (this._selectedIndex >= 0) {
+      this._selectedIndex += msgs.length;
+    }
 
     // Insert new DOM nodes at the top without clearing existing content.
     // This avoids blanking the visible timeline while the DOM rebuilds.
