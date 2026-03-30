@@ -1414,8 +1414,8 @@ span.reaction__emoji {
 /* ── Input bar ───────────────────────────────────────────────────────────── */
 
 /*
- * padding-left: 0 so that: mode margin-left (4px) + mode width (40px) = 44px
- * = timeline padding-left (12px) + avatar width (24px) + wrapper gap (8px).
+ * padding-left: 8px so that: padding-left (8px) + mode margin-left (4px) + mode width (40px) = 52px
+ * = timeline padding-left (12px) + avatar width (32px) + wrapper gap (8px).
  * This aligns the compose box left-edge exactly with .message-group boxes above,
  * making the send animation a clean vertical translate.
  */
@@ -1426,7 +1426,7 @@ span.reaction__emoji {
   flex-shrink: 0;
   background-color: var(--bg);
   margin-top: auto;
-  padding: 16px 16px 16px 0;
+  padding: 16px 16px 16px 8px;
 }
 
 .input-bar__mode {
