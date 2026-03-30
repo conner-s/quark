@@ -282,7 +282,8 @@ export async function selectRoom(roomId: string): Promise<void> {
   _paginationLoading = false;
   roomList.setActiveRoom(roomId);
 
-  // Clear unread badge optimistically in local cache, then send read receipt
+  // Clear unread badge optimistically in local cache, then send read receipt.
+  // Use updateRoomBadge (not setRooms) so the current space filter is preserved.
   const cached = AppState.get("roomListCache");
   if (cached.some((r) => r.room_id === roomId && (r.unread_count > 0 || r.notification_count > 0))) {
     AppState.set(
@@ -291,9 +292,7 @@ export async function selectRoom(roomId: string): Promise<void> {
         r.room_id === roomId ? { ...r, unread_count: 0, notification_count: 0 } : r
       )
     );
-    roomList.setRooms(
-      AppState.get("roomListCache").map(roomInfoToEntry)
-    );
+    roomList.updateRoomBadge(roomId, 0, 0);
   }
   void markRoomRead(roomId).catch(() => {/* non-fatal: badge already cleared locally */});
 
@@ -893,6 +892,9 @@ export async function redactMessage(eventId: string): Promise<void> {
 
   try {
     await ipcRedactMessage(roomId, eventId);
+    // Remove message from timeline immediately (don't wait for re-sync)
+    const { timeline } = getComponents();
+    timeline.removeMessage(eventId);
     showSuccess("Message deleted");
   } catch (err) {
     showError(`Failed to delete: ${err instanceof Error ? err.message : String(err)}`);

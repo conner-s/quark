@@ -1207,7 +1207,7 @@ span.reaction__emoji {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: profile-dialog-in 80ms ease;
+  animation: picker-in 80ms ease;
 }
 
 .emoji-picker__tabs {
@@ -1341,7 +1341,7 @@ span.reaction__emoji {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: profile-dialog-in 80ms ease;
+  animation: picker-in 80ms ease;
 }
 
 .sticker-picker__pack-label {
@@ -2314,6 +2314,13 @@ a:hover {
 @keyframes profile-dialog-in {
   from { opacity: 0; transform: translate(-50%, calc(-50% - 4px)); }
   to   { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+/* Fade-in for fixed-position overlays (emoji/sticker pickers) that must not
+   have a centering transform applied — profile-dialog-in is only for dialogs. */
+@keyframes picker-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .profile-dialog__header {
