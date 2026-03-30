@@ -164,15 +164,18 @@ export class QuickReactPicker {
     }
 
     this._el.style.display = "flex";
-    // Defer focus so the element is rendered first; also check for bottom overflow.
+    // Defer focus so the element is rendered first; also check for overflow.
     requestAnimationFrame(() => {
       if (anchor) {
         const pickerRect = this._el.getBoundingClientRect();
         if (pickerRect.bottom > window.innerHeight - 8) {
           // Flip upward: position the picker above the anchor instead
           const anchorRect = anchor.getBoundingClientRect();
+          const desiredBottom = window.innerHeight - anchorRect.top + 6;
+          // Clamp so the picker doesn't go off-screen at the top
+          const maxBottom = window.innerHeight - pickerRect.height - 8;
           this._el.style.top = "";
-          this._el.style.bottom = `${window.innerHeight - anchorRect.top + 6}px`;
+          this._el.style.bottom = `${Math.min(desiredBottom, Math.max(8, maxBottom))}px`;
         }
       }
       this._inputEl.focus();

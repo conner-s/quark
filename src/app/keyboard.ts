@@ -444,7 +444,14 @@ export function setupKeyboard(components: AppComponents): void {
     // their own keys with stopPropagation. The check here is a belt-and-
     // suspenders guard for the case where focus escapes the overlay element.
     if (quickReactPicker.isVisible()) return;
-    if (emojiPicker.isVisible() || gifPicker.isVisible() || stickerPicker.isVisible() ||
+    if (emojiPicker.isVisible()) {
+      if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
+        e.preventDefault();
+        emojiPicker.hide();
+      }
+      return;
+    }
+    if (gifPicker.isVisible() || stickerPicker.isVisible() ||
         verification.isVisible() || helpDialog.isVisible() || profileDialog.isVisible() ||
         devicePicker.isVisible()) return;
 

@@ -103,6 +103,13 @@ export class EmojiPicker {
 
     // ── Keyboard handling ────────────────────────────────────────────────
     this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
+
+    // ── Click outside closes ─────────────────────────────────────────────
+    document.addEventListener("mousedown", (e) => {
+      if (this.isVisible() && !this._el.contains(e.target as Node)) {
+        this.hide();
+      }
+    });
   }
 
   getElement(): HTMLElement {
