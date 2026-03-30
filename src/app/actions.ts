@@ -980,7 +980,7 @@ export function openEmojiPicker(): void {
       const customEntries: EmojiEntry[] = [];
       for (const pack of packs) {
         for (const e of pack.emojis) {
-          if (!e.usage.includes("sticker")) {
+          if (e.usage.includes("emoticon")) {
             customEntries.push({ key: `:${e.shortcode}:`, shortcode: e.shortcode, imageUrl: e.url });
           }
         }
@@ -1823,6 +1823,7 @@ export function openQuickReactPicker(eventId: string): void {
       const custom: CustomEmojiEntry[] = [];
       for (const pack of packs) {
         for (const entry of pack.emojis) {
+          if (!entry.usage.includes("emoticon")) continue;
           const mxc = entry.url;
           const cached = _emojiImageCache.get(mxc);
           if (cached) {

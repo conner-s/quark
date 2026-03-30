@@ -187,6 +187,7 @@ async function refreshCustomEmoji(): Promise<void> {
     _customEmoji = [];
     for (const pack of packs) {
       for (const entry of pack.emojis) {
+        if (!entry.usage.includes("emoticon")) continue;
         const customEntry: ShortcodeEntry = {
           key: `:${entry.shortcode}:`,
           shortcode: entry.shortcode,

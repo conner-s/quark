@@ -721,6 +721,6 @@ quark/
 - [x] Keyboard nav doesn't quite scroll far enough when moving to an off-screen message — replaced scrollIntoView({block:"nearest"}) with a custom _scrollIntoViewWithScrolloff() that keeps 80px margin on both edges (vim-style scrolloff)
 - [x] Sometimes unable to navigate timeline — fixed two root causes: (1) _selectedIndex not reset on room switch left it out-of-range, making selectNext/selectPrev think the boundary was reached; (2) clicking the timeline now fires an onFocus callback that updates activePanel to "timeline" so j/k immediately routes there
 - [ ] timeline navigation broken after loading more messages
-- [ ] Still can't see custom emotes, only getting stickers
+- [x] Still can't see custom emotes, only getting stickers
 
 
