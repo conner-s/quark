@@ -3,6 +3,44 @@
 export type PresenceStatus = "online" | "unavailable" | "offline";
 export type PowerLevel = "admin" | "mod" | "member";
 
+// ── Avatar helpers ────────────────────────────────────────────────────────────
+
+const AVATAR_COLORS = [
+  "#00ff41", "#00aaff", "#ff4466", "#ffaa00",
+  "#aa44ff", "#00ffcc", "#ff6600", "#44ccff",
+];
+
+function _memberColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+function _buildFallbackAvatar(name: string): HTMLElement {
+  const color = _memberColor(name);
+  const initial = name[0]?.toUpperCase() ?? "?";
+  const el = document.createElement("span");
+  el.className = "member-list__avatar member-list__avatar--fallback";
+  el.textContent = initial;
+  el.style.color = color;
+  el.style.border = `1px solid ${color}`;
+  el.setAttribute("aria-hidden", "true");
+  return el;
+}
+
+function _buildAvatarElement(name: string, avatarUrl?: string): HTMLElement {
+  if (avatarUrl) {
+    const img = document.createElement("img");
+    img.className = "member-list__avatar";
+    img.src = avatarUrl;
+    img.alt = "";
+    img.setAttribute("aria-hidden", "true");
+    img.onerror = () => img.replaceWith(_buildFallbackAvatar(name));
+    return img;
+  }
+  return _buildFallbackAvatar(name);
+}
+
 export interface MemberEntry {
   id: string;
   /** Display name */
@@ -194,15 +232,18 @@ export class MemberList {
     el.className = "member-list__item";
     el.setAttribute("role", "listitem");
     el.setAttribute("tabindex", "0");
-    el.setAttribute("aria-label", `${member.name}, ${member.powerLevel}`);
+    const presenceLabel = member.presence ?? "offline";
+    el.setAttribute("aria-label", `${member.name}, ${member.powerLevel}, ${presenceLabel}`);
     el.dataset.memberId = member.id;
 
+    // Avatar
+    el.appendChild(_buildAvatarElement(member.name, member.avatarUrl));
+
     // Presence indicator
-    const presence = member.presence ?? "offline";
     const presenceEl = document.createElement("span");
-    presenceEl.className = `member-list__presence member-list__presence--${presence}`;
-    presenceEl.textContent = PRESENCE_SYMBOL[presence];
-    presenceEl.setAttribute("aria-label", presence);
+    presenceEl.className = `member-list__presence member-list__presence--${presenceLabel}`;
+    presenceEl.textContent = PRESENCE_SYMBOL[presenceLabel];
+    presenceEl.setAttribute("aria-label", presenceLabel);
     el.appendChild(presenceEl);
 
     // Display name

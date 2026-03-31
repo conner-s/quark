@@ -258,6 +258,10 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     img.className = "message__image";
     img.src = msg.mediaUrl ?? "";
     img.alt = msg.mediaAlt ?? "image";
+    // Mark GIFs so the focus/blur handler can pause/resume animation
+    if ((msg.mediaUrl ?? "").match(/\.gif($|\?)/i)) {
+      img.dataset.gif = "1";
+    }
     row.appendChild(img);
   } else if (type === "sticker") {
     const img = document.createElement("img");

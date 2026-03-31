@@ -653,7 +653,7 @@ quark/
 - [ ] Add sticker picker dialogue
 - [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach shows "not yet implemented" toast
 - [x] Support pasting images into the compose box — clipboard image paste detected in `Input`, converted to base64, uploaded via new `send_pasted_image` IPC (Rust: decode base64 → upload → send as `m.image`)
-- [ ] Polish pass over top bar displaying room info. Take cues from the message UI.
+- [x] Polish pass over top bar displaying room info. Take cues from the message UI.
 - [x] Polish pass over verification UI; currently unstyled at the bottom
 - [ ] Emoji and sticker picker styling. Should show in box above compose area.
 - [ ] Threads animate open a space between message bubbles and display there.
@@ -664,9 +664,9 @@ quark/
 - [ ] Pinned messages UI
 - [ ] Implement themes (command currently does nothing)
 - [ ] Make space UI bigger
-- [ ] Show avatars in member list
+- [x] Show avatars in member list
 - [ ] Profile images should snap to the top of the visible area if the message's position would place it out of view
-- [ ] Pause gif animation while not focused
+- [x] Pause gif animation while not focused
 - [x] Detect links
 - [ ] Add more info to profile screen
 - [x] Split up messages more than 30 minutes apart
@@ -726,7 +726,7 @@ quark/
 - [ ] Emoji and sticker pickers are separate dom elements; just recreate the content box, don't recreate the whole popup
 - [ ] Emoji and sticker pickers initially appear in the wrong position
 - [ ] Custom emoji tabs pop in after emoji picker load; should probably cache these? May need a way to invalidate the cache if stickers/emoji are added...
-- [ ] Show emoji categories in react picker
+- [x] Show emoji categories in react picker
 - [ ] When sending a message, break into new bubble on the same condition as loading existing messages.
 - [ ] Redacted messages don't disappear until reloading the chat
 - [ ] Selecting a room in some spaces returns the room list to the home view

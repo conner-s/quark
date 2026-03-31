@@ -94,6 +94,8 @@ const _memberDisplayName = new Map<string, string>();
 const _memberAvatarMxc = new Map<string, string>();
 /** mxc:// URL → blob: URL, populated as thumbnails are downloaded */
 const _avatarDataUrl = new Map<string, string>();
+/** roomId → resolved blob: URL for the room avatar */
+const _roomAvatarDataUrl = new Map<string, string>();
 
 /**
  * Convert a downloaded media blob to a Blob URL.
@@ -300,13 +302,33 @@ export async function selectRoom(roomId: string): Promise<void> {
   const roomInfo = updatedCache.find((r) => r.room_id === roomId);
   const roomName = roomInfo?.name ?? roomId;
 
+  // Pass a cached room avatar URL if one has already been resolved
+  const cachedRoomAvatar = roomInfo?.room_id
+    ? _roomAvatarDataUrl.get(roomInfo.room_id)
+    : undefined;
+
   roomHeader.setRoom(
     roomName,
     roomInfo?.topic ?? undefined,
     roomInfo?.member_count,
-    roomInfo?.is_encrypted
+    roomInfo?.is_encrypted,
+    cachedRoomAvatar
   );
   statusBar.setRoom(roomName);
+
+  // Resolve the room avatar in the background if not already cached
+  if (roomInfo?.avatar_url && roomInfo.room_id && !_roomAvatarDataUrl.has(roomInfo.room_id)) {
+    const mxcUrl = roomInfo.avatar_url;
+    const targetRoomId = roomInfo.room_id;
+    void downloadMedia(mxcUrl).then((dl) => {
+      const blobUrl = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+      _roomAvatarDataUrl.set(targetRoomId, blobUrl);
+      // Only update the header if the user is still looking at this room
+      if (AppState.get("currentRoomId") === targetRoomId) {
+        getComponents().roomHeader.setAvatarUrl(blobUrl);
+      }
+    }).catch(() => { /* non-fatal: fallback letter stays */ });
+  }
 
   try {
     // Fetch timeline first for fast initial render; members come in parallel
