@@ -463,12 +463,12 @@ body {
 }
 
 .room-header__sep {
-  color: var(--roomlist-muted);
+  color: color-mix(in srgb, var(--fg) 35%, transparent);
   flex-shrink: 0;
 }
 
 .room-header__topic {
-  color: var(--roomlist-muted);
+  color: color-mix(in srgb, var(--fg) 55%, transparent);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -481,13 +481,13 @@ body {
   align-items: center;
   gap: 0;
   flex-shrink: 0;
-  color: var(--roomlist-muted);
+  color: color-mix(in srgb, var(--fg) 65%, transparent);
   font-size: calc(var(--font-size) - 1px);
   white-space: nowrap;
 }
 
 .room-header__members {
-  color: var(--roomlist-muted);
+  color: color-mix(in srgb, var(--fg) 65%, transparent);
 }
 
 .room-header__encryption--on {
@@ -602,11 +602,6 @@ body {
   /* Offset down to align with the box's top border, accounting for the
      space the header label overflows above the border. */
   margin-top: calc(var(--font-size) * 0.5 + 15px);
-  /* Stick to the top of the viewport so the avatar remains visible when
-     scrolling through a long message group. top: 48px accounts for the
-     44px room header plus a little breathing room. */
-  position: sticky;
-  top: 48px;
   align-self: flex-start;
 }
 

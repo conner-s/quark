@@ -1714,13 +1714,16 @@ export function toggleMemberList(): void {
 
 /** Convert IPC RoomMember → MemberList MemberEntry */
 function roomMemberToEntry(m: RoomMember): MemberEntry {
+  // Use the already-resolved blob URL if available; mxc:// URLs can't be
+  // loaded by the browser directly, so fall back to undefined (shows initial).
+  const resolvedAvatar = m.avatar_url ? _avatarDataUrl.get(m.avatar_url) : undefined;
   return {
     id: m.user_id,
     name: m.display_name ?? m.user_id,
     userId: m.user_id,
     powerLevel: m.power_level,
     presence: m.presence ?? "offline",
-    avatarUrl: m.avatar_url ?? undefined,
+    avatarUrl: resolvedAvatar,
   };
 }
 
@@ -1841,17 +1844,20 @@ function _downloadInlineEmoji(timeline: import("../ui/Timeline.js").Timeline): v
  * are not transcoded to static images by the homeserver thumbnail endpoint.
  */
 function _downloadMemberAvatars(members: RoomMember[], timeline: import("../ui/Timeline.js").Timeline): void {
+  const { memberList } = getComponents();
   for (const m of members) {
     if (!m.avatar_url) continue;
     const mxc = m.avatar_url;
     if (_avatarDataUrl.has(mxc)) {
       timeline.updateSenderAvatar(m.user_id, _avatarDataUrl.get(mxc)!);
+      memberList.updateMemberAvatar(m.user_id, _avatarDataUrl.get(mxc)!);
       continue;
     }
     downloadMedia(mxc).then((dl) => {
       const url = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
       _avatarDataUrl.set(mxc, url);
       timeline.updateSenderAvatar(m.user_id, url);
+      memberList.updateMemberAvatar(m.user_id, url);
     }).catch(() => { /* non-critical */ });
   }
 }

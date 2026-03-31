@@ -128,6 +128,30 @@ export class MemberList {
     this._updateActive();
   }
 
+  /**
+   * Update the avatar for a specific member in-place (called after async download).
+   * Swaps the fallback span for an img without re-rendering the whole list.
+   */
+  updateMemberAvatar(userId: string, resolvedUrl: string): void {
+    // Update the cached entry so re-renders use the resolved URL
+    const entry = this._members.find((m) => m.userId === userId);
+    if (entry) entry.avatarUrl = resolvedUrl;
+
+    // Swap the avatar element in the DOM if the item is currently rendered
+    const item = this._scrollEl.querySelector<HTMLElement>(`[data-member-id="${CSS.escape(userId)}"]`);
+    if (!item) return;
+    const existing = item.querySelector<HTMLElement>(".member-list__avatar");
+    if (!existing) return;
+    const name = entry?.name ?? userId;
+    const img = document.createElement("img");
+    img.className = "member-list__avatar";
+    img.src = resolvedUrl;
+    img.alt = "";
+    img.setAttribute("aria-hidden", "true");
+    img.onerror = () => img.replaceWith(_buildFallbackAvatar(name));
+    existing.replaceWith(img);
+  }
+
   /** Return the currently focused MemberEntry, or null if no member item is focused. */
   getFocusedMember(): MemberEntry | null {
     const focused = document.activeElement as HTMLElement | null;
