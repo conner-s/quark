@@ -609,9 +609,6 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 3px;
-  /* Offset down to align with the box's top border, accounting for the
-     space the header label overflows above the border. */
-  margin-top: calc(var(--font-size) * 0.5 + 15px);
   /* Stick to the viewport top while still inside the group's column.
      top value: room-header min-height (44px) + 8px breathing room. */
   position: sticky;
