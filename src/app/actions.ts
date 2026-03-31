@@ -1766,6 +1766,31 @@ export function downloadSyncMessageImage(event: TimelineEvent, timeline: { updat
   _downloadMessageImages([event], timeline);
 }
 
+/** Return the cached avatar data URL for a sender, if already downloaded. */
+export function resolveSenderAvatarUrl(senderId: string): string | undefined {
+  const mxcUrl = _memberAvatarMxc.get(senderId);
+  return mxcUrl ? _avatarDataUrl.get(mxcUrl) : undefined;
+}
+
+/**
+ * Ensure a sender's avatar is downloaded and reflected in the timeline.
+ * If the data URL is already cached, updates immediately; otherwise triggers
+ * an async download. No-op if the sender has no known avatar mxc URL.
+ */
+export function ensureSenderAvatarDownloaded(senderId: string, timeline: import("../ui/Timeline.js").Timeline): void {
+  const mxcUrl = _memberAvatarMxc.get(senderId);
+  if (!mxcUrl) return;
+  if (_avatarDataUrl.has(mxcUrl)) {
+    timeline.updateSenderAvatar(senderId, _avatarDataUrl.get(mxcUrl)!);
+    return;
+  }
+  downloadMedia(mxcUrl).then((dl) => {
+    const url = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+    _avatarDataUrl.set(mxcUrl, url);
+    timeline.updateSenderAvatar(senderId, url);
+  }).catch(() => { /* non-critical */ });
+}
+
 /** Public alias used by sync.ts after appending a new message. */
 export function resolveInlineEmojiForTimeline(timeline: import("../ui/Timeline.js").Timeline): void {
   _downloadInlineEmoji(timeline);
