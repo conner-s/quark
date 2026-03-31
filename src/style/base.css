@@ -610,9 +610,11 @@ body {
   height: 32px;
   border-radius: 3px;
   /* Stick to the viewport top while still inside the group's column.
-     top value: room-header min-height (44px) + 8px breathing room. */
+     top: how far down before sticking kicks in.
+     margin-bottom: releases the sticky that many px before the column bottom. */
   position: sticky;
-  top: 52px;
+  top: 72px;
+  margin-bottom: 24px;
 }
 
 .message-group__avatar {
