@@ -666,7 +666,7 @@ quark/
 - [ ] Implement themes (command currently does nothing)
 - [x] Make space UI bigger
 - [x] Show avatars in member list
-- [ ] Profile images should snap to the top of the visible area if the message's position would place it out of view
+- [x] Profile images should snap to the top of the visible area if the message's position would place it out of view
 - [x] Pause gif animation while not focused
 - [x] Detect links
 - [x] Add more info to profile screen

@@ -581,7 +581,7 @@ body {
 
 .message-group-wrapper {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch; /* column must stretch to group height for sticky to work */
   gap: 8px;
   font-family: var(--font-family-messages);
 }
@@ -591,18 +591,28 @@ body {
   min-width: 0;
 }
 
-/* ── Avatar (left of the message box, top-aligned to the border) ─────────── */
+/* ── Avatar column (stretches to the full group height) ──────────────────── */
+
+.message-group__avatar-col {
+  width: 32px;
+  flex-shrink: 0;
+  /* No overflow:hidden — sticky requires an unclipped ancestor */
+}
+
+/* ── Avatar (sticky within its column so it tracks the viewport top) ──────── */
 
 .message-group__avatar,
 .message-group__avatar-fallback {
   width: 32px;
   height: 32px;
   border-radius: 3px;
-  flex-shrink: 0;
   /* Offset down to align with the box's top border, accounting for the
      space the header label overflows above the border. */
   margin-top: calc(var(--font-size) * 0.5 + 15px);
-  align-self: flex-start;
+  /* Stick to the viewport top while still inside the group's column.
+     top value: room-header min-height (44px) + 8px breathing room. */
+  position: sticky;
+  top: 52px;
 }
 
 .message-group__avatar {

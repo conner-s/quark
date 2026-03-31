@@ -383,8 +383,14 @@ function buildMessageGroup(msgs: MessageData[]): HTMLElement {
   wrapper.className = "message-group-wrapper";
   wrapper.dataset.sender = first.senderId ?? first.senderName;
 
+  // Wrap the avatar in a column that stretches to the full group height.
+  // This gives position:sticky on the avatar a proper containing block —
+  // the sticky zone spans the whole group, not just the 32px avatar height.
+  const avatarCol = document.createElement("div");
+  avatarCol.className = "message-group__avatar-col";
   const avatar = buildAvatarElement(first.senderName, first.senderAvatarUrl);
-  wrapper.appendChild(avatar);
+  avatarCol.appendChild(avatar);
+  wrapper.appendChild(avatarCol);
   wrapper.appendChild(group);
 
   return wrapper;
