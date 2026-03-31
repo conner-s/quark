@@ -88,7 +88,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   padding: 4px 0;
   overflow-y: auto;
   overflow-x: hidden;
@@ -100,8 +100,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   border-radius: 2px;
   cursor: pointer;
   font-size: 14px;
@@ -134,13 +134,13 @@ body {
   position: absolute;
   left: 0;
   width: 2px;
-  height: 28px;
+  height: 36px;
   background-color: var(--accent-primary);
 }
 
 .space-strip__icon {
-	width: 32px;
-	height: 32px;
+	width: 36px;
+	height: 36px;
 	object-fit: contain;
 	border-radius: 100%;
 }
@@ -602,6 +602,12 @@ body {
   /* Offset down to align with the box's top border, accounting for the
      space the header label overflows above the border. */
   margin-top: calc(var(--font-size) * 0.5 + 15px);
+  /* Stick to the top of the viewport so the avatar remains visible when
+     scrolling through a long message group. top: 48px accounts for the
+     44px room header plus a little breathing room. */
+  position: sticky;
+  top: 48px;
+  align-self: flex-start;
 }
 
 .message-group__avatar {
@@ -664,6 +670,45 @@ body {
 
 .message:hover {
   background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* ── Hover action bar ────────────────────────────────────────────────────── */
+
+.message__actions {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  gap: 2px;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border-color);
+  padding: 1px 4px;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.message:hover .message__actions {
+  display: flex;
+}
+
+.message__action-btn {
+  background: none;
+  border: none;
+  padding: 0 3px;
+  height: 20px;
+  line-height: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--fg);
+  border-radius: 2px;
+  transition: background-color var(--transition-speed), color var(--transition-speed);
+}
+
+.message__action-btn:hover {
+  background-color: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  color: var(--accent-primary);
 }
 
 .message:focus {
@@ -2347,6 +2392,21 @@ a:hover {
 .profile-dialog__value--muted {
   color: var(--roomlist-muted);
   font-size: calc(var(--font-size) - 1px);
+}
+
+.profile-dialog__copy-btn {
+  background: transparent;
+  border: none;
+  color: var(--roomlist-muted);
+  font-family: var(--font-mono);
+  font-size: smaller;
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+}
+
+.profile-dialog__copy-btn:hover {
+  color: var(--accent-primary);
 }
 
 .profile-dialog__hint {

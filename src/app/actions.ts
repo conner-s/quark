@@ -1933,3 +1933,26 @@ export function setupReactionChipHandler(): void {
     }
   });
 }
+
+/**
+ * Wire the hover action bar buttons (react / reply) that bubble custom events
+ * from message elements. Must be called once after components are set.
+ */
+export function setupMessageActionHandlers(): void {
+  document.addEventListener("quark:msg-react" as keyof DocumentEventMap, (e: Event) => {
+    const { eventId } = (e as CustomEvent<{ eventId: string }>).detail;
+    if (eventId) openQuickReactPicker(eventId);
+  });
+
+  document.addEventListener("quark:msg-reply" as keyof DocumentEventMap, (e: Event) => {
+    const { eventId } = (e as CustomEvent<{ eventId: string }>).detail;
+    if (!eventId) return;
+    const events = AppState.get("currentTimeline");
+    const evt = events.find((ev) => ev.event_id === eventId);
+    if (evt) {
+      const { input } = getComponents();
+      startReply(eventId, evt.sender, evt.body.slice(0, 80));
+      input.focus();
+    }
+  });
+}

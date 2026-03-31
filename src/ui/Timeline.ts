@@ -298,6 +298,47 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     row.appendChild(createReactionBar(msg.reactions));
   }
 
+  // ── Hover action bar ───────────────────────────────────────────────────
+  if (msg.type !== "system") {
+    const actions = document.createElement("div");
+    actions.className = "message__actions";
+    actions.setAttribute("aria-hidden", "true");
+
+    const reactBtn = document.createElement("button");
+    reactBtn.className = "message__action-btn";
+    reactBtn.textContent = "😀";
+    reactBtn.title = "React (e)";
+    reactBtn.setAttribute("tabindex", "-1");
+    reactBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      row.dispatchEvent(
+        new CustomEvent("quark:msg-react", {
+          bubbles: true,
+          detail: { eventId: msg.id },
+        })
+      );
+    });
+
+    const replyBtn = document.createElement("button");
+    replyBtn.className = "message__action-btn";
+    replyBtn.textContent = "↩";
+    replyBtn.title = "Reply (r)";
+    replyBtn.setAttribute("tabindex", "-1");
+    replyBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      row.dispatchEvent(
+        new CustomEvent("quark:msg-reply", {
+          bubbles: true,
+          detail: { eventId: msg.id },
+        })
+      );
+    });
+
+    actions.appendChild(reactBtn);
+    actions.appendChild(replyBtn);
+    row.appendChild(actions);
+  }
+
   return row;
 }
 

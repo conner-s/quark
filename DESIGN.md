@@ -660,15 +660,16 @@ quark/
 - [ ] Settings UI
 - [ ] Permissions UI
 - [ ] Room configuration UI
-- [ ] Mouse interactions (click on profile to open profile view, react and reply buttons, etc.)
+- [x] Mouse interactions — hover react (😀) and reply (↩) buttons on messages
+- [ ] Mouse interactions — click on profile to open profile view
 - [ ] Pinned messages UI
 - [ ] Implement themes (command currently does nothing)
-- [ ] Make space UI bigger
+- [x] Make space UI bigger
 - [x] Show avatars in member list
-- [ ] Profile images should snap to the top of the visible area if the message's position would place it out of view
+- [x] Profile images should snap to the top of the visible area if the message's position would place it out of view
 - [x] Pause gif animation while not focused
 - [x] Detect links
-- [ ] Add more info to profile screen
+- [x] Add more info to profile screen
 - [x] Split up messages more than 30 minutes apart
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`

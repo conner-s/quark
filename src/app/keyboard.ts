@@ -17,6 +17,7 @@ import {
   openThread,
   openQuickReactPicker,
   setupReactionChipHandler,
+  setupMessageActionHandlers,
   handleImagePaste,
 } from "./actions.js";
 import { AppState } from "./state.js";
@@ -368,6 +369,8 @@ export function setupKeyboard(components: AppComponents): void {
 
   // Wire reaction chip clicks (bubbling custom events) → sendReaction
   setupReactionChipHandler();
+  // Wire hover action bar button clicks → react / reply
+  setupMessageActionHandlers();
 
   // Sync mode indicators + blur/focus on mode change
   modeManager.on((_from, to) => {

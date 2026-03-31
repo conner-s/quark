@@ -17,6 +17,8 @@ export class ProfileDialog {
   private _avatarEl: HTMLElement;
   private _displayNameEl: HTMLElement;
   private _userIdEl: HTMLElement;
+  private _homeserverEl: HTMLElement;
+  private _copyBtn: HTMLButtonElement;
 
   constructor() {
     this._el = document.createElement("div");
@@ -73,9 +75,36 @@ export class ProfileDialog {
     idLabel.textContent = "user id";
     this._userIdEl = document.createElement("span");
     this._userIdEl.className = "profile-dialog__value profile-dialog__value--muted";
+    this._copyBtn = document.createElement("button");
+    this._copyBtn.type = "button";
+    this._copyBtn.className = "profile-dialog__copy-btn";
+    this._copyBtn.textContent = "[copy]";
+    this._copyBtn.setAttribute("aria-label", "Copy user ID");
+    this._copyBtn.setAttribute("tabindex", "-1");
+    this._copyBtn.addEventListener("click", () => {
+      const userId = this._userIdEl.textContent ?? "";
+      navigator.clipboard.writeText(userId).then(() => {
+        this._copyBtn.textContent = "[copied!]";
+        setTimeout(() => {
+          this._copyBtn.textContent = "[copy]";
+        }, 1500);
+      });
+    });
     idRow.appendChild(idLabel);
     idRow.appendChild(this._userIdEl);
+    idRow.appendChild(this._copyBtn);
     info.appendChild(idRow);
+
+    const hsRow = document.createElement("div");
+    hsRow.className = "profile-dialog__row";
+    const hsLabel = document.createElement("span");
+    hsLabel.className = "profile-dialog__label";
+    hsLabel.textContent = "homeserver";
+    this._homeserverEl = document.createElement("span");
+    this._homeserverEl.className = "profile-dialog__value profile-dialog__value--muted";
+    hsRow.appendChild(hsLabel);
+    hsRow.appendChild(this._homeserverEl);
+    info.appendChild(hsRow);
 
     this._el.appendChild(info);
 
@@ -123,6 +152,8 @@ export class ProfileDialog {
   show(data: ProfileData): void {
     this._displayNameEl.textContent = data.displayName ?? "(not set)";
     this._userIdEl.textContent = data.userId;
+    const colonIdx = data.userId.indexOf(":");
+    this._homeserverEl.textContent = colonIdx !== -1 ? data.userId.slice(colonIdx + 1) : data.userId;
 
     if (data.avatarUrl) {
       this._avatarEl.innerHTML = "";
