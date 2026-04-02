@@ -280,7 +280,8 @@ export async function selectRoom(roomId: string): Promise<void> {
   _paginationLoading = false;
   roomList.setActiveRoom(roomId);
 
-  // Clear unread badge optimistically in local cache, then send read receipt
+  // Clear unread badge optimistically in local cache, then send read receipt.
+  // Use updateRoomBadge (not setRooms) so the current space filter is preserved.
   const cached = AppState.get("roomListCache");
   if (cached.some((r) => r.room_id === roomId && (r.unread_count > 0 || r.notification_count > 0))) {
     AppState.set(
@@ -289,9 +290,7 @@ export async function selectRoom(roomId: string): Promise<void> {
         r.room_id === roomId ? { ...r, unread_count: 0, notification_count: 0 } : r
       )
     );
-    roomList.setRooms(
-      AppState.get("roomListCache").map(roomInfoToEntry)
-    );
+    roomList.updateRoomBadge(roomId, 0, 0);
   }
   void markRoomRead(roomId).catch(() => {/* non-fatal: badge already cleared locally */});
 
@@ -499,10 +498,14 @@ export async function sendMessage(body: string): Promise<void> {
   const ownDisplayName = AppState.get("ownDisplayName");
   const ownSenderName = ownDisplayName ?? ownUserId ?? "you";
 
+  const ownAvatarMxc = ownUserId ? _memberAvatarMxc.get(ownUserId) : undefined;
+  const ownAvatarUrl = (ownAvatarMxc && _avatarDataUrl.get(ownAvatarMxc)) ?? undefined;
+
   const optimisticMsg: MessageData = {
     id: `optimistic-${Date.now()}`,
     senderId: ownUserId ?? undefined,
     senderName: ownSenderName,
+    senderAvatarUrl: ownAvatarUrl,
     isOwn: true,
     timestamp: new Date().toISOString(),
     body,
@@ -688,18 +691,12 @@ export async function sendMessage(body: string): Promise<void> {
         background: getComputedStyle(composeBoxEl).backgroundColor || "var(--bg)",
       });
       document.body.appendChild(clone);
-      const clonePaddingTop = getComputedStyle(clone).paddingTop;
       composeBoxEl.style.opacity = "0";
 
       const anim = clone.animate(
         [
-          { transform: "translate(0,0)", opacity: "1", borderRadius: "0px 8px 8px 0px",
-            width: `${composeRect.width}px`, height: `${composeRect.height}px`,
-            paddingTop: clonePaddingTop },
-          { transform: `translate(0,${deltaY}px)`, opacity: "1", borderRadius: "8px",
-            width: `${targetRect?.width ?? composeRect.width}px`,
-            height: `${targetRect?.height ?? composeRect.height}px`,
-            paddingTop: "10px" },
+          { transform: "translate(0,0)", borderRadius: "0px 8px 8px 0px" },
+          { transform: `translate(0,${deltaY}px)`, borderRadius: "8px" },
         ],
         { duration: 260, easing: "cubic-bezier(0.25, 0.46, 0.45, 0.94)", fill: "forwards" }
       );
@@ -871,6 +868,9 @@ export async function redactMessage(eventId: string): Promise<void> {
 
   try {
     await ipcRedactMessage(roomId, eventId);
+    // Remove message from timeline immediately (don't wait for re-sync)
+    const { timeline } = getComponents();
+    timeline.removeMessage(eventId);
     showSuccess("Message deleted");
   } catch (err) {
     showError(`Failed to delete: ${err instanceof Error ? err.message : String(err)}`);
