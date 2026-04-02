@@ -1014,6 +1014,7 @@ export class Timeline {
   }
 
   /**
+  /**
    * Scroll to a message by event ID and briefly highlight it.
    * No-ops silently if the event ID is not in the rendered timeline.
    */

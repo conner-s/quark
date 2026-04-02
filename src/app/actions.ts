@@ -882,6 +882,19 @@ export async function editMessage(eventId: string, newBody: string): Promise<voi
 }
 
 /**
+ * Apply a redaction from another user (incoming via sync).
+ * Removes the message from the DOM and state cache.
+ */
+export function applyIncomingRedaction(eventId: string): void {
+  const { timeline } = getComponents();
+  timeline.removeMessage(eventId);
+  AppState.set(
+    "currentTimeline",
+    AppState.get("currentTimeline").filter((e) => e.event_id !== eventId)
+  );
+}
+
+/**
  * Redact (delete) a message.
  */
 export async function redactMessage(eventId: string): Promise<void> {
@@ -890,9 +903,13 @@ export async function redactMessage(eventId: string): Promise<void> {
 
   try {
     await ipcRedactMessage(roomId, eventId);
-    // Remove message from timeline immediately (don't wait for re-sync)
+    // Remove immediately from DOM and state cache
     const { timeline } = getComponents();
     timeline.removeMessage(eventId);
+    AppState.set(
+      "currentTimeline",
+      AppState.get("currentTimeline").filter((e) => e.event_id !== eventId)
+    );
     showSuccess("Message deleted");
   } catch (err) {
     showError(`Failed to delete: ${err instanceof Error ? err.message : String(err)}`);

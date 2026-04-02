@@ -11,7 +11,10 @@ use matrix_sdk::{
         presence::PresenceEvent,
         reaction::ReactionEventContent,
         receipt::ReceiptEventContent,
-        room::message::{OriginalSyncRoomMessageEvent, SyncRoomMessageEvent},
+        room::{
+            message::{OriginalSyncRoomMessageEvent, SyncRoomMessageEvent},
+            redaction::OriginalSyncRoomRedactionEvent,
+        },
         typing::SyncTypingEvent,
         OriginalSyncMessageLikeEvent, SyncEphemeralRoomEvent, ToDeviceEvent,
     },
@@ -39,6 +42,7 @@ pub const EVENT_VERIFICATION_REQUEST: &str = "quark://sync/verification_request"
 pub const EVENT_UNREAD_COUNT: &str = "quark://sync/unread_count";
 pub const EVENT_CONNECTED: &str = "quark://sync/connected";
 pub const EVENT_REACTION: &str = "quark://sync/reaction";
+pub const EVENT_REDACTION: &str = "quark://sync/redaction";
 
 // ─── Event Payload Structs ────────────────────────────────────────────────────
 
@@ -92,6 +96,13 @@ pub struct SyncRoomUnreadCount {
     pub room_id: String,
     pub unread_count: u64,
     pub highlight_count: u64,
+}
+
+/// Emitted when a message is redacted in a room.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncRedactionUpdate {
+    pub room_id: String,
+    pub redacted_event_id: String,
 }
 
 /// Emitted when a reaction is added to an event in a room.
@@ -277,6 +288,30 @@ pub fn setup_sync_event_handlers(client: &Client, app_handle: &tauri::AppHandle)
             };
             if let Err(e) = app.emit(EVENT_VERIFICATION_REQUEST, &payload) {
                 error!("Failed to emit {}: {}", EVENT_VERIFICATION_REQUEST, e);
+            }
+        },
+    );
+
+    // ── Redactions ────────────────────────────────────────────────────────────
+    client.add_event_handler(
+        |ev: OriginalSyncRoomRedactionEvent,
+         room: Room,
+         Ctx(app): Ctx<tauri::AppHandle>| async move {
+            // The redacted event ID is in `ev.redacts` (older spec) or
+            // `ev.content.redacts` (newer spec / MSC2174). Try both.
+            let redacted_id = ev.redacts
+                .as_deref()
+                .or(ev.content.redacts.as_deref())
+                .map(|id| id.to_string());
+
+            if let Some(redacted_event_id) = redacted_id {
+                let payload = SyncRedactionUpdate {
+                    room_id: room.room_id().to_string(),
+                    redacted_event_id,
+                };
+                if let Err(e) = app.emit(EVENT_REDACTION, &payload) {
+                    error!("Failed to emit {}: {}", EVENT_REDACTION, e);
+                }
             }
         },
     );
