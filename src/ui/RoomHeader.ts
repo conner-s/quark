@@ -28,6 +28,7 @@ export class RoomHeader {
   private _metaEl: HTMLElement;
   private _memberCountEl: HTMLElement;
   private _encEl: HTMLElement;
+  private _avatarClickHandler: (() => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -87,6 +88,14 @@ export class RoomHeader {
 
     this._el.appendChild(this._metaEl);
 
+    // Single delegated listener — fires for any click originating from the avatar element
+    this._el.addEventListener("click", (e) => {
+      if (this._avatarClickHandler &&
+          (e.target === this._avatarEl || this._avatarEl.contains(e.target as Node))) {
+        this._avatarClickHandler();
+      }
+    });
+
     // Set a blank default state
     this._applyData({ name: "" });
   }
@@ -111,6 +120,15 @@ export class RoomHeader {
     this._applyData({ name, topic, memberCount, encrypted, avatarUrl });
   }
 
+  /**
+   * Register a callback to invoke when the room avatar is clicked.
+   * Pass null to remove the handler (e.g. when switching to a non-DM room).
+   */
+  setAvatarClickHandler(handler: (() => void) | null): void {
+    this._avatarClickHandler = handler;
+    this._updateAvatarCursor();
+  }
+
   /** Update just the member count in-place (e.g. after the full member list loads). */
   setMemberCount(count: number): void {
     this._memberCountEl.textContent = `${count} member${count === 1 ? "" : "s"}`;
@@ -131,9 +149,20 @@ export class RoomHeader {
     img.onerror = () => { /* keep existing element on load failure */ };
     this._avatarEl.replaceWith(img);
     this._avatarEl = img;
+    this._updateAvatarCursor();
   }
 
   // ── Private ─────────────────────────────────────────────────────────────────
+
+  private _updateAvatarCursor(): void {
+    if (this._avatarClickHandler) {
+      this._avatarEl.style.cursor = "pointer";
+      this._avatarEl.title = "View profile";
+    } else {
+      this._avatarEl.style.cursor = "";
+      this._avatarEl.title = "";
+    }
+  }
 
   private _applyData(data: RoomHeaderData): void {
     // Avatar
@@ -149,14 +178,17 @@ export class RoomHeader {
         const fallback = this._buildFallback(displayName, color);
         img.replaceWith(fallback);
         this._avatarEl = fallback;
+        this._updateAvatarCursor();
       };
       this._avatarEl.replaceWith(img);
       this._avatarEl = img;
+      this._updateAvatarCursor();
     } else {
       // Always rebuild the fallback so the initial letter stays current
       const fallback = this._buildFallback(displayName, color);
       this._avatarEl.replaceWith(fallback);
       this._avatarEl = fallback;
+      this._updateAvatarCursor();
     }
 
     // Name

@@ -306,6 +306,8 @@ export async function selectRoom(roomId: string): Promise<void> {
     ? _roomAvatarDataUrl.get(roomInfo.room_id)
     : undefined;
 
+  // Clear any DM avatar click handler from the previous room before rendering new avatar
+  roomHeader.setAvatarClickHandler(null);
   roomHeader.setRoom(
     roomName,
     roomInfo?.topic ?? undefined,
@@ -373,18 +375,22 @@ export async function selectRoom(roomId: string): Promise<void> {
       if (roomInfo?.is_direct && !roomInfo.avatar_url) {
         const ownUserId = AppState.get("ownUserId");
         const dmPartner = members.find((m) => m.user_id !== ownUserId);
-        if (dmPartner?.avatar_url) {
-          const mxc = dmPartner.avatar_url;
-          if (_roomAvatarDataUrl.has(roomId)) {
-            roomHeader.setAvatarUrl(_roomAvatarDataUrl.get(roomId)!);
-          } else {
-            void downloadMedia(mxc).then((dl) => {
-              const blobUrl = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
-              _roomAvatarDataUrl.set(roomId, blobUrl);
-              if (AppState.get("currentRoomId") === roomId) {
-                roomHeader.setAvatarUrl(blobUrl);
-              }
-            }).catch(() => { /* non-fatal */ });
+        if (dmPartner) {
+          const dmPartnerId = dmPartner.user_id;
+          roomHeader.setAvatarClickHandler(() => void openProfileForUser(dmPartnerId));
+          if (dmPartner.avatar_url) {
+            const mxc = dmPartner.avatar_url;
+            if (_roomAvatarDataUrl.has(roomId)) {
+              roomHeader.setAvatarUrl(_roomAvatarDataUrl.get(roomId)!);
+            } else {
+              void downloadMedia(mxc).then((dl) => {
+                const blobUrl = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+                _roomAvatarDataUrl.set(roomId, blobUrl);
+                if (AppState.get("currentRoomId") === roomId) {
+                  roomHeader.setAvatarUrl(blobUrl);
+                }
+              }).catch(() => { /* non-fatal */ });
+            }
           }
         }
       }
