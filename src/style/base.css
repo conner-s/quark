@@ -1216,6 +1216,15 @@ span.reaction__emoji {
   flex-shrink: 0;
 }
 
+/* Section wrappers (emoji / sticker) — fill the remaining picker height */
+.emoji-picker__section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* ── Category bar ────────────────────────────────────────────────────────── */
 
 .emoji-picker__categories {
