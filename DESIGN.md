@@ -725,9 +725,9 @@ quark/
 - [x] Sometimes unable to navigate timeline — fixed two root causes: (1) _selectedIndex not reset on room switch left it out-of-range, making selectNext/selectPrev think the boundary was reached; (2) clicking the timeline now fires an onFocus callback that updates activePanel to "timeline" so j/k immediately routes there
 - [x] timeline navigation broken after loading more messages — _scrollTopFired was not reset in prependMessages, blocking keyboard nav from triggering further page loads; reset to false after scroll restoration (_paginationLoading guard prevents immediate double-fire)
 - [x] Still can't see custom emotes, only getting stickers
-- [ ] Emoji and sticker pickers are separate dom elements; just recreate the content box, don't recreate the whole popup
+- [x] Emoji and sticker pickers are separate dom elements; just recreate the content box, don't recreate the whole popup — StickerPicker merged into EmojiPicker; tab switching swaps section visibility within one DOM element, no popup close/reopen
 - [x] Emoji and sticker pickers initially appear in the wrong position — both used profile-dialog-in animation (centering transform) instead of a simple picker-in fade/slide; added @keyframes picker-in
-- [ ] Custom emoji tabs pop in after emoji picker load; should probably cache these? May need a way to invalidate the cache if stickers/emoji are added...
+- [x] Custom emoji tabs pop in after emoji picker load — custom emoji categories now cached per-room in `_customEmojiCategoryCache`; prepended immediately on open, then refreshed by the async load
 - [x] Show emoji categories in react picker
 - [x] When sending a message, break into new bubble on the same condition as loading existing messages — appendMessage/appendMessageHidden now check 30-minute time gap before merging into existing group, inserting a time separator when needed
 - [x] Redacted messages don't disappear until reloading the chat — redactMessage now calls timeline.removeMessage() after successful IPC; removes from DOM and _messages array, collapses single-message groups

@@ -333,7 +333,7 @@ function applyRcDirectives(rc: ParsedRc): void {
 
 export function setupKeyboard(components: AppComponents): void {
   const { input, commandBar, shortcodePreview, timeline,
-          emojiPicker, gifPicker, stickerPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker } = components;
+          emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker } = components;
 
   registerDefaultBindings();
 
@@ -459,13 +459,6 @@ export function setupKeyboard(components: AppComponents): void {
       if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
         e.preventDefault();
         emojiPicker.hide();
-      }
-      return;
-    }
-    if (stickerPicker.isVisible()) {
-      if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
-        e.preventDefault();
-        stickerPicker.hide();
       }
       return;
     }

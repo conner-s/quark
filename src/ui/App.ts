@@ -14,7 +14,6 @@ import { MemberList } from "./MemberList.js";
 import { EmojiPicker } from "./EmojiPicker.js";
 import { GifPicker } from "./GifPicker.js";
 import { HelpDialog } from "./HelpDialog.js";
-import { StickerPicker } from "./StickerPicker.js";
 import { Verification } from "./Verification.js";
 import { DevicePicker } from "./DevicePicker.js";
 import { ShortcodePreview } from "./ShortcodePreview.js";
@@ -44,7 +43,6 @@ export interface AppComponents {
   // Overlays
   emojiPicker: EmojiPicker;
   gifPicker: GifPicker;
-  stickerPicker: StickerPicker;
   verification: Verification;
   devicePicker: DevicePicker;
   shortcodePreview: ShortcodePreview;
@@ -82,7 +80,6 @@ export function mountApp(container: HTMLElement): AppComponents {
   const memberList = new MemberList();
   const emojiPicker = new EmojiPicker();
   const gifPicker = new GifPicker();
-  const stickerPicker = new StickerPicker();
   const verification = new Verification();
   const devicePicker = new DevicePicker();
   const shortcodePreview = new ShortcodePreview();
@@ -133,7 +130,6 @@ export function mountApp(container: HTMLElement): AppComponents {
   // ── Overlays (appended to body so they float above everything) ───────────
   document.body.appendChild(emojiPicker.getElement());
   document.body.appendChild(gifPicker.getElement());
-  document.body.appendChild(stickerPicker.getElement());
   document.body.appendChild(verification.getElement());
   document.body.appendChild(devicePicker.getElement());
   document.body.appendChild(helpDialog.getElement());
@@ -154,7 +150,6 @@ export function mountApp(container: HTMLElement): AppComponents {
     memberList,
     emojiPicker,
     gifPicker,
-    stickerPicker,
     verification,
     devicePicker,
     shortcodePreview,

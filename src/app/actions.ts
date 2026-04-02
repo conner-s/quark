@@ -57,8 +57,7 @@ import type { RoomEntry } from "../ui/RoomList.js";
 import type { MessageData, ReplyPreviewData } from "../ui/Timeline.js";
 import type { MemberEntry } from "../ui/MemberList.js";
 import type { SpaceItem } from "../ui/SpaceStrip.js";
-import type { EmojiEntry, EmojiPickerCategory } from "../ui/EmojiPicker.js";
-import type { StickerEntry } from "../ui/StickerPicker.js";
+import type { EmojiEntry, EmojiPickerCategory, StickerEntry } from "../ui/EmojiPicker.js";
 import type { CustomEmojiEntry } from "../ui/QuickReactPicker.js";
 import { BUILTIN_EMOJI, EMOJI_CATEGORIES } from "../data/unicode-emoji.js";
 
@@ -979,12 +978,15 @@ export function closeThread(): void {
 /** Whether the EmojiPicker callbacks have been wired (one-time setup). */
 let _emojiPickerWired = false;
 
+/** Cache of custom emoji categories per room ID (or "" for account-level). */
+const _customEmojiCategoryCache = new Map<string, EmojiPickerCategory[]>();
+
 /**
- * Show the emoji picker, loading BUILTIN_EMOJI immediately and custom
- * emoji packs asynchronously. Wires selection/tab-change callbacks on
- * first call.
+ * Show the emoji/sticker picker. Loads BUILTIN_EMOJI immediately and custom
+ * emoji packs asynchronously. Wires callbacks on first call. Custom emoji
+ * categories are cached per-room so they appear immediately on subsequent opens.
  */
-export function openEmojiPicker(): void {
+export function openEmojiPicker(initialTab: "emoji" | "sticker" = "emoji"): void {
   const { emojiPicker, input } = getComponents();
 
   if (!_emojiPickerWired) {
@@ -998,11 +1000,31 @@ export function openEmojiPicker(): void {
     });
 
     emojiPicker.onTabChange((tab) => {
-      emojiPicker.hide();
-      if (tab === "sticker") {
-        void openStickerPicker();
-      } else if (tab === "gif") {
+      // Only gif needs to close this picker and open another overlay
+      if (tab === "gif") {
+        emojiPicker.hide();
         openGifPicker();
+      }
+    });
+
+    emojiPicker.onStickerTabActivated(() => {
+      void _loadStickersIntoUnifiedPicker();
+    });
+
+    emojiPicker.onStickerSelect(async (sticker) => {
+      const roomId = AppState.get("currentRoomId");
+      if (!roomId) {
+        showError("No room selected");
+        return;
+      }
+      const sepIdx = sticker.id.lastIndexOf("::");
+      const packId = sepIdx >= 0 ? sticker.id.slice(0, sepIdx) : sticker.id;
+      const shortcode = sepIdx >= 0 ? sticker.id.slice(sepIdx + 2) : sticker.name;
+      try {
+        await ipcSendSticker(roomId, shortcode, sticker.url, sticker.name, packId, sticker.packName ?? null);
+        showSuccess("Sticker sent");
+      } catch (err) {
+        showError(`Failed to send sticker: ${err instanceof Error ? err.message : String(err)}`);
       }
     });
   }
@@ -1015,11 +1037,18 @@ export function openEmojiPicker(): void {
     entries: cat.entries.map(([shortcode, glyph]) => ({ key: glyph, shortcode })),
   }));
   emojiPicker.setCategories(builtinCategories);
-  emojiPicker.show();
 
-  // Async: load custom emoji packs and prepend them as categories
-  const roomId = AppState.get("currentRoomId");
-  getEmojiPacks(roomId ?? undefined)
+  // Prepend cached custom categories immediately (avoids pop-in on repeat opens)
+  const roomId = AppState.get("currentRoomId") ?? "";
+  const cached = _customEmojiCategoryCache.get(roomId);
+  if (cached && cached.length > 0) {
+    emojiPicker.prependCategories(cached);
+  }
+
+  emojiPicker.show(initialTab);
+
+  // Async: load custom emoji packs, update cache, and prepend into picker
+  getEmojiPacks(roomId || undefined)
     .then(async (packs) => {
       const customCategories: EmojiPickerCategory[] = [];
       for (const pack of packs) {
@@ -1049,10 +1078,52 @@ export function openEmojiPicker(): void {
       }
 
       if (customCategories.length > 0) {
+        _customEmojiCategoryCache.set(roomId, customCategories);
         emojiPicker.prependCategories(customCategories);
       }
     })
     .catch(() => { /* non-critical */ });
+}
+
+async function _loadStickersIntoUnifiedPicker(): Promise<void> {
+  const { emojiPicker } = getComponents();
+  const roomId = AppState.get("currentRoomId");
+  try {
+    const packs = await getStickerPacks(roomId ?? undefined);
+    const stickers: StickerEntry[] = [];
+    for (const pack of packs) {
+      for (const e of pack.emojis) {
+        stickers.push({
+          id: `${pack.pack_id}::${e.shortcode}`,
+          name: e.body ?? e.shortcode,
+          url: e.url,
+          thumbnailUrl: e.url.startsWith("mxc://") ? undefined : e.url,
+          packName: pack.display_name ?? pack.pack_id,
+        });
+      }
+    }
+    emojiPicker.setStickers(stickers);
+
+    // Resolve mxc:// thumbnails asynchronously and patch cells as each arrives
+    for (const sticker of stickers) {
+      if (!sticker.url.startsWith("mxc://")) continue;
+      const mxc = sticker.url;
+      if (_emojiImageCache.has(mxc)) {
+        emojiPicker.updateStickerThumbnail(sticker.id, _emojiImageCache.get(mxc)!);
+        continue;
+      }
+      const capturedId = sticker.id;
+      getThumbnail(mxc, 96, 96)
+        .then((dl) => {
+          const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+          _emojiImageCache.set(mxc, dataUrl);
+          emojiPicker.updateStickerThumbnail(capturedId, dataUrl);
+        })
+        .catch(() => { /* non-critical */ });
+    }
+  } catch {
+    emojiPicker.setStickers([]);
+  }
 }
 
 /**
@@ -1220,89 +1291,9 @@ export function openGifPicker(): void {
   gifPicker.show();
 }
 
-// ── Sticker picker state ──────────────────────────────────────────────────────
-
-/** Whether the StickerPicker onSelect callback has been wired (one-time setup). */
-let _stickerPickerWired = false;
-
-/**
- * Show the sticker picker. Loads sticker packs for the current room and wires
- * the send callback on first call.
- */
-export async function openStickerPicker(): Promise<void> {
-  const { stickerPicker } = getComponents();
-
-  if (!_stickerPickerWired) {
-    _stickerPickerWired = true;
-
-    stickerPicker.onTabChange((tab) => {
-      stickerPicker.hide();
-      if (tab === "emoji") {
-        openEmojiPicker();
-      } else if (tab === "gif") {
-        openGifPicker();
-      }
-    });
-
-    stickerPicker.onSelect(async (sticker) => {
-      const roomId = AppState.get("currentRoomId");
-      if (!roomId) {
-        showError("No room selected");
-        return;
-      }
-      // id is encoded as "packId::shortcode"
-      const sepIdx = sticker.id.lastIndexOf("::");
-      const packId = sepIdx >= 0 ? sticker.id.slice(0, sepIdx) : sticker.id;
-      const shortcode = sepIdx >= 0 ? sticker.id.slice(sepIdx + 2) : sticker.name;
-      try {
-        await ipcSendSticker(roomId, shortcode, sticker.url, sticker.name, packId, sticker.packName ?? null);
-        showSuccess("Sticker sent");
-      } catch (err) {
-        showError(`Failed to send sticker: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    });
-  }
-
-  const roomId = AppState.get("currentRoomId");
-  try {
-    const packs = await getStickerPacks(roomId ?? undefined);
-    const stickers: StickerEntry[] = [];
-    for (const pack of packs) {
-      for (const e of pack.emojis) {
-        stickers.push({
-          id: `${pack.pack_id}::${e.shortcode}`,
-          name: e.body ?? e.shortcode,
-          url: e.url,
-          // mxc:// URLs are not directly displayable — resolved below
-          thumbnailUrl: e.url.startsWith("mxc://") ? undefined : e.url,
-          packName: pack.display_name ?? pack.pack_id,
-        });
-      }
-    }
-    stickerPicker.setStickers(stickers);
-
-    // Resolve mxc:// thumbnails asynchronously and patch cells as each arrives
-    for (const sticker of stickers) {
-      if (!sticker.url.startsWith("mxc://")) continue;
-      const mxc = sticker.url;
-      if (_emojiImageCache.has(mxc)) {
-        stickerPicker.updateStickerThumbnail(sticker.id, _emojiImageCache.get(mxc)!);
-        continue;
-      }
-      const capturedId = sticker.id;
-      getThumbnail(mxc, 96, 96)
-        .then((dl) => {
-          const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
-          _emojiImageCache.set(mxc, dataUrl);
-          stickerPicker.updateStickerThumbnail(capturedId, dataUrl);
-        })
-        .catch(() => { /* non-critical */ });
-    }
-  } catch {
-    stickerPicker.setStickers([]);
-  }
-
-  stickerPicker.show();
+/** Open the sticker tab of the unified emoji/sticker picker. */
+export function openStickerPicker(): void {
+  openEmojiPicker("sticker");
 }
 
 /**
