@@ -396,14 +396,14 @@ function buildMessageGroup(msgs: MessageData[]): HTMLElement {
   // the sticky zone spans the whole group, not just the 32px avatar height.
   const avatarCol = document.createElement("div");
   avatarCol.className = "message-group__avatar-col";
-  const avatar = buildAvatarElement(first.senderName, first.senderAvatarUrl);
-  avatar.style.cursor = "pointer";
-  avatar.title = "View profile";
-  avatar.addEventListener("click", () => {
-    avatar.dispatchEvent(
+  avatarCol.style.cursor = "pointer";
+  avatarCol.title = "View profile";
+  avatarCol.addEventListener("click", () => {
+    avatarCol.dispatchEvent(
       new CustomEvent("quark:open-profile", { bubbles: true, detail: { userId: senderId } })
     );
   });
+  const avatar = buildAvatarElement(first.senderName, first.senderAvatarUrl);
   avatarCol.appendChild(avatar);
   wrapper.appendChild(avatarCol);
   wrapper.appendChild(group);
