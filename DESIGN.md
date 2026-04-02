@@ -647,15 +647,15 @@ quark/
 - [x] Don't show rooms that are in spaces in the DM view — home view (`__home__`) filters out rooms that belong to any space; `spaceRoomIds` set built at startup by fetching each space's children
 - [x] Add profile dialogue and keybind — `ProfileDialog` overlay shows display name, user ID, and avatar; opened with `P` in normal mode or `:profile` command; `get_own_profile` IPC backed by matrix-sdk `account()` API
 - [x] Back out of threads and replies with escape — global Escape handler now calls `cancelReply()` and `closeThread()`
-- [ ] Add emoji search window
-- [ ] Enable shortcode for custom emoji
+- [x] Add emoji search window
+- [x] Enable shortcode for custom emoji
 - [x] Show all emojis in react picker — `QuickReactPicker` now loads all `BUILTIN_EMOJI` (pinned common reactions first) in a scrollable grid; filtering uses shortcode text
-- [ ] Add sticker picker dialogue
+- [x] Add sticker picker dialogue
 - [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach shows "not yet implemented" toast
 - [x] Support pasting images into the compose box — clipboard image paste detected in `Input`, converted to base64, uploaded via new `send_pasted_image` IPC (Rust: decode base64 → upload → send as `m.image`)
 - [x] Polish pass over top bar displaying room info. Take cues from the message UI.
 - [x] Polish pass over verification UI; currently unstyled at the bottom
-- [ ] Emoji and sticker picker styling. Should show in box above compose area.
+- [x] Emoji and sticker picker styling. Should show in box above compose area.
 - [ ] Threads animate open a space between message bubbles and display there.
 - [ ] Settings UI
 - [ ] Permissions UI
