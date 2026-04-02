@@ -627,7 +627,7 @@ quark/
 - [ ] Room summary previews (MSC3266) — no preview fetch before joining
 
 #### Room Discovery
-- [ ] Room directory browser — `:join #room:server` works but no searchable directory UI
+- [x] Room directory browser — `:directory` command opens a searchable public room browser with j/k navigation and join button; `search_room_directory` IPC backed by matrix-sdk `public_rooms_filtered`
 
 #### Emoji / Sticker Packs
 - [ ] Pack management UI — create, edit, and import emoji/sticker packs (per-room and account data)
@@ -657,14 +657,14 @@ quark/
 - [x] Polish pass over verification UI; currently unstyled at the bottom
 - [x] Emoji and sticker picker styling. Should show in box above compose area.
 - [ ] Threads animate open a space between message bubbles and display there.
-- [ ] Settings UI
+- [x] Settings UI — `SettingsDialog` overlay with Notifications, Media Cache, and Themes tabs; opened with `:settings` or `?` key
 - [ ] Permissions UI
-- [ ] Room info/configuration UI
+- [x] Room info/configuration UI — `RoomInfoDialog` shows room name/topic/member count/encryption/ID, mute toggle, and leave button; opened with `:info` or `I` key
 - [x] Polish pass over top right status UI. User state (online, status, etc.) should go in the bottom left. Mode is no longer needed since it's in the compose UI. Presence status_msg shown in status bar; editable via click or S key.
 - [x] Mouse interactions — hover react (😀) and reply (↩) buttons on messages
 - [x] Mouse interactions — click on profile to open profile view
-- [ ] Pinned messages UI
-- [ ] Implement themes (command currently does nothing)
+- [x] Pinned messages UI — `PinnedMessagesDialog` lists pinned events for the current room; opened with `:pinned`; `get_pinned_events` IPC backed by reading `m.room.pinned_events` state event
+- [x] Implement themes — `loadTheme` IPC + `applyTheme` apply CSS custom properties; `:theme <name>` command works; Themes tab in Settings lists all built-in themes
 - [x] Make space UI bigger
 - [x] Show avatars in member list
 - [x] Profile images should snap to the top of the visible area if the message's position would place it out of view
