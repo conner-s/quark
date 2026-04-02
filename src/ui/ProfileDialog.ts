@@ -6,6 +6,8 @@ export interface ProfileData {
   userId: string;
   displayName: string | null;
   avatarUrl: string | null;
+  /** If provided, a [message] button is shown that calls this when clicked. */
+  onMessage?: () => void;
 }
 
 /**
@@ -19,6 +21,8 @@ export class ProfileDialog {
   private _userIdEl: HTMLElement;
   private _homeserverEl: HTMLElement;
   private _copyBtn: HTMLButtonElement;
+  private _dmBtn: HTMLButtonElement;
+  private _actionsEl: HTMLElement;
 
   constructor() {
     this._el = document.createElement("div");
@@ -108,6 +112,20 @@ export class ProfileDialog {
 
     this._el.appendChild(info);
 
+    // ── Actions ───────────────────────────────────────────────────────────
+    this._actionsEl = document.createElement("div");
+    this._actionsEl.className = "profile-dialog__actions";
+
+    this._dmBtn = document.createElement("button");
+    this._dmBtn.type = "button";
+    this._dmBtn.className = "profile-dialog__dm-btn";
+    this._dmBtn.textContent = "[message]";
+    this._dmBtn.setAttribute("aria-label", "Open direct message");
+    this._dmBtn.setAttribute("tabindex", "-1");
+    this._actionsEl.appendChild(this._dmBtn);
+    this._actionsEl.style.display = "none";
+    this._el.appendChild(this._actionsEl);
+
     // ── Hint ──────────────────────────────────────────────────────────────
     const hint = document.createElement("div");
     hint.className = "profile-dialog__hint";
@@ -154,6 +172,22 @@ export class ProfileDialog {
     this._userIdEl.textContent = data.userId;
     const colonIdx = data.userId.indexOf(":");
     this._homeserverEl.textContent = colonIdx !== -1 ? data.userId.slice(colonIdx + 1) : data.userId;
+
+    // Wire up DM button
+    if (data.onMessage) {
+      const handler = data.onMessage;
+      // Remove previous listener by cloning the node
+      const newBtn = this._dmBtn.cloneNode(true) as HTMLButtonElement;
+      this._dmBtn.replaceWith(newBtn);
+      this._dmBtn = newBtn;
+      this._dmBtn.addEventListener("click", () => {
+        this.hide();
+        handler();
+      });
+      this._actionsEl.style.display = "";
+    } else {
+      this._actionsEl.style.display = "none";
+    }
 
     if (data.avatarUrl) {
       this._avatarEl.innerHTML = "";

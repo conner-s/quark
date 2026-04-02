@@ -21,6 +21,7 @@ import {
   getUserSpaces,
   joinRoom,
   leaveRoom,
+  createRoom,
   markRoomRead,
   getThreadTimeline,
   loadTheme as ipcLoadTheme,
@@ -96,6 +97,8 @@ const _memberAvatarMxc = new Map<string, string>();
 const _avatarDataUrl = new Map<string, string>();
 /** roomId → resolved blob: URL for the room avatar */
 const _roomAvatarDataUrl = new Map<string, string>();
+/** userId → known DM room ID, populated when a DM room is entered */
+const _dmRoomByUser = new Map<string, string>();
 
 /**
  * Convert a downloaded media blob to a Blob URL.
@@ -377,6 +380,7 @@ export async function selectRoom(roomId: string): Promise<void> {
         const dmPartner = members.find((m) => m.user_id !== ownUserId);
         if (dmPartner) {
           const dmPartnerId = dmPartner.user_id;
+          _dmRoomByUser.set(dmPartnerId, roomId);
           roomHeader.setAvatarClickHandler(() => void openProfileForUser(dmPartnerId));
           if (dmPartner.avatar_url) {
             const mxc = dmPartner.avatar_url;
@@ -1171,9 +1175,60 @@ export async function openProfileForUser(userId: string): Promise<void> {
         _avatarDataUrl.set(mxcUrl, avatarUrl);
       } catch { /* non-critical */ }
     }
-    profileDialog.show({ userId, displayName, avatarUrl });
+    const ownUserId = AppState.get("ownUserId");
+    const onMessage = userId !== ownUserId
+      ? () => { void openOrCreateDm(userId); }
+      : undefined;
+    profileDialog.show({ userId, displayName, avatarUrl, onMessage });
   } catch (err) {
     showError(`Failed to load profile: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Navigate to an existing DM room with `userId`, or create one if none exists.
+ */
+export async function openOrCreateDm(userId: string): Promise<void> {
+  // Fast path: use cached room ID from a previously visited DM
+  const cachedRoomId = _dmRoomByUser.get(userId);
+  if (cachedRoomId) {
+    await selectRoom(cachedRoomId);
+    return;
+  }
+
+  // Scan the cached room list for a known DM with this user
+  const rooms = AppState.get("roomListCache");
+  const ownUserId = AppState.get("ownUserId");
+  for (const room of rooms) {
+    if (!room.is_direct || room.member_count !== 2) continue;
+    // Fetch members to verify — only for small DM rooms
+    try {
+      const members = await getRoomMembers(room.room_id);
+      if (members.some((m) => m.user_id === userId) &&
+          members.some((m) => m.user_id === ownUserId)) {
+        _dmRoomByUser.set(userId, room.room_id);
+        await selectRoom(room.room_id);
+        return;
+      }
+    } catch { /* skip on error */ }
+  }
+
+  // No existing DM found — create one
+  try {
+    const roomId = await createRoom({
+      name: null,
+      topic: null,
+      alias: null,
+      is_public: false,
+      is_direct: true,
+      invite: [userId],
+      enable_encryption: true,
+    });
+    _dmRoomByUser.set(userId, roomId);
+    await refreshRooms();
+    await selectRoom(roomId);
+  } catch (err) {
+    showError(`Failed to open DM: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -1201,7 +1256,11 @@ export async function openProfileDialog(): Promise<void> {
             _avatarDataUrl.set(mxcUrl, avatarUrl);
           } catch { /* non-critical */ }
         }
-        profileDialog.show({ userId: focused.userId, displayName: focused.name, avatarUrl });
+        const ownUserId = AppState.get("ownUserId");
+        const onMessage = focused.userId !== ownUserId
+          ? () => { void openOrCreateDm(focused.userId); }
+          : undefined;
+        profileDialog.show({ userId: focused.userId, displayName: focused.name, avatarUrl, onMessage });
         return;
       }
     }
@@ -1226,7 +1285,11 @@ export async function openProfileDialog(): Promise<void> {
             _avatarDataUrl.set(mxcUrl, avatarUrl);
           } catch { /* non-critical */ }
         }
-        profileDialog.show({ userId: evt.sender, displayName, avatarUrl });
+        const ownUserId = AppState.get("ownUserId");
+        const onMessage = evt.sender !== ownUserId
+          ? () => { void openOrCreateDm(evt.sender); }
+          : undefined;
+        profileDialog.show({ userId: evt.sender, displayName, avatarUrl, onMessage });
         return;
       }
     }
@@ -1428,6 +1491,16 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
 
     case "profile": {
       void openProfileDialog();
+      break;
+    }
+
+    case "msg": {
+      const targetUser = parsed.args[0];
+      if (!targetUser) {
+        showError("Usage: :msg <user-id>");
+        return;
+      }
+      void openOrCreateDm(targetUser);
       break;
     }
 

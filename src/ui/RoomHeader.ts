@@ -29,6 +29,7 @@ export class RoomHeader {
   private _memberCountEl: HTMLElement;
   private _encEl: HTMLElement;
   private _avatarClickHandler: (() => void) | null = null;
+  private _memberCountClickHandler: (() => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -88,11 +89,16 @@ export class RoomHeader {
 
     this._el.appendChild(this._metaEl);
 
-    // Single delegated listener — fires for any click originating from the avatar element
+    // Single delegated listener — fires for clicks on avatar or member count
     this._el.addEventListener("click", (e) => {
       if (this._avatarClickHandler &&
           (e.target === this._avatarEl || this._avatarEl.contains(e.target as Node))) {
         this._avatarClickHandler();
+        return;
+      }
+      if (this._memberCountClickHandler &&
+          (e.target === this._memberCountEl || this._memberCountEl.contains(e.target as Node))) {
+        this._memberCountClickHandler();
       }
     });
 
@@ -127,6 +133,16 @@ export class RoomHeader {
   setAvatarClickHandler(handler: (() => void) | null): void {
     this._avatarClickHandler = handler;
     this._updateAvatarCursor();
+  }
+
+  /**
+   * Register a callback to invoke when the member count is clicked.
+   * Typically used to toggle the member list sidebar.
+   */
+  setMemberCountClickHandler(handler: (() => void) | null): void {
+    this._memberCountClickHandler = handler;
+    this._memberCountEl.classList.toggle("room-header__members--clickable", handler !== null);
+    this._memberCountEl.title = handler ? "Toggle member list" : "";
   }
 
   /** Update just the member count in-place (e.g. after the full member list loads). */

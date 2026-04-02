@@ -333,9 +333,13 @@ function applyRcDirectives(rc: ParsedRc): void {
 
 export function setupKeyboard(components: AppComponents): void {
   const { input, commandBar, shortcodePreview, timeline,
-          emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker } = components;
+          emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker,
+          roomHeader } = components;
 
   registerDefaultBindings();
+
+  // Member count in the header toggles the member list sidebar
+  roomHeader.setMemberCountClickHandler(() => toggleMemberList());
 
   // ── User keybindings ──────────────────────────────────────────────────────
   void loadQuarkrc().then(applyRcDirectives).catch(() => { /* no rc file is fine */ });

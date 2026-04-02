@@ -490,6 +490,14 @@ body {
   color: color-mix(in srgb, var(--fg) 65%, transparent);
 }
 
+.room-header__members--clickable {
+  cursor: pointer;
+}
+
+.room-header__members--clickable:hover {
+  color: var(--fg);
+}
+
 .room-header__encryption--on {
   color: var(--accent-success);
 }
@@ -2440,6 +2448,28 @@ a:hover {
 
 .profile-dialog__copy-btn:hover {
   color: var(--accent-primary);
+}
+
+.profile-dialog__actions {
+  padding: 4px 16px 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.profile-dialog__dm-btn {
+  background: transparent;
+  border: var(--border-width) solid var(--accent-primary);
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  font-size: calc(var(--font-size) - 1px);
+  cursor: pointer;
+  padding: 2px 8px;
+  outline: none;
+  letter-spacing: 0.04em;
+}
+
+.profile-dialog__dm-btn:hover {
+  background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
 }
 
 .profile-dialog__hint {
