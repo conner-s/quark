@@ -10,6 +10,10 @@ import {
   openEmojiPicker,
   openGifPicker,
   openProfileDialog,
+  openSettings,
+  openRoomInfo,
+  openPinnedMessages,
+  openRoomDirectory,
   executeCommand,
   toggleMemberList,
   startReply,
@@ -57,6 +61,8 @@ function registerDefaultBindings(): void {
   keymapManager.nmap("m", "toggle-members");
   keymapManager.nmap("P", "open-profile");
   keymapManager.nmap("S", "edit-status");
+  keymapManager.nmap("?", "open-settings");
+  keymapManager.nmap("I", "open-room-info");
 
   // select — activates the focused item in panels that support it (roomlist, spaces)
   keymapManager.nmap("Enter", "select");
@@ -159,6 +165,14 @@ function dispatchAction(action: string, components: AppComponents): void {
 
     case "open-profile":
       void openProfileDialog();
+      break;
+
+    case "open-settings":
+      openSettings();
+      break;
+
+    case "open-room-info":
+      void openRoomInfo();
       break;
 
     case "edit-status":
@@ -334,6 +348,7 @@ function applyRcDirectives(rc: ParsedRc): void {
 export function setupKeyboard(components: AppComponents): void {
   const { input, commandBar, shortcodePreview, timeline,
           emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker,
+          settingsDialog, roomInfoDialog, pinnedMessagesDialog, roomDirectoryDialog,
           roomHeader } = components;
 
   registerDefaultBindings();
@@ -467,7 +482,9 @@ export function setupKeyboard(components: AppComponents): void {
       return;
     }
     if (gifPicker.isVisible() || verification.isVisible() || helpDialog.isVisible() ||
-        profileDialog.isVisible() || devicePicker.isVisible()) return;
+        profileDialog.isVisible() || devicePicker.isVisible() ||
+        settingsDialog.isVisible() || roomInfoDialog.isVisible() ||
+        pinnedMessagesDialog.isVisible() || roomDirectoryDialog.isVisible()) return;
 
     // Escape (or Ctrl+[) always resets to Normal (if not already) and clears sequences
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {

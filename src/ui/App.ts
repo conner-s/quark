@@ -19,6 +19,10 @@ import { DevicePicker } from "./DevicePicker.js";
 import { ShortcodePreview } from "./ShortcodePreview.js";
 import { QuickReactPicker } from "./QuickReactPicker.js";
 import { ProfileDialog } from "./ProfileDialog.js";
+import { SettingsDialog } from "./SettingsDialog.js";
+import { RoomInfoDialog } from "./RoomInfoDialog.js";
+import { PinnedMessagesDialog } from "./PinnedMessagesDialog.js";
+import { RoomDirectoryDialog } from "./RoomDirectoryDialog.js";
 
 // ── AppComponents ─────────────────────────────────────────────────────────────
 
@@ -50,6 +54,10 @@ export interface AppComponents {
   commandBar: CommandBar;
   quickReactPicker: QuickReactPicker;
   profileDialog: ProfileDialog;
+  settingsDialog: SettingsDialog;
+  roomInfoDialog: RoomInfoDialog;
+  pinnedMessagesDialog: PinnedMessagesDialog;
+  roomDirectoryDialog: RoomDirectoryDialog;
 
   // Status
   statusBar: StatusBar;
@@ -86,6 +94,10 @@ export function mountApp(container: HTMLElement): AppComponents {
   const helpDialog = new HelpDialog();
   const quickReactPicker = new QuickReactPicker();
   const profileDialog = new ProfileDialog();
+  const settingsDialog = new SettingsDialog();
+  const roomInfoDialog = new RoomInfoDialog();
+  const pinnedMessagesDialog = new PinnedMessagesDialog();
+  const roomDirectoryDialog = new RoomDirectoryDialog();
 
   // ── Login screen ─────────────────────────────────────────────────────────
   container.appendChild(loginScreen.getElement());
@@ -135,6 +147,10 @@ export function mountApp(container: HTMLElement): AppComponents {
   document.body.appendChild(helpDialog.getElement());
   document.body.appendChild(quickReactPicker.getElement());
   document.body.appendChild(profileDialog.getElement());
+  document.body.appendChild(settingsDialog.getElement());
+  document.body.appendChild(roomInfoDialog.getElement());
+  document.body.appendChild(pinnedMessagesDialog.getElement());
+  document.body.appendChild(roomDirectoryDialog.getElement());
 
   return {
     loginScreen,
@@ -156,6 +172,10 @@ export function mountApp(container: HTMLElement): AppComponents {
     helpDialog,
     quickReactPicker,
     profileDialog,
+    settingsDialog,
+    roomInfoDialog,
+    pinnedMessagesDialog,
+    roomDirectoryDialog,
     mainLayout,
   };
 }

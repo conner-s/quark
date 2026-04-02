@@ -208,6 +208,29 @@ export interface GifResult {
   height: number;
 }
 
+// ─── Pinned Messages ──────────────────────────────────────────────────────────
+
+/** A pinned event — matches matrix::rooms::PinnedEventInfo */
+export interface PinnedEventInfo {
+  event_id: string;
+  sender: string;
+  body: string;
+  formatted_body: string | null;
+  timestamp: number;
+}
+
+// ─── Room Directory ───────────────────────────────────────────────────────────
+
+/** A public room from the room directory — matches matrix::rooms::PublicRoomInfo */
+export interface PublicRoomInfo {
+  room_id: string;
+  name: string | null;
+  topic: string | null;
+  alias: string | null;
+  avatar_url: string | null;
+  member_count: number | null;
+}
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 /**

@@ -19,7 +19,7 @@ import {
   redactMessage as ipcRedactMessage,
   getSpaceChildren,
   getUserSpaces,
-  joinRoom,
+  joinRoom as ipcJoinRoom,
   leaveRoom,
   createRoom,
   markRoomRead,
@@ -1313,6 +1313,49 @@ export async function openProfileDialog(): Promise<void> {
   }
 }
 
+/**
+ * Join a room by ID or alias, refresh the room list, and navigate to it.
+ * Convenience wrapper for use in UI components.
+ */
+export async function joinRoom(roomIdOrAlias: string): Promise<void> {
+  const roomId = await ipcJoinRoom(roomIdOrAlias);
+  showSuccess(`Joined ${roomId}`);
+  await refreshRooms();
+  await selectRoom(roomId);
+}
+
+/**
+ * Open the settings dialog.
+ */
+export function openSettings(): void {
+  const { settingsDialog } = getComponents();
+  settingsDialog.show();
+}
+
+/**
+ * Open the room info dialog for the current room.
+ */
+export async function openRoomInfo(): Promise<void> {
+  const { roomInfoDialog } = getComponents();
+  await roomInfoDialog.show();
+}
+
+/**
+ * Open the pinned messages dialog for the current room.
+ */
+export async function openPinnedMessages(): Promise<void> {
+  const { pinnedMessagesDialog } = getComponents();
+  await pinnedMessagesDialog.show();
+}
+
+/**
+ * Open the room directory dialog.
+ */
+export function openRoomDirectory(): void {
+  const { roomDirectoryDialog } = getComponents();
+  roomDirectoryDialog.show();
+}
+
 // GIF picker search state (persisted across picker open/close within a session)
 let _gifQuery = "";
 let _gifResultCount = 0;
@@ -1425,10 +1468,7 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
         return;
       }
       try {
-        const roomId = await joinRoom(alias);
-        showSuccess(`Joined ${roomId}`);
-        await refreshRooms();
-        await selectRoom(roomId);
+        await joinRoom(alias);
       } catch (err) {
         showError(`Failed to join: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -1491,6 +1531,26 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
 
     case "profile": {
       void openProfileDialog();
+      break;
+    }
+
+    case "settings": {
+      openSettings();
+      break;
+    }
+
+    case "info": {
+      void openRoomInfo();
+      break;
+    }
+
+    case "pinned": {
+      void openPinnedMessages();
+      break;
+    }
+
+    case "directory": {
+      openRoomDirectory();
       break;
     }
 

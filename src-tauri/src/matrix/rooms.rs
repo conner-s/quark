@@ -254,6 +254,138 @@ pub async fn create_room(
     Ok(room_id)
 }
 
+/// A single pinned event's content, resolved from the room timeline.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PinnedEventInfo {
+    pub event_id: String,
+    pub sender: String,
+    pub body: String,
+    pub formatted_body: Option<String>,
+    pub timestamp: u64,
+}
+
+/// Fetch the pinned events for a room.
+pub async fn get_pinned_events(client: &Client, room_id: &str) -> Result<Vec<PinnedEventInfo>, String> {
+    use matrix_sdk::ruma::events::StateEventType;
+    use matrix_sdk::ruma::EventId;
+    use serde_json::Value;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    // Read m.room.pinned_events state event
+    let raw_opt = room
+        .get_state_event(StateEventType::from("m.room.pinned_events"), "")
+        .await
+        .map_err(|e| format!("Failed to fetch pinned events state: {e}"))?;
+
+    let raw = match raw_opt {
+        Some(r) => r,
+        None => return Ok(vec![]),
+    };
+
+    let json: Value = {
+        use matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState;
+        match raw {
+            RawAnySyncOrStrippedState::Sync(r) => r.deserialize_as::<Value>().unwrap_or(Value::Null),
+            RawAnySyncOrStrippedState::Stripped(r) => r.deserialize_as::<Value>().unwrap_or(Value::Null),
+        }
+    };
+
+    let pinned_ids: Vec<String> = json
+        .get("content")
+        .and_then(|c| c.get("pinned"))
+        .and_then(|p| p.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+        .unwrap_or_default();
+
+    let mut result = Vec::new();
+
+    for event_id_str in pinned_ids.iter().take(50) {
+        let Ok(event_id) = EventId::parse(event_id_str) else { continue };
+
+        // Try to find the event in the local timeline via messages()
+        let mut opts = matrix_sdk::room::MessagesOptions::backward();
+        opts.limit = matrix_sdk::ruma::UInt::from(100u32);
+        let Ok(page) = room.messages(opts).await else { continue };
+
+        let target_id = event_id.as_str();
+        let found = page.chunk.iter().find(|ev| ev.kind.event_id().map(|id| id.as_str() == target_id).unwrap_or(false));
+        if let Some(ev) = found {
+            use serde_json::Value;
+            let Ok(json_val) = ev.raw().deserialize_as::<Value>() else { continue };
+            let sender = json_val.get("sender").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let ts = json_val.get("origin_server_ts").and_then(|t| t.as_u64()).unwrap_or(0);
+            let content = json_val.get("content").unwrap_or(&Value::Null);
+            let body = content.get("body").and_then(|b| b.as_str()).unwrap_or("").to_string();
+            let formatted_body = content.get("formatted_body").and_then(|b| b.as_str()).map(str::to_string);
+            result.push(PinnedEventInfo {
+                event_id: event_id_str.clone(),
+                sender,
+                body,
+                formatted_body,
+                timestamp: ts,
+            });
+        }
+    }
+
+    Ok(result)
+}
+
+/// Serializable public room for the room directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicRoomInfo {
+    pub room_id: String,
+    pub name: Option<String>,
+    pub topic: Option<String>,
+    pub alias: Option<String>,
+    pub avatar_url: Option<String>,
+    pub member_count: Option<u64>,
+}
+
+/// Search the public room directory.
+pub async fn search_room_directory(
+    client: &Client,
+    filter: Option<String>,
+    limit: Option<u32>,
+) -> Result<Vec<PublicRoomInfo>, String> {
+    use matrix_sdk::ruma::api::client::directory::get_public_rooms_filtered::v3::Request as PubRoomsRequest;
+    use matrix_sdk::ruma::directory::Filter;
+    use matrix_sdk::ruma::UInt;
+
+    let mut request = PubRoomsRequest::new();
+
+    if let Some(limit_val) = limit {
+        request.limit = Some(UInt::from(limit_val));
+    }
+
+    if let Some(filter_text) = filter {
+        let mut f = Filter::new();
+        f.generic_search_term = Some(filter_text);
+        request.filter = f;
+    }
+
+    let response = client
+        .public_rooms_filtered(request)
+        .await
+        .map_err(|e| format!("Room directory search failed: {e}"))?;
+
+    Ok(response
+        .chunk
+        .into_iter()
+        .map(|room| PublicRoomInfo {
+            room_id: room.room_id.to_string(),
+            name: room.name,
+            topic: room.topic,
+            alias: room.canonical_alias.map(|a| a.to_string()),
+            avatar_url: room.avatar_url.map(|u| u.to_string()),
+            member_count: Some(room.num_joined_members.into()),
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

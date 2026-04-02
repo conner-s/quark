@@ -10,7 +10,7 @@ use crate::{
         emoji::EmojiPack,
         media::MediaDownload,
         reactions::ReactionGroup,
-        rooms::{CreateRoomOptions, RoomInfo, RoomMemberInfo},
+        rooms::{CreateRoomOptions, PinnedEventInfo, PublicRoomInfo, RoomInfo, RoomMemberInfo},
         spaces::SpaceChild,
         threads::ThreadRoot,
         timeline::{TimelineEvent, TimelinePage},
@@ -185,6 +185,27 @@ pub async fn mark_room_read(
 ) -> Result<(), String> {
     let client = get_client(&state)?;
     crate::matrix::rooms::mark_room_read(&client, &room_id).await
+}
+
+/// Get pinned events for a room.
+#[tauri::command]
+pub async fn get_pinned_events(
+    state: State<'_, MatrixState>,
+    room_id: String,
+) -> Result<Vec<PinnedEventInfo>, String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::get_pinned_events(&client, &room_id).await
+}
+
+/// Search the public room directory.
+#[tauri::command]
+pub async fn search_room_directory(
+    state: State<'_, MatrixState>,
+    filter: Option<String>,
+    limit: Option<u32>,
+) -> Result<Vec<PublicRoomInfo>, String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::search_room_directory(&client, filter, limit).await
 }
 
 // ─── Timeline Commands ────────────────────────────────────────────────────────

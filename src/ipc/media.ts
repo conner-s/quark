@@ -5,6 +5,30 @@ import type { MediaDownload } from "./types.js";
 
 export type { MediaDownload };
 
+// ─── Cache Stats ─────────────────────────────────────────────────────────────
+
+export interface CacheStats {
+  total_size_bytes: number;
+  entry_count: number;
+  max_size_bytes: number;
+  usage_percent: number;
+}
+
+/** Get media cache statistics. */
+export async function getCacheStats(): Promise<CacheStats> {
+  return invoke<CacheStats>("get_cache_stats");
+}
+
+/** Clear all entries from the media cache. */
+export async function clearMediaCache(): Promise<void> {
+  return invoke<void>("clear_media_cache");
+}
+
+/** Set the maximum media cache size in megabytes. */
+export async function setCacheSizeLimit(limitMb: number): Promise<void> {
+  return invoke<void>("set_cache_size_limit", { sizeMb: limitMb });
+}
+
 /**
  * Download media from an mxc:// URL.
  * Returns a MediaDownload containing base64-encoded content and MIME type.

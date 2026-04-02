@@ -29,6 +29,10 @@ const KNOWN_COMMANDS: string[] = [
   "cross-sign",
   "setup-cross-signing",
   "profile",
+  "settings",
+  "info",
+  "pinned",
+  "directory",
 ];
 
 /**

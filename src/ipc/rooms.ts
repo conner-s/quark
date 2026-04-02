@@ -1,9 +1,9 @@
 // Room IPC calls
 
 import { invoke } from "./invoke.js";
-import type { RoomInfo, CreateRoomOptions, RoomMember } from "./types.js";
+import type { RoomInfo, CreateRoomOptions, RoomMember, PinnedEventInfo, PublicRoomInfo } from "./types.js";
 
-export type { RoomInfo, CreateRoomOptions, RoomMember };
+export type { RoomInfo, CreateRoomOptions, RoomMember, PinnedEventInfo, PublicRoomInfo };
 
 /**
  * Get all joined rooms.
@@ -51,4 +51,23 @@ export async function getRoomMembers(roomId: string): Promise<RoomMember[]> {
  */
 export async function markRoomRead(roomId: string): Promise<void> {
   return invoke<void>("mark_room_read", { roomId });
+}
+
+/**
+ * Get pinned events for a room.
+ * Matches the Rust `get_pinned_events` command.
+ */
+export async function getPinnedEvents(roomId: string): Promise<PinnedEventInfo[]> {
+  return invoke<PinnedEventInfo[]>("get_pinned_events", { roomId });
+}
+
+/**
+ * Search the public room directory.
+ * Matches the Rust `search_room_directory` command.
+ */
+export async function searchRoomDirectory(filter?: string, limit?: number): Promise<PublicRoomInfo[]> {
+  return invoke<PublicRoomInfo[]>("search_room_directory", {
+    filter: filter ?? null,
+    limit: limit ?? null,
+  });
 }

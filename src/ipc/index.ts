@@ -29,13 +29,15 @@ export type {
   RcDirective,
   ParseError,
   ParsedRc,
+  PinnedEventInfo,
+  PublicRoomInfo,
 } from "./types.js";
 
 // ─── Client (auth) ────────────────────────────────────────────────────────────
 export { login, restoreSession, logout, getOwnProfile, setPresenceStatus } from "./client.js";
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────
-export { getRooms, joinRoom, leaveRoom, createRoom, getRoomMembers, markRoomRead } from "./rooms.js";
+export { getRooms, joinRoom, leaveRoom, createRoom, getRoomMembers, markRoomRead, getPinnedEvents, searchRoomDirectory } from "./rooms.js";
 
 // ─── Timeline ─────────────────────────────────────────────────────────────────
 export {
@@ -58,7 +60,12 @@ export {
 } from "./emoji.js";
 
 // ─── Media ────────────────────────────────────────────────────────────────────
-export { downloadMedia, getThumbnail, uploadMedia, sendPastedImage } from "./media.js";
+export { downloadMedia, getThumbnail, uploadMedia, sendPastedImage, getCacheStats, clearMediaCache, setCacheSizeLimit } from "./media.js";
+export type { CacheStats } from "./media.js";
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+export { getNotificationConfig, setNotificationConfig, muteRoomIpc, unmuteRoomIpc, testNotification } from "./notifications.js";
+export type { NotificationConfig, QuietHours } from "./notifications.js";
 
 // ─── Crypto ───────────────────────────────────────────────────────────────────
 export {

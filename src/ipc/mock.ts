@@ -317,6 +317,31 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       };
     }
 
+    case "get_pinned_events":
+      return [
+        { event_id: "$pin1:matrix.org", sender: "@alice:matrix.org", body: "Check out the new release notes!", formatted_body: null, timestamp: Date.now() - 24 * 60 * 60_000 },
+        { event_id: "$pin2:matrix.org", sender: "@bob:matrix.org", body: "Server maintenance scheduled for Sunday 02:00 UTC.", formatted_body: null, timestamp: Date.now() - 3 * 24 * 60 * 60_000 },
+        { event_id: "$pin3:matrix.org", sender: "@alice:matrix.org", body: "Welcome to #general! Please read the rules in #announcements.", formatted_body: null, timestamp: Date.now() - 7 * 24 * 60 * 60_000 },
+      ];
+    case "search_room_directory": {
+      const filterStr = ((args?.filter as string | null) ?? "").toLowerCase();
+      const rooms = [
+        { room_id: "!pub1:matrix.org", name: "Matrix HQ", topic: "The official Matrix headquarters room", alias: "#matrix:matrix.org", avatar_url: null, member_count: 12500 },
+        { room_id: "!pub2:matrix.org", name: "Open Source Developers", topic: "For FOSS contributors and enthusiasts", alias: "#opensource:matrix.org", avatar_url: null, member_count: 3800 },
+        { room_id: "!pub3:matrix.org", name: "Gaming Lounge", topic: "All things gaming", alias: "#gaming:matrix.org", avatar_url: null, member_count: 950 },
+        { room_id: "!pub4:matrix.org", name: "Linux & BSD", topic: "Linux, BSD and unix-like system discussion", alias: "#linux:matrix.org", avatar_url: null, member_count: 2100 },
+        { room_id: "!pub5:matrix.org", name: "Privacy & Security", topic: "Privacy tools and best practices", alias: "#privacy:matrix.org", avatar_url: null, member_count: 4400 },
+      ];
+      return filterStr
+        ? rooms.filter((r) => (r.name + " " + (r.topic ?? "")).toLowerCase().includes(filterStr))
+        : rooms;
+    }
+    case "set_notification_config":
+    case "clear_media_cache":
+    case "set_cache_size_limit":
+    case "mute_room":
+    case "unmute_room":
+      return null;
     case "download_media": {
       // Return a placeholder SVG so emoji/sticker previews render in mock mode.
       const label = ((args?.mxcUrl as string) ?? "").split("/").pop()?.slice(0, 8) ?? "media";
