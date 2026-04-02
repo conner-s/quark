@@ -369,6 +369,26 @@ export async function selectRoom(roomId: string): Promise<void> {
       // Populate the member list sidebar
       memberList.setMembers(members.map(roomMemberToEntry));
 
+      // For DMs with no room avatar, use the other party's profile picture
+      if (roomInfo?.is_direct && !roomInfo.avatar_url) {
+        const ownUserId = AppState.get("ownUserId");
+        const dmPartner = members.find((m) => m.user_id !== ownUserId);
+        if (dmPartner?.avatar_url) {
+          const mxc = dmPartner.avatar_url;
+          if (_roomAvatarDataUrl.has(roomId)) {
+            roomHeader.setAvatarUrl(_roomAvatarDataUrl.get(roomId)!);
+          } else {
+            void downloadMedia(mxc).then((dl) => {
+              const blobUrl = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+              _roomAvatarDataUrl.set(roomId, blobUrl);
+              if (AppState.get("currentRoomId") === roomId) {
+                roomHeader.setAvatarUrl(blobUrl);
+              }
+            }).catch(() => { /* non-fatal */ });
+          }
+        }
+      }
+
       // Download uncached avatar thumbnails in the background
       _downloadMemberAvatars(members, timeline);
 
