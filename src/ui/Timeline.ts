@@ -356,9 +356,17 @@ function buildMessageGroup(msgs: MessageData[]): HTMLElement {
   const label = document.createElement("div");
   label.className = "message-group__header";
 
+  const senderId = first.senderId ?? first.senderName;
   const sender = document.createElement("span");
   sender.className = "message-group__sender" + (first.isOwn ? " message-group__sender--own" : "");
   sender.textContent = first.senderName;
+  sender.style.cursor = "pointer";
+  sender.title = "View profile";
+  sender.addEventListener("click", () => {
+    sender.dispatchEvent(
+      new CustomEvent("quark:open-profile", { bubbles: true, detail: { userId: senderId } })
+    );
+  });
   label.appendChild(sender);
 
   const ts = document.createElement("span");
@@ -389,6 +397,13 @@ function buildMessageGroup(msgs: MessageData[]): HTMLElement {
   const avatarCol = document.createElement("div");
   avatarCol.className = "message-group__avatar-col";
   const avatar = buildAvatarElement(first.senderName, first.senderAvatarUrl);
+  avatar.style.cursor = "pointer";
+  avatar.title = "View profile";
+  avatar.addEventListener("click", () => {
+    avatar.dispatchEvent(
+      new CustomEvent("quark:open-profile", { bubbles: true, detail: { userId: senderId } })
+    );
+  });
   avatarCol.appendChild(avatar);
   wrapper.appendChild(avatarCol);
   wrapper.appendChild(group);

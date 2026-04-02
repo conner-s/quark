@@ -1036,6 +1036,31 @@ export function openEmojiPicker(): void {
 }
 
 /**
+ * Open the profile dialog for a specific user ID.
+ */
+export async function openProfileForUser(userId: string): Promise<void> {
+  const { profileDialog } = getComponents();
+  try {
+    const displayName = resolveDisplayName(userId);
+    const mxcUrl = _memberAvatarMxc.get(userId);
+    const cachedDataUrl = mxcUrl ? _avatarDataUrl.get(mxcUrl) : undefined;
+    let avatarUrl: string | null = null;
+    if (cachedDataUrl) {
+      avatarUrl = cachedDataUrl;
+    } else if (mxcUrl) {
+      try {
+        const dl = await downloadMedia(mxcUrl);
+        avatarUrl = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+        _avatarDataUrl.set(mxcUrl, avatarUrl);
+      } catch { /* non-critical */ }
+    }
+    profileDialog.show({ userId, displayName, avatarUrl });
+  } catch (err) {
+    showError(`Failed to load profile: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
  * Open the profile dialog. Shows the selected message's sender if one is
  * selected, otherwise shows the current user's own profile.
  */
@@ -1960,5 +1985,11 @@ export function setupMessageActionHandlers(): void {
       startReply(eventId, evt.sender, evt.body.slice(0, 80));
       input.focus();
     }
+  });
+
+  document.addEventListener("quark:open-profile" as keyof DocumentEventMap, (e: Event) => {
+    const { userId } = (e as CustomEvent<{ userId: string }>).detail;
+    if (!userId) return;
+    void openProfileForUser(userId);
   });
 }
