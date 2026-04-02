@@ -495,6 +495,29 @@ pub async fn get_own_profile(
     crate::matrix::client::get_own_profile(&client).await
 }
 
+#[tauri::command]
+pub async fn set_presence_status(
+    state: State<'_, MatrixState>,
+    status_msg: String,
+) -> Result<(), String> {
+    use matrix_sdk::ruma::{
+        api::client::presence::set_presence::v3::Request as SetPresenceRequest,
+        presence::PresenceState,
+    };
+    let client = get_client(&state)?;
+    let user_id = client
+        .user_id()
+        .ok_or_else(|| "Not logged in".to_string())?
+        .to_owned();
+    let mut req = SetPresenceRequest::new(user_id, PresenceState::Online);
+    req.status_msg = if status_msg.is_empty() { None } else { Some(status_msg) };
+    client
+        .send(req, None)
+        .await
+        .map_err(|e| format!("Failed to set presence: {e}"))?;
+    Ok(())
+}
+
 // ─── Thread Commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]

@@ -653,22 +653,24 @@ quark/
 - [ ] Add sticker picker dialogue
 - [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach shows "not yet implemented" toast
 - [x] Support pasting images into the compose box — clipboard image paste detected in `Input`, converted to base64, uploaded via new `send_pasted_image` IPC (Rust: decode base64 → upload → send as `m.image`)
-- [ ] Polish pass over top bar displaying room info. Take cues from the message UI.
+- [x] Polish pass over top bar displaying room info. Take cues from the message UI.
 - [x] Polish pass over verification UI; currently unstyled at the bottom
 - [ ] Emoji and sticker picker styling. Should show in box above compose area.
 - [ ] Threads animate open a space between message bubbles and display there.
 - [ ] Settings UI
 - [ ] Permissions UI
-- [ ] Room configuration UI
-- [ ] Mouse interactions (click on profile to open profile view, react and reply buttons, etc.)
+- [ ] Room info/configuration UI
+- [x] Polish pass over top right status UI. User state (online, status, etc.) should go in the bottom left. Mode is no longer needed since it's in the compose UI. Presence status_msg shown in status bar; editable via click or S key.
+- [x] Mouse interactions — hover react (😀) and reply (↩) buttons on messages
+- [x] Mouse interactions — click on profile to open profile view
 - [ ] Pinned messages UI
 - [ ] Implement themes (command currently does nothing)
-- [ ] Make space UI bigger
-- [ ] Show avatars in member list
-- [ ] Profile images should snap to the top of the visible area if the message's position would place it out of view
-- [ ] Pause gif animation while not focused
+- [x] Make space UI bigger
+- [x] Show avatars in member list
+- [x] Profile images should snap to the top of the visible area if the message's position would place it out of view
+- [x] Pause gif animation while not focused
 - [x] Detect links
-- [ ] Add more info to profile screen
+- [x] Add more info to profile screen
 - [x] Split up messages more than 30 minutes apart
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
@@ -723,10 +725,10 @@ quark/
 - [x] Sometimes unable to navigate timeline — fixed two root causes: (1) _selectedIndex not reset on room switch left it out-of-range, making selectNext/selectPrev think the boundary was reached; (2) clicking the timeline now fires an onFocus callback that updates activePanel to "timeline" so j/k immediately routes there
 - [x] timeline navigation broken after loading more messages — _scrollTopFired was not reset in prependMessages, blocking keyboard nav from triggering further page loads; reset to false after scroll restoration (_paginationLoading guard prevents immediate double-fire)
 - [x] Still can't see custom emotes, only getting stickers
-- [ ] Emoji and sticker pickers are separate dom elements; just recreate the content box, don't recreate the whole popup
+- [x] Emoji and sticker pickers are separate dom elements; just recreate the content box, don't recreate the whole popup — StickerPicker merged into EmojiPicker; tab switching swaps section visibility within one DOM element, no popup close/reopen
 - [x] Emoji and sticker pickers initially appear in the wrong position — both used profile-dialog-in animation (centering transform) instead of a simple picker-in fade/slide; added @keyframes picker-in
-- [ ] Custom emoji tabs pop in after emoji picker load; should probably cache these? May need a way to invalidate the cache if stickers/emoji are added...
-- [ ] Show emoji categories in react picker
+- [x] Custom emoji tabs pop in after emoji picker load — custom emoji categories now cached per-room in `_customEmojiCategoryCache`; prepended immediately on open, then refreshed by the async load
+- [x] Show emoji categories in react picker
 - [x] When sending a message, break into new bubble on the same condition as loading existing messages — appendMessage/appendMessageHidden now check 30-minute time gap before merging into existing group, inserting a time separator when needed
 - [x] Redacted messages don't disappear until reloading the chat — redactMessage now calls timeline.removeMessage() after successful IPC; removes from DOM and _messages array, collapses single-message groups
 - [x] Selecting a room in some spaces returns the room list to the home view — selectRoom was calling roomList.setRooms() with all cached rooms when clearing unread badge; now uses updateRoomBadge() to update only the specific room item in place

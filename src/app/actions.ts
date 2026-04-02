@@ -9,6 +9,7 @@ import {
   restoreSession as ipcRestoreSession,
   logout as ipcLogout,
   getOwnProfile,
+  setPresenceStatus as ipcSetPresenceStatus,
   getRooms,
   getRoomMembers,
   getTimeline,
@@ -20,6 +21,7 @@ import {
   getUserSpaces,
   joinRoom,
   leaveRoom,
+  createRoom,
   markRoomRead,
   getThreadTimeline,
   loadTheme as ipcLoadTheme,
@@ -56,8 +58,7 @@ import type { RoomEntry } from "../ui/RoomList.js";
 import type { MessageData, ReplyPreviewData } from "../ui/Timeline.js";
 import type { MemberEntry } from "../ui/MemberList.js";
 import type { SpaceItem } from "../ui/SpaceStrip.js";
-import type { EmojiEntry, EmojiPickerCategory } from "../ui/EmojiPicker.js";
-import type { StickerEntry } from "../ui/StickerPicker.js";
+import type { EmojiEntry, EmojiPickerCategory, StickerEntry } from "../ui/EmojiPicker.js";
 import type { CustomEmojiEntry } from "../ui/QuickReactPicker.js";
 import { BUILTIN_EMOJI, EMOJI_CATEGORIES } from "../data/unicode-emoji.js";
 
@@ -94,6 +95,10 @@ const _memberDisplayName = new Map<string, string>();
 const _memberAvatarMxc = new Map<string, string>();
 /** mxc:// URL → blob: URL, populated as thumbnails are downloaded */
 const _avatarDataUrl = new Map<string, string>();
+/** roomId → resolved blob: URL for the room avatar */
+const _roomAvatarDataUrl = new Map<string, string>();
+/** userId → known DM room ID, populated when a DM room is entered */
+const _dmRoomByUser = new Map<string, string>();
 
 /**
  * Convert a downloaded media blob to a Blob URL.
@@ -299,13 +304,35 @@ export async function selectRoom(roomId: string): Promise<void> {
   const roomInfo = updatedCache.find((r) => r.room_id === roomId);
   const roomName = roomInfo?.name ?? roomId;
 
+  // Pass a cached room avatar URL if one has already been resolved
+  const cachedRoomAvatar = roomInfo?.room_id
+    ? _roomAvatarDataUrl.get(roomInfo.room_id)
+    : undefined;
+
+  // Clear any DM avatar click handler from the previous room before rendering new avatar
+  roomHeader.setAvatarClickHandler(null);
   roomHeader.setRoom(
     roomName,
     roomInfo?.topic ?? undefined,
     roomInfo?.member_count,
-    roomInfo?.is_encrypted
+    roomInfo?.is_encrypted,
+    cachedRoomAvatar
   );
   statusBar.setRoom(roomName);
+
+  // Resolve the room avatar in the background if not already cached
+  if (roomInfo?.avatar_url && roomInfo.room_id && !_roomAvatarDataUrl.has(roomInfo.room_id)) {
+    const mxcUrl = roomInfo.avatar_url;
+    const targetRoomId = roomInfo.room_id;
+    void downloadMedia(mxcUrl).then((dl) => {
+      const blobUrl = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+      _roomAvatarDataUrl.set(targetRoomId, blobUrl);
+      // Only update the header if the user is still looking at this room
+      if (AppState.get("currentRoomId") === targetRoomId) {
+        getComponents().roomHeader.setAvatarUrl(blobUrl);
+      }
+    }).catch(() => { /* non-fatal: fallback letter stays */ });
+  }
 
   try {
     // Fetch timeline first for fast initial render; members come in parallel
@@ -336,6 +363,8 @@ export async function selectRoom(roomId: string): Promise<void> {
     // Update display names in place now that member data is available.
     // Avoids a full DOM rebuild — use targeted text swaps instead of setMessages.
     if (AppState.get("currentRoomId") === roomId) {
+      // Accurate member count now available — update header in-place
+      roomHeader.setMemberCount(members.length);
       for (const m of members) {
         if (m.display_name) {
           timeline.updateSenderName(m.user_id, m.display_name);
@@ -344,6 +373,31 @@ export async function selectRoom(roomId: string): Promise<void> {
 
       // Populate the member list sidebar
       memberList.setMembers(members.map(roomMemberToEntry));
+
+      // For DMs with no room avatar, use the other party's profile picture
+      if (roomInfo?.is_direct && !roomInfo.avatar_url) {
+        const ownUserId = AppState.get("ownUserId");
+        const dmPartner = members.find((m) => m.user_id !== ownUserId);
+        if (dmPartner) {
+          const dmPartnerId = dmPartner.user_id;
+          _dmRoomByUser.set(dmPartnerId, roomId);
+          roomHeader.setAvatarClickHandler(() => void openProfileForUser(dmPartnerId));
+          if (dmPartner.avatar_url) {
+            const mxc = dmPartner.avatar_url;
+            if (_roomAvatarDataUrl.has(roomId)) {
+              roomHeader.setAvatarUrl(_roomAvatarDataUrl.get(roomId)!);
+            } else {
+              void downloadMedia(mxc).then((dl) => {
+                const blobUrl = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+                _roomAvatarDataUrl.set(roomId, blobUrl);
+                if (AppState.get("currentRoomId") === roomId) {
+                  roomHeader.setAvatarUrl(blobUrl);
+                }
+              }).catch(() => { /* non-fatal */ });
+            }
+          }
+        }
+      }
 
       // Download uncached avatar thumbnails in the background
       _downloadMemberAvatars(members, timeline);
@@ -860,6 +914,19 @@ export async function editMessage(eventId: string, newBody: string): Promise<voi
 }
 
 /**
+ * Apply a redaction from another user (incoming via sync).
+ * Removes the message from the DOM and state cache.
+ */
+export function applyIncomingRedaction(eventId: string): void {
+  const { timeline } = getComponents();
+  timeline.removeMessage(eventId);
+  AppState.set(
+    "currentTimeline",
+    AppState.get("currentTimeline").filter((e) => e.event_id !== eventId)
+  );
+}
+
+/**
  * Redact (delete) a message.
  */
 export async function redactMessage(eventId: string): Promise<void> {
@@ -868,9 +935,13 @@ export async function redactMessage(eventId: string): Promise<void> {
 
   try {
     await ipcRedactMessage(roomId, eventId);
-    // Remove message from timeline immediately (don't wait for re-sync)
+    // Remove immediately from DOM and state cache
     const { timeline } = getComponents();
     timeline.removeMessage(eventId);
+    AppState.set(
+      "currentTimeline",
+      AppState.get("currentTimeline").filter((e) => e.event_id !== eventId)
+    );
     showSuccess("Message deleted");
   } catch (err) {
     showError(`Failed to delete: ${err instanceof Error ? err.message : String(err)}`);
@@ -937,12 +1008,15 @@ export function closeThread(): void {
 /** Whether the EmojiPicker callbacks have been wired (one-time setup). */
 let _emojiPickerWired = false;
 
+/** Cache of custom emoji categories per room ID (or "" for account-level). */
+const _customEmojiCategoryCache = new Map<string, EmojiPickerCategory[]>();
+
 /**
- * Show the emoji picker, loading BUILTIN_EMOJI immediately and custom
- * emoji packs asynchronously. Wires selection/tab-change callbacks on
- * first call.
+ * Show the emoji/sticker picker. Loads BUILTIN_EMOJI immediately and custom
+ * emoji packs asynchronously. Wires callbacks on first call. Custom emoji
+ * categories are cached per-room so they appear immediately on subsequent opens.
  */
-export function openEmojiPicker(): void {
+export function openEmojiPicker(initialTab: "emoji" | "sticker" = "emoji"): void {
   const { emojiPicker, input } = getComponents();
 
   if (!_emojiPickerWired) {
@@ -956,11 +1030,31 @@ export function openEmojiPicker(): void {
     });
 
     emojiPicker.onTabChange((tab) => {
-      emojiPicker.hide();
-      if (tab === "sticker") {
-        void openStickerPicker();
-      } else if (tab === "gif") {
+      // Only gif needs to close this picker and open another overlay
+      if (tab === "gif") {
+        emojiPicker.hide();
         openGifPicker();
+      }
+    });
+
+    emojiPicker.onStickerTabActivated(() => {
+      void _loadStickersIntoUnifiedPicker();
+    });
+
+    emojiPicker.onStickerSelect(async (sticker) => {
+      const roomId = AppState.get("currentRoomId");
+      if (!roomId) {
+        showError("No room selected");
+        return;
+      }
+      const sepIdx = sticker.id.lastIndexOf("::");
+      const packId = sepIdx >= 0 ? sticker.id.slice(0, sepIdx) : sticker.id;
+      const shortcode = sepIdx >= 0 ? sticker.id.slice(sepIdx + 2) : sticker.name;
+      try {
+        await ipcSendSticker(roomId, shortcode, sticker.url, sticker.name, packId, sticker.packName ?? null);
+        showSuccess("Sticker sent");
+      } catch (err) {
+        showError(`Failed to send sticker: ${err instanceof Error ? err.message : String(err)}`);
       }
     });
   }
@@ -973,11 +1067,18 @@ export function openEmojiPicker(): void {
     entries: cat.entries.map(([shortcode, glyph]) => ({ key: glyph, shortcode })),
   }));
   emojiPicker.setCategories(builtinCategories);
-  emojiPicker.show();
 
-  // Async: load custom emoji packs and prepend them as categories
-  const roomId = AppState.get("currentRoomId");
-  getEmojiPacks(roomId ?? undefined)
+  // Prepend cached custom categories immediately (avoids pop-in on repeat opens)
+  const roomId = AppState.get("currentRoomId") ?? "";
+  const cached = _customEmojiCategoryCache.get(roomId);
+  if (cached && cached.length > 0) {
+    emojiPicker.prependCategories(cached);
+  }
+
+  emojiPicker.show(initialTab);
+
+  // Async: load custom emoji packs, update cache, and prepend into picker
+  getEmojiPacks(roomId || undefined)
     .then(async (packs) => {
       const customCategories: EmojiPickerCategory[] = [];
       for (const pack of packs) {
@@ -1007,10 +1108,128 @@ export function openEmojiPicker(): void {
       }
 
       if (customCategories.length > 0) {
+        _customEmojiCategoryCache.set(roomId, customCategories);
         emojiPicker.prependCategories(customCategories);
       }
     })
     .catch(() => { /* non-critical */ });
+}
+
+async function _loadStickersIntoUnifiedPicker(): Promise<void> {
+  const { emojiPicker } = getComponents();
+  const roomId = AppState.get("currentRoomId");
+  try {
+    const packs = await getStickerPacks(roomId ?? undefined);
+    const stickers: StickerEntry[] = [];
+    for (const pack of packs) {
+      for (const e of pack.emojis) {
+        stickers.push({
+          id: `${pack.pack_id}::${e.shortcode}`,
+          name: e.body ?? e.shortcode,
+          url: e.url,
+          thumbnailUrl: e.url.startsWith("mxc://") ? undefined : e.url,
+          packName: pack.display_name ?? pack.pack_id,
+        });
+      }
+    }
+    emojiPicker.setStickers(stickers);
+
+    // Resolve mxc:// thumbnails asynchronously and patch cells as each arrives
+    for (const sticker of stickers) {
+      if (!sticker.url.startsWith("mxc://")) continue;
+      const mxc = sticker.url;
+      if (_emojiImageCache.has(mxc)) {
+        emojiPicker.updateStickerThumbnail(sticker.id, _emojiImageCache.get(mxc)!);
+        continue;
+      }
+      const capturedId = sticker.id;
+      getThumbnail(mxc, 96, 96)
+        .then((dl) => {
+          const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+          _emojiImageCache.set(mxc, dataUrl);
+          emojiPicker.updateStickerThumbnail(capturedId, dataUrl);
+        })
+        .catch(() => { /* non-critical */ });
+    }
+  } catch {
+    emojiPicker.setStickers([]);
+  }
+}
+
+/**
+ * Open the profile dialog for a specific user ID.
+ */
+export async function openProfileForUser(userId: string): Promise<void> {
+  const { profileDialog } = getComponents();
+  try {
+    const displayName = resolveDisplayName(userId);
+    const mxcUrl = _memberAvatarMxc.get(userId);
+    const cachedDataUrl = mxcUrl ? _avatarDataUrl.get(mxcUrl) : undefined;
+    let avatarUrl: string | null = null;
+    if (cachedDataUrl) {
+      avatarUrl = cachedDataUrl;
+    } else if (mxcUrl) {
+      try {
+        const dl = await downloadMedia(mxcUrl);
+        avatarUrl = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+        _avatarDataUrl.set(mxcUrl, avatarUrl);
+      } catch { /* non-critical */ }
+    }
+    const ownUserId = AppState.get("ownUserId");
+    const onMessage = userId !== ownUserId
+      ? () => { void openOrCreateDm(userId); }
+      : undefined;
+    profileDialog.show({ userId, displayName, avatarUrl, onMessage });
+  } catch (err) {
+    showError(`Failed to load profile: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Navigate to an existing DM room with `userId`, or create one if none exists.
+ */
+export async function openOrCreateDm(userId: string): Promise<void> {
+  // Fast path: use cached room ID from a previously visited DM
+  const cachedRoomId = _dmRoomByUser.get(userId);
+  if (cachedRoomId) {
+    await selectRoom(cachedRoomId);
+    return;
+  }
+
+  // Scan the cached room list for a known DM with this user
+  const rooms = AppState.get("roomListCache");
+  const ownUserId = AppState.get("ownUserId");
+  for (const room of rooms) {
+    if (!room.is_direct || room.member_count !== 2) continue;
+    // Fetch members to verify — only for small DM rooms
+    try {
+      const members = await getRoomMembers(room.room_id);
+      if (members.some((m) => m.user_id === userId) &&
+          members.some((m) => m.user_id === ownUserId)) {
+        _dmRoomByUser.set(userId, room.room_id);
+        await selectRoom(room.room_id);
+        return;
+      }
+    } catch { /* skip on error */ }
+  }
+
+  // No existing DM found — create one
+  try {
+    const roomId = await createRoom({
+      name: null,
+      topic: null,
+      alias: null,
+      is_public: false,
+      is_direct: true,
+      invite: [userId],
+      enable_encryption: true,
+    });
+    _dmRoomByUser.set(userId, roomId);
+    await refreshRooms();
+    await selectRoom(roomId);
+  } catch (err) {
+    showError(`Failed to open DM: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /**
@@ -1037,7 +1256,11 @@ export async function openProfileDialog(): Promise<void> {
             _avatarDataUrl.set(mxcUrl, avatarUrl);
           } catch { /* non-critical */ }
         }
-        profileDialog.show({ userId: focused.userId, displayName: focused.name, avatarUrl });
+        const ownUserId = AppState.get("ownUserId");
+        const onMessage = focused.userId !== ownUserId
+          ? () => { void openOrCreateDm(focused.userId); }
+          : undefined;
+        profileDialog.show({ userId: focused.userId, displayName: focused.name, avatarUrl, onMessage });
         return;
       }
     }
@@ -1062,7 +1285,11 @@ export async function openProfileDialog(): Promise<void> {
             _avatarDataUrl.set(mxcUrl, avatarUrl);
           } catch { /* non-critical */ }
         }
-        profileDialog.show({ userId: evt.sender, displayName, avatarUrl });
+        const ownUserId = AppState.get("ownUserId");
+        const onMessage = evt.sender !== ownUserId
+          ? () => { void openOrCreateDm(evt.sender); }
+          : undefined;
+        profileDialog.show({ userId: evt.sender, displayName, avatarUrl, onMessage });
         return;
       }
     }
@@ -1153,89 +1380,9 @@ export function openGifPicker(): void {
   gifPicker.show();
 }
 
-// ── Sticker picker state ──────────────────────────────────────────────────────
-
-/** Whether the StickerPicker onSelect callback has been wired (one-time setup). */
-let _stickerPickerWired = false;
-
-/**
- * Show the sticker picker. Loads sticker packs for the current room and wires
- * the send callback on first call.
- */
-export async function openStickerPicker(): Promise<void> {
-  const { stickerPicker } = getComponents();
-
-  if (!_stickerPickerWired) {
-    _stickerPickerWired = true;
-
-    stickerPicker.onTabChange((tab) => {
-      stickerPicker.hide();
-      if (tab === "emoji") {
-        openEmojiPicker();
-      } else if (tab === "gif") {
-        openGifPicker();
-      }
-    });
-
-    stickerPicker.onSelect(async (sticker) => {
-      const roomId = AppState.get("currentRoomId");
-      if (!roomId) {
-        showError("No room selected");
-        return;
-      }
-      // id is encoded as "packId::shortcode"
-      const sepIdx = sticker.id.lastIndexOf("::");
-      const packId = sepIdx >= 0 ? sticker.id.slice(0, sepIdx) : sticker.id;
-      const shortcode = sepIdx >= 0 ? sticker.id.slice(sepIdx + 2) : sticker.name;
-      try {
-        await ipcSendSticker(roomId, shortcode, sticker.url, sticker.name, packId, sticker.packName ?? null);
-        showSuccess("Sticker sent");
-      } catch (err) {
-        showError(`Failed to send sticker: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    });
-  }
-
-  const roomId = AppState.get("currentRoomId");
-  try {
-    const packs = await getStickerPacks(roomId ?? undefined);
-    const stickers: StickerEntry[] = [];
-    for (const pack of packs) {
-      for (const e of pack.emojis) {
-        stickers.push({
-          id: `${pack.pack_id}::${e.shortcode}`,
-          name: e.body ?? e.shortcode,
-          url: e.url,
-          // mxc:// URLs are not directly displayable — resolved below
-          thumbnailUrl: e.url.startsWith("mxc://") ? undefined : e.url,
-          packName: pack.display_name ?? pack.pack_id,
-        });
-      }
-    }
-    stickerPicker.setStickers(stickers);
-
-    // Resolve mxc:// thumbnails asynchronously and patch cells as each arrives
-    for (const sticker of stickers) {
-      if (!sticker.url.startsWith("mxc://")) continue;
-      const mxc = sticker.url;
-      if (_emojiImageCache.has(mxc)) {
-        stickerPicker.updateStickerThumbnail(sticker.id, _emojiImageCache.get(mxc)!);
-        continue;
-      }
-      const capturedId = sticker.id;
-      getThumbnail(mxc, 96, 96)
-        .then((dl) => {
-          const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
-          _emojiImageCache.set(mxc, dataUrl);
-          stickerPicker.updateStickerThumbnail(capturedId, dataUrl);
-        })
-        .catch(() => { /* non-critical */ });
-    }
-  } catch {
-    stickerPicker.setStickers([]);
-  }
-
-  stickerPicker.show();
+/** Open the sticker tab of the unified emoji/sticker picker. */
+export function openStickerPicker(): void {
+  openEmojiPicker("sticker");
 }
 
 /**
@@ -1344,6 +1491,16 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
 
     case "profile": {
       void openProfileDialog();
+      break;
+    }
+
+    case "msg": {
+      const targetUser = parsed.args[0];
+      if (!targetUser) {
+        showError("Usage: :msg <user-id>");
+        return;
+      }
+      void openOrCreateDm(targetUser);
       break;
     }
 
@@ -1692,13 +1849,16 @@ export function toggleMemberList(): void {
 
 /** Convert IPC RoomMember → MemberList MemberEntry */
 function roomMemberToEntry(m: RoomMember): MemberEntry {
+  // Use the already-resolved blob URL if available; mxc:// URLs can't be
+  // loaded by the browser directly, so fall back to undefined (shows initial).
+  const resolvedAvatar = m.avatar_url ? _avatarDataUrl.get(m.avatar_url) : undefined;
   return {
     id: m.user_id,
     name: m.display_name ?? m.user_id,
     userId: m.user_id,
     powerLevel: m.power_level,
     presence: m.presence ?? "offline",
-    avatarUrl: m.avatar_url ?? undefined,
+    avatarUrl: resolvedAvatar,
   };
 }
 
@@ -1819,17 +1979,20 @@ function _downloadInlineEmoji(timeline: import("../ui/Timeline.js").Timeline): v
  * are not transcoded to static images by the homeserver thumbnail endpoint.
  */
 function _downloadMemberAvatars(members: RoomMember[], timeline: import("../ui/Timeline.js").Timeline): void {
+  const { memberList } = getComponents();
   for (const m of members) {
     if (!m.avatar_url) continue;
     const mxc = m.avatar_url;
     if (_avatarDataUrl.has(mxc)) {
       timeline.updateSenderAvatar(m.user_id, _avatarDataUrl.get(mxc)!);
+      memberList.updateMemberAvatar(m.user_id, _avatarDataUrl.get(mxc)!);
       continue;
     }
     downloadMedia(mxc).then((dl) => {
       const url = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
       _avatarDataUrl.set(mxc, url);
       timeline.updateSenderAvatar(m.user_id, url);
+      memberList.updateMemberAvatar(m.user_id, url);
     }).catch(() => { /* non-critical */ });
   }
 }
@@ -1910,4 +2073,52 @@ export function setupReactionChipHandler(): void {
       void sendReaction(msgEl.dataset.messageId, customEv.detail.key);
     }
   });
+}
+
+/**
+ * Wire the hover action bar buttons (react / reply) that bubble custom events
+ * from message elements. Must be called once after components are set.
+ */
+export function setupMessageActionHandlers(): void {
+  document.addEventListener("quark:msg-react" as keyof DocumentEventMap, (e: Event) => {
+    const { eventId } = (e as CustomEvent<{ eventId: string }>).detail;
+    if (eventId) openQuickReactPicker(eventId);
+  });
+
+  document.addEventListener("quark:msg-reply" as keyof DocumentEventMap, (e: Event) => {
+    const { eventId } = (e as CustomEvent<{ eventId: string }>).detail;
+    if (!eventId) return;
+    const events = AppState.get("currentTimeline");
+    const evt = events.find((ev) => ev.event_id === eventId);
+    if (evt) {
+      const { input } = getComponents();
+      startReply(eventId, evt.sender, evt.body.slice(0, 80));
+      input.focus();
+    }
+  });
+
+  document.addEventListener("quark:open-profile" as keyof DocumentEventMap, (e: Event) => {
+    const { userId } = (e as CustomEvent<{ userId: string }>).detail;
+    if (!userId) return;
+    void openProfileForUser(userId);
+  });
+}
+
+/**
+ * Wire up the status bar's onSetStatus callback and load the initial status.
+ * Call once after login completes.
+ */
+export function setupStatusBar(): void {
+  const { statusBar } = getComponents();
+  statusBar.onSetStatus((msg) => {
+    void ipcSetPresenceStatus(msg).catch(() => { /* non-fatal */ });
+  });
+}
+
+/**
+ * Begin editing the status bar status message (triggered by the S key).
+ */
+export function editStatus(): void {
+  const { statusBar } = getComponents();
+  statusBar.beginEdit();
 }

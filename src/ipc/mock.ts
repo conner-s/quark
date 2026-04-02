@@ -147,6 +147,25 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       MOCK_TIMELINE.push(ev);
       return ev.event_id;
     }
+    case "create_room": {
+      const opts = args?.options as { name?: string; invite?: string[]; is_direct?: boolean } | undefined;
+      const roomId = `!mock-${Date.now()}:matrix.org`;
+      const inviteUser = opts?.invite?.[0];
+      const name = opts?.name ?? (inviteUser ? inviteUser.slice(1, inviteUser.indexOf(":")) : "New Room");
+      MOCK_ROOMS.push({
+        room_id: roomId,
+        name,
+        topic: null,
+        avatar_url: null,
+        unread_count: 0,
+        notification_count: 0,
+        is_direct: opts?.is_direct ?? false,
+        is_encrypted: true,
+        member_count: opts?.is_direct ? 2 : 1,
+        last_activity_ts: Date.now(),
+      });
+      return roomId;
+    }
     case "join_room":
     case "leave_room":
     case "mark_room_read":
@@ -257,6 +276,8 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return "$mock-sticker-event-id";
     case "get_own_profile":
       return { user_id: "@you:matrix.org", display_name: "You", avatar_url: null };
+    case "set_presence_status":
+      return;
     case "get_notification_config":
       return { enabled: true, show_body: true, show_sender: true, mute_rooms: [], quiet_hours: null };
 

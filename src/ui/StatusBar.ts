@@ -1,27 +1,13 @@
-// Bottom status bar — mode indicator, room name, encryption, connection
-
-import { Mode } from "../vim/mode.js";
-
-const MODE_LABELS: Record<string, string> = {
-  Normal: "NOR",
-  Insert: "INS",
-  Command: "CMD",
-  Visual: "VIS",
-};
-
-const MODE_CSS_CLASS: Record<string, string> = {
-  Normal: "",
-  Insert: "status-bar__mode--insert",
-  Command: "status-bar__mode--command",
-  Visual: "status-bar__mode--visual",
-};
+// Bottom-left status bar — connection, room name, and editable presence status
 
 export class StatusBar {
   private _el: HTMLElement;
-  private _modeEl: HTMLElement;
   private _roomEl: HTMLElement;
   private _encEl: HTMLElement;
   private _connEl: HTMLElement;
+  private _statusEl: HTMLElement;
+  private _statusInput: HTMLInputElement | null = null;
+  private _onSetStatus: ((msg: string) => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -29,18 +15,18 @@ export class StatusBar {
     this._el.setAttribute("role", "status");
     this._el.setAttribute("aria-label", "Status bar");
 
-    // ── Mode indicator (left) ────────────────────────────────────────────────
-    this._modeEl = document.createElement("span");
-    this._modeEl.className = "status-bar__mode";
-    this._modeEl.setAttribute("aria-live", "polite");
-    this._modeEl.setAttribute("aria-label", "Editor mode");
-    this._modeEl.textContent = "NOR";
-    this._el.appendChild(this._modeEl);
+    // ── Connection status (left) ─────────────────────────────────────────────
+    this._connEl = document.createElement("span");
+    this._connEl.className = "status-bar__connection";
+    this._connEl.setAttribute("aria-label", "Connection status");
+    this._connEl.setAttribute("aria-live", "polite");
+    this._connEl.textContent = "offline";
+    this._el.appendChild(this._connEl);
 
     // ── Separator ────────────────────────────────────────────────────────────
     this._el.appendChild(this._makeSep());
 
-    // ── Room name (centre-left) ──────────────────────────────────────────────
+    // ── Room name ────────────────────────────────────────────────────────────
     this._roomEl = document.createElement("span");
     this._roomEl.className = "status-bar__room";
     this._roomEl.setAttribute("aria-label", "Current room");
@@ -53,43 +39,30 @@ export class StatusBar {
     spacer.setAttribute("aria-hidden", "true");
     this._el.appendChild(spacer);
 
-    // ── Encryption indicator ─────────────────────────────────────────────────
+    // ── Presence status message ───────────────────────────────────────────────
+    this._statusEl = document.createElement("span");
+    this._statusEl.className = "status-bar__status";
+    this._statusEl.setAttribute("aria-label", "Presence status — click or press S to edit");
+    this._statusEl.title = "Click or press S to set status";
+    this._statusEl.textContent = "";
+    this._statusEl.addEventListener("click", () => this.beginEdit());
+    this._el.appendChild(this._statusEl);
+
+    // ── Separator ────────────────────────────────────────────────────────────
+    this._el.appendChild(this._makeSep());
+
+    // ── Encryption indicator (right) ─────────────────────────────────────────
     this._encEl = document.createElement("span");
     this._encEl.className = "status-bar__encryption";
     this._encEl.setAttribute("aria-label", "Encryption status");
     this._encEl.textContent = "🔓";
     this._el.appendChild(this._encEl);
-
-    // ── Separator ────────────────────────────────────────────────────────────
-    this._el.appendChild(this._makeSep());
-
-    // ── Connection status ────────────────────────────────────────────────────
-    this._connEl = document.createElement("span");
-    this._connEl.className = "status-bar__connection";
-    this._connEl.setAttribute("aria-label", "Connection status");
-    this._connEl.setAttribute("aria-live", "polite");
-    this._connEl.textContent = "offline";
-    this._el.appendChild(this._connEl);
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
   getElement(): HTMLElement {
     return this._el;
-  }
-
-  setMode(mode: Mode): void {
-    const label = mode as string;
-
-    // Remove all previous mode classes
-    for (const cls of Object.values(MODE_CSS_CLASS)) {
-      if (cls) this._modeEl.classList.remove(cls);
-    }
-
-    this._modeEl.textContent = MODE_LABELS[label] ?? label.slice(0, 3).toUpperCase();
-
-    const cls = MODE_CSS_CLASS[label];
-    if (cls) this._modeEl.classList.add(cls);
   }
 
   setRoom(name: string | null): void {
@@ -110,6 +83,59 @@ export class StatusBar {
     this._connEl.textContent = connected ? "online" : "offline";
     this._connEl.classList.toggle("status-bar__connection--online", connected);
     this._connEl.classList.toggle("status-bar__connection--offline", !connected);
+  }
+
+  /** Display a presence status message. Pass empty string to show the placeholder. */
+  setStatusMessage(msg: string): void {
+    if (this._statusInput) return; // don't clobber mid-edit
+    this._statusEl.textContent = msg || "set status…";
+    this._statusEl.classList.toggle("status-bar__status--placeholder", !msg);
+  }
+
+  /** Register a callback invoked when the user commits a new status message. */
+  onSetStatus(cb: (msg: string) => void): void {
+    this._onSetStatus = cb;
+  }
+
+  /** Enter inline editing mode for the status message. */
+  beginEdit(): void {
+    if (this._statusInput) return; // already editing
+
+    const current = this._statusEl.textContent ?? "";
+    const placeholder = this._statusEl.classList.contains("status-bar__status--placeholder");
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "status-bar__status-input";
+    input.value = placeholder ? "" : current;
+    input.placeholder = "set status…";
+    input.maxLength = 255;
+    input.setAttribute("aria-label", "Presence status message");
+
+    this._statusInput = input;
+    this._statusEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const commit = () => {
+      const val = input.value.trim();
+      input.replaceWith(this._statusEl);
+      this._statusInput = null;
+      this.setStatusMessage(val);
+      this._onSetStatus?.(val);
+    };
+
+    const cancel = () => {
+      input.replaceWith(this._statusEl);
+      this._statusInput = null;
+    };
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commit(); }
+      else if (e.key === "Escape" || (e.key === "[" && e.ctrlKey)) { e.preventDefault(); cancel(); }
+      e.stopPropagation(); // prevent vim mode from intercepting
+    });
+    input.addEventListener("blur", cancel);
   }
 
   // ── Private ─────────────────────────────────────────────────────────────────

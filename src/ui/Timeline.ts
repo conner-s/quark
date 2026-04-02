@@ -258,6 +258,10 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     img.className = "message__image";
     img.src = msg.mediaUrl ?? "";
     img.alt = msg.mediaAlt ?? "image";
+    // Mark GIFs so the focus/blur handler can pause/resume animation
+    if ((msg.mediaUrl ?? "").match(/\.gif($|\?)/i)) {
+      img.dataset.gif = "1";
+    }
     row.appendChild(img);
   } else if (type === "sticker") {
     const img = document.createElement("img");
@@ -294,6 +298,47 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     row.appendChild(createReactionBar(msg.reactions));
   }
 
+  // ── Hover action bar ───────────────────────────────────────────────────
+  if (msg.type !== "system") {
+    const actions = document.createElement("div");
+    actions.className = "message__actions";
+    actions.setAttribute("aria-hidden", "true");
+
+    const reactBtn = document.createElement("button");
+    reactBtn.className = "message__action-btn";
+    reactBtn.textContent = "😀";
+    reactBtn.title = "React (e)";
+    reactBtn.setAttribute("tabindex", "-1");
+    reactBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      row.dispatchEvent(
+        new CustomEvent("quark:msg-react", {
+          bubbles: true,
+          detail: { eventId: msg.id },
+        })
+      );
+    });
+
+    const replyBtn = document.createElement("button");
+    replyBtn.className = "message__action-btn";
+    replyBtn.textContent = "↩";
+    replyBtn.title = "Reply (r)";
+    replyBtn.setAttribute("tabindex", "-1");
+    replyBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      row.dispatchEvent(
+        new CustomEvent("quark:msg-reply", {
+          bubbles: true,
+          detail: { eventId: msg.id },
+        })
+      );
+    });
+
+    actions.appendChild(reactBtn);
+    actions.appendChild(replyBtn);
+    row.appendChild(actions);
+  }
+
   return row;
 }
 
@@ -311,9 +356,17 @@ function buildMessageGroup(msgs: MessageData[]): HTMLElement {
   const label = document.createElement("div");
   label.className = "message-group__header";
 
+  const senderId = first.senderId ?? first.senderName;
   const sender = document.createElement("span");
   sender.className = "message-group__sender" + (first.isOwn ? " message-group__sender--own" : "");
   sender.textContent = first.senderName;
+  sender.style.cursor = "pointer";
+  sender.title = "View profile";
+  sender.addEventListener("click", () => {
+    sender.dispatchEvent(
+      new CustomEvent("quark:open-profile", { bubbles: true, detail: { userId: senderId } })
+    );
+  });
   label.appendChild(sender);
 
   const ts = document.createElement("span");
@@ -338,8 +391,21 @@ function buildMessageGroup(msgs: MessageData[]): HTMLElement {
   wrapper.className = "message-group-wrapper";
   wrapper.dataset.sender = first.senderId ?? first.senderName;
 
+  // Wrap the avatar in a column that stretches to the full group height.
+  // This gives position:sticky on the avatar a proper containing block —
+  // the sticky zone spans the whole group, not just the 32px avatar height.
+  const avatarCol = document.createElement("div");
+  avatarCol.className = "message-group__avatar-col";
+  avatarCol.style.cursor = "pointer";
+  avatarCol.title = "View profile";
+  avatarCol.addEventListener("click", () => {
+    avatarCol.dispatchEvent(
+      new CustomEvent("quark:open-profile", { bubbles: true, detail: { userId: senderId } })
+    );
+  });
   const avatar = buildAvatarElement(first.senderName, first.senderAvatarUrl);
-  wrapper.appendChild(avatar);
+  avatarCol.appendChild(avatar);
+  wrapper.appendChild(avatarCol);
   wrapper.appendChild(group);
 
   return wrapper;
@@ -947,6 +1013,7 @@ export class Timeline {
     }
   }
 
+  /**
   /**
    * Scroll to a message by event ID and briefly highlight it.
    * No-ops silently if the event ID is not in the rendered timeline.

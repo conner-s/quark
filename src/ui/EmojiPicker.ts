@@ -20,29 +20,61 @@ export interface EmojiPickerCategory {
   entries: EmojiEntry[];
 }
 
+export interface StickerEntry {
+  id: string;
+  /** Display name / shortcode */
+  name: string;
+  /** mxc:// URL of the sticker image */
+  url: string;
+  /** Optional thumbnail URL (lower res for the grid) */
+  thumbnailUrl?: string;
+  /** Pack this sticker belongs to */
+  packName?: string;
+}
+
 type SelectCallback = (entry: EmojiEntry) => void;
+type StickerSelectCallback = (sticker: StickerEntry) => void;
 type TabChangeCallback = (tab: PickerTab) => void;
+type StickerTabActivatedCallback = () => void;
 
 const COLS = 8;
+const STICKER_COLS = 4;
 
 /** Keyboard-navigable emoji / sticker / GIF picker overlay. */
 export class EmojiPicker {
   private _el: HTMLElement;
   private _tabBarEl: HTMLElement;
+  private _currentTab: PickerTab = "emoji";
+
+  // ── Emoji section ──────────────────────────────────────────────────────
+  private _emojiSectionEl: HTMLElement;
   private _categoryBarEl: HTMLElement;
   private _searchEl: HTMLInputElement;
   private _gridEl: HTMLElement;
 
   private _categories: EmojiPickerCategory[] = [];
   private _activeCategoryId: string | null = null;
-  private _allEntries: EmojiEntry[] = [];       // entries for the active category (or all)
+  private _allEntries: EmojiEntry[] = [];
   private _filteredEntries: EmojiEntry[] = [];
-  private _currentTab: PickerTab = "emoji";
   private _focusIndex = 0;
   private _searchActive = false;
 
+  // ── Sticker section ────────────────────────────────────────────────────
+  private _stickerSectionEl: HTMLElement;
+  private _stickerSearchEl: HTMLInputElement;
+  private _stickerPackLabelEl: HTMLElement;
+  private _stickerGridEl: HTMLElement;
+
+  private _stickerAllEntries: StickerEntry[] = [];
+  private _stickerFilteredEntries: StickerEntry[] = [];
+  private _stickerFocusIndex = 0;
+  private _stickerSearchActive = false;
+
+  // ── Callbacks ──────────────────────────────────────────────────────────
   private _onSelect: SelectCallback | null = null;
+  private _onStickerSelect: StickerSelectCallback | null = null;
   private _onTabChange: TabChangeCallback | null = null;
+  private _onStickerTabActivated: StickerTabActivatedCallback | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -50,7 +82,7 @@ export class EmojiPicker {
     this._el.setAttribute("role", "dialog");
     this._el.setAttribute("aria-label", "Emoji picker");
     this._el.setAttribute("aria-modal", "true");
-    this._el.setAttribute("tabindex", "-1"); // allows focus for keyboard events when grid is empty
+    this._el.setAttribute("tabindex", "-1");
     this._el.style.display = "none";
 
     // ── Tab bar ──────────────────────────────────────────────────────────
@@ -76,13 +108,16 @@ export class EmojiPicker {
       this._tabBarEl.appendChild(btn);
     }
 
-    // ── Category bar (hidden until categories are set) ─────────────────
+    // ── Emoji section ─────────────────────────────────────────────────────
+    this._emojiSectionEl = document.createElement("div");
+    this._emojiSectionEl.className = "emoji-picker__section";
+    this._el.appendChild(this._emojiSectionEl);
+
     this._categoryBarEl = document.createElement("div");
     this._categoryBarEl.className = "emoji-picker__categories";
     this._categoryBarEl.style.display = "none";
-    this._el.appendChild(this._categoryBarEl);
+    this._emojiSectionEl.appendChild(this._categoryBarEl);
 
-    // ── Search bar ───────────────────────────────────────────────────────
     this._searchEl = document.createElement("input");
     this._searchEl.type = "text";
     this._searchEl.className = "emoji-picker__search";
@@ -92,14 +127,40 @@ export class EmojiPicker {
     this._searchEl.setAttribute("spellcheck", "false");
     this._searchEl.style.display = "none";
     this._searchEl.addEventListener("input", () => this._applyFilter(this._searchEl.value));
-    this._el.appendChild(this._searchEl);
+    this._emojiSectionEl.appendChild(this._searchEl);
 
-    // ── Grid ─────────────────────────────────────────────────────────────
     this._gridEl = document.createElement("div");
     this._gridEl.className = "emoji-picker__grid";
     this._gridEl.setAttribute("role", "grid");
     this._gridEl.setAttribute("aria-label", "Emoji grid");
-    this._el.appendChild(this._gridEl);
+    this._emojiSectionEl.appendChild(this._gridEl);
+
+    // ── Sticker section ───────────────────────────────────────────────────
+    this._stickerSectionEl = document.createElement("div");
+    this._stickerSectionEl.className = "emoji-picker__section";
+    this._stickerSectionEl.style.display = "none";
+    this._el.appendChild(this._stickerSectionEl);
+
+    this._stickerPackLabelEl = document.createElement("div");
+    this._stickerPackLabelEl.className = "sticker-picker__pack-label";
+    this._stickerSectionEl.appendChild(this._stickerPackLabelEl);
+
+    this._stickerSearchEl = document.createElement("input");
+    this._stickerSearchEl.type = "text";
+    this._stickerSearchEl.className = "sticker-picker__search";
+    this._stickerSearchEl.placeholder = "Search stickers…";
+    this._stickerSearchEl.setAttribute("aria-label", "Search stickers");
+    this._stickerSearchEl.setAttribute("autocomplete", "off");
+    this._stickerSearchEl.setAttribute("spellcheck", "false");
+    this._stickerSearchEl.style.display = "none";
+    this._stickerSearchEl.addEventListener("input", () => this._applyStickerFilter(this._stickerSearchEl.value));
+    this._stickerSectionEl.appendChild(this._stickerSearchEl);
+
+    this._stickerGridEl = document.createElement("div");
+    this._stickerGridEl.className = "sticker-picker__grid";
+    this._stickerGridEl.setAttribute("role", "grid");
+    this._stickerGridEl.setAttribute("aria-label", "Sticker grid");
+    this._stickerSectionEl.appendChild(this._stickerGridEl);
 
     // ── Keyboard handling ────────────────────────────────────────────────
     this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
@@ -120,32 +181,48 @@ export class EmojiPicker {
     this._onSelect = cb;
   }
 
+  onStickerSelect(cb: StickerSelectCallback): void {
+    this._onStickerSelect = cb;
+  }
+
   onTabChange(cb: TabChangeCallback): void {
     this._onTabChange = cb;
+  }
+
+  /** Called when the sticker tab is activated so the host can load sticker data. */
+  onStickerTabActivated(cb: StickerTabActivatedCallback): void {
+    this._onStickerTabActivated = cb;
   }
 
   isVisible(): boolean {
     return this._el.style.display !== "none";
   }
 
-  show(): void {
+  show(tab?: PickerTab): void {
     this._el.style.display = "";
-    this._focusIndex = 0;
-    const cells = this._gridEl.querySelectorAll<HTMLElement>(".emoji-picker__cell");
-    if (cells.length > 0) {
-      this._focusCell(0);
+    if (tab && tab !== this._currentTab) {
+      this._switchTab(tab);
     } else {
-      // Grid not populated yet — focus the container so Escape still works
-      this._el.focus();
+      // If showing the sticker tab again (room may have changed), reload data
+      if (this._currentTab === "sticker") {
+        this._onStickerTabActivated?.();
+      }
+      this._focusActiveSection();
     }
   }
 
   hide(): void {
     this._el.style.display = "none";
+    // Reset emoji search
     this._searchEl.style.display = "none";
     this._searchEl.value = "";
     this._searchActive = false;
     this._applyFilter("");
+    // Reset sticker search
+    this._stickerSearchEl.style.display = "none";
+    this._stickerSearchEl.value = "";
+    this._stickerSearchActive = false;
+    this._applyStickerFilter("");
     keymapManager.resetSequence();
   }
 
@@ -153,7 +230,6 @@ export class EmojiPicker {
   setCategories(categories: EmojiPickerCategory[]): void {
     this._categories = categories;
     this._rebuildCategoryBar();
-    // Select first category by default
     if (categories.length > 0) {
       this._selectCategory(categories[0].id, false);
     }
@@ -173,7 +249,6 @@ export class EmojiPicker {
       }
     }
     this._rebuildCategoryBar();
-    // Re-render active category in case it was updated
     if (this._activeCategoryId) {
       const active = this._categories.find((c) => c.id === this._activeCategoryId);
       if (active) {
@@ -181,7 +256,6 @@ export class EmojiPicker {
         this._applyFilter(this._searchEl.value);
       }
     }
-    // If we just added the first categories, select the first one
     if (!this._activeCategoryId && this._categories.length > 0) {
       this._selectCategory(this._categories[0].id, false);
     }
@@ -191,7 +265,6 @@ export class EmojiPicker {
   setEntries(entries: EmojiEntry[]): void {
     this._allEntries = entries;
     this._applyFilter(this._searchEl.value);
-    // Focus first cell if picker is currently shown but focus was on the container
     if (this.isVisible() && document.activeElement === this._el) {
       this._focusCell(0);
     }
@@ -201,7 +274,46 @@ export class EmojiPicker {
     this._switchTab(tab);
   }
 
+  // ── Sticker methods ────────────────────────────────────────────────────
+
+  setStickers(stickers: StickerEntry[]): void {
+    this._stickerAllEntries = stickers;
+    this._applyStickerFilter(this._stickerSearchEl.value);
+    this._updateStickerPackLabel();
+  }
+
+  updateStickerThumbnail(id: string, thumbnailUrl: string): void {
+    const canonical = this._stickerAllEntries.find((s) => s.id === id);
+    if (canonical) canonical.thumbnailUrl = thumbnailUrl;
+    const filtered = this._stickerFilteredEntries.find((s) => s.id === id);
+    if (filtered) filtered.thumbnailUrl = thumbnailUrl;
+
+    const cells = this._stickerGridEl.querySelectorAll<HTMLElement>(".sticker-picker__cell");
+    for (const cell of cells) {
+      const idx = Number(cell.dataset.index);
+      if (this._stickerFilteredEntries[idx]?.id === id) {
+        const img = cell.querySelector<HTMLImageElement>("img");
+        if (img) img.src = thumbnailUrl;
+        break;
+      }
+    }
+  }
+
   // ── Private ────────────────────────────────────────────────────────────
+
+  private _focusActiveSection(): void {
+    if (this._currentTab === "sticker") {
+      this._focusStickerCell(0);
+    } else {
+      this._focusIndex = 0;
+      const cells = this._gridEl.querySelectorAll<HTMLElement>(".emoji-picker__cell");
+      if (cells.length > 0) {
+        this._focusCell(0);
+      } else {
+        this._el.focus();
+      }
+    }
+  }
 
   private _rebuildCategoryBar(): void {
     this._categoryBarEl.innerHTML = "";
@@ -256,19 +368,37 @@ export class EmojiPicker {
   }
 
   private _switchTab(tab: PickerTab): void {
+    if (tab === "gif") {
+      // GIF is a separate overlay — delegate to host
+      this._onTabChange?.(tab);
+      return;
+    }
+
     this._currentTab = tab;
     for (const btn of this._tabBarEl.querySelectorAll<HTMLElement>(".emoji-picker__tab")) {
       const isActive = btn.dataset.tab === tab;
       btn.setAttribute("aria-selected", String(isActive));
       btn.classList.toggle("emoji-picker__tab--active", isActive);
     }
-    this._onTabChange?.(tab);
+
+    if (tab === "sticker") {
+      this._emojiSectionEl.style.display = "none";
+      this._stickerSectionEl.style.display = "";
+      // Notify host to load sticker data
+      this._onStickerTabActivated?.();
+      this._focusStickerCell(0);
+    } else {
+      this._stickerSectionEl.style.display = "none";
+      this._emojiSectionEl.style.display = "";
+      const cells = this._gridEl.querySelectorAll<HTMLElement>(".emoji-picker__cell");
+      if (cells.length > 0) this._focusCell(0);
+      else this._el.focus();
+    }
   }
 
   private _applyFilter(query: string): void {
     const q = query.toLowerCase().trim();
     if (q) {
-      // Search across ALL categories when a query is active
       const allEntries = this._categories.length > 0
         ? this._categories.flatMap((c) => c.entries)
         : this._allEntries;
@@ -332,12 +462,99 @@ export class EmojiPicker {
     }
   }
 
+  private _cycleCategory(dir: -1 | 1): void {
+    if (this._categories.length === 0) return;
+    const idx = this._categories.findIndex((c) => c.id === this._activeCategoryId);
+    const next = (idx + dir + this._categories.length) % this._categories.length;
+    this._selectCategory(this._categories[next].id, true);
+  }
+
+  // ── Sticker section private ────────────────────────────────────────────
+
+  private _updateStickerPackLabel(): void {
+    const first = this._stickerFilteredEntries[0];
+    this._stickerPackLabelEl.textContent = first?.packName ?? "";
+  }
+
+  private _applyStickerFilter(query: string): void {
+    const q = query.toLowerCase().trim();
+    this._stickerFilteredEntries = q
+      ? this._stickerAllEntries.filter(
+          (s) =>
+            s.name.toLowerCase().includes(q) ||
+            (s.packName?.toLowerCase().includes(q) ?? false)
+        )
+      : this._stickerAllEntries;
+    this._renderStickerGrid();
+    this._stickerFocusIndex = 0;
+    this._updateStickerPackLabel();
+  }
+
+  private _renderStickerGrid(): void {
+    this._stickerGridEl.innerHTML = "";
+
+    for (let i = 0; i < this._stickerFilteredEntries.length; i++) {
+      const sticker = this._stickerFilteredEntries[i];
+      const cell = document.createElement("button");
+      cell.className = "sticker-picker__cell";
+      cell.type = "button";
+      cell.setAttribute("role", "gridcell");
+      cell.setAttribute("tabindex", i === this._stickerFocusIndex ? "0" : "-1");
+      cell.setAttribute("aria-label", sticker.name);
+      cell.title = sticker.name;
+      cell.dataset.index = String(i);
+
+      const img = document.createElement("img");
+      img.src = sticker.thumbnailUrl ?? sticker.url;
+      img.alt = sticker.name;
+      img.className = "sticker-picker__img";
+      img.loading = "lazy";
+      cell.appendChild(img);
+
+      const label = document.createElement("span");
+      label.className = "sticker-picker__cell-label";
+      label.textContent = sticker.name;
+      cell.appendChild(label);
+
+      cell.addEventListener("click", () => this._selectStickerIndex(i));
+      this._stickerGridEl.appendChild(cell);
+    }
+  }
+
+  private _focusStickerCell(index: number): void {
+    const cells = this._stickerGridEl.querySelectorAll<HTMLElement>(".sticker-picker__cell");
+    if (cells.length === 0) {
+      this._el.focus();
+      return;
+    }
+    this._stickerFocusIndex = Math.max(0, Math.min(index, cells.length - 1));
+    for (let i = 0; i < cells.length; i++) {
+      cells[i].setAttribute("tabindex", i === this._stickerFocusIndex ? "0" : "-1");
+    }
+    cells[this._stickerFocusIndex]?.focus();
+  }
+
+  private _selectStickerIndex(index: number): void {
+    const sticker = this._stickerFilteredEntries[index];
+    if (sticker) {
+      this._onStickerSelect?.(sticker);
+      this.hide();
+    }
+  }
+
+  // ── Keyboard handling ──────────────────────────────────────────────────
+
   private _handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
     const isEscape = e.key === "Escape" || (e.ctrlKey && e.key === "[");
 
-    // Escape: if search active, close search; otherwise close picker
+    if (this._currentTab === "sticker") {
+      this._handleStickerKeydown(e, isEscape);
+      return;
+    }
+
+    // ── Emoji tab keydown ──────────────────────────────────────────────────
     if (this._searchActive && isEscape) {
       e.preventDefault();
       this._searchActive = false;
@@ -354,7 +571,6 @@ export class EmojiPicker {
       return;
     }
 
-    // Tab — cycle emoji/sticker/gif tabs
     if (e.key === "Tab" && !e.shiftKey) {
       e.preventDefault();
       const tabs: PickerTab[] = ["emoji", "sticker", "gif"];
@@ -363,7 +579,6 @@ export class EmojiPicker {
       return;
     }
 
-    // [ / ] — cycle emoji categories
     if (e.key === "[" && this._categories.length > 0) {
       e.preventDefault();
       this._cycleCategory(-1);
@@ -375,7 +590,6 @@ export class EmojiPicker {
       return;
     }
 
-    // / — open search
     if (e.key === "/" && !this._searchActive) {
       e.preventDefault();
       this._searchActive = true;
@@ -384,7 +598,6 @@ export class EmojiPicker {
       return;
     }
 
-    // Enter — select focused cell
     if (e.key === "Enter") {
       e.preventDefault();
       this._selectIndex(this._focusIndex);
@@ -433,10 +646,77 @@ export class EmojiPicker {
     }
   }
 
-  private _cycleCategory(dir: -1 | 1): void {
-    if (this._categories.length === 0) return;
-    const idx = this._categories.findIndex((c) => c.id === this._activeCategoryId);
-    const next = (idx + dir + this._categories.length) % this._categories.length;
-    this._selectCategory(this._categories[next].id, true);
+  private _handleStickerKeydown(e: KeyboardEvent, isEscape: boolean): void {
+    const cells = this._stickerGridEl.querySelectorAll<HTMLElement>(".sticker-picker__cell");
+    const total = cells.length;
+
+    if (this._stickerSearchActive && isEscape) {
+      e.preventDefault();
+      this._stickerSearchActive = false;
+      this._stickerSearchEl.style.display = "none";
+      this._stickerSearchEl.value = "";
+      this._applyStickerFilter("");
+      this._focusStickerCell(0);
+      return;
+    }
+
+    if (isEscape) {
+      e.preventDefault();
+      this.hide();
+      return;
+    }
+
+    if (e.key === "Tab" && !e.shiftKey) {
+      e.preventDefault();
+      const tabs: PickerTab[] = ["emoji", "sticker", "gif"];
+      const next = tabs[(tabs.indexOf(this._currentTab) + 1) % tabs.length];
+      this._switchTab(next);
+      return;
+    }
+
+    if (e.key === "/" && !this._stickerSearchActive) {
+      e.preventDefault();
+      this._stickerSearchActive = true;
+      this._stickerSearchEl.style.display = "";
+      this._stickerSearchEl.focus();
+      return;
+    }
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      this._selectStickerIndex(this._stickerFocusIndex);
+      return;
+    }
+
+    if (total === 0) return;
+
+    let next = this._stickerFocusIndex;
+
+    switch (e.key) {
+      case "j":
+      case "ArrowDown":
+        e.preventDefault();
+        next = Math.min(this._stickerFocusIndex + STICKER_COLS, total - 1);
+        break;
+      case "k":
+      case "ArrowUp":
+        e.preventDefault();
+        next = Math.max(this._stickerFocusIndex - STICKER_COLS, 0);
+        break;
+      case "l":
+      case "ArrowRight":
+        e.preventDefault();
+        next = Math.min(this._stickerFocusIndex + 1, total - 1);
+        break;
+      case "h":
+      case "ArrowLeft":
+        e.preventDefault();
+        next = Math.max(this._stickerFocusIndex - 1, 0);
+        break;
+      default:
+        return;
+    }
+
+    this._focusStickerCell(next);
   }
 }

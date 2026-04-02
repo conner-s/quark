@@ -1,6 +1,6 @@
 // Quick reaction picker — text input as default, Tab to browse all emoji
 
-import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
+import { BUILTIN_EMOJI, EMOJI_CATEGORIES } from "../data/unicode-emoji.js";
 
 /** Build reaction data from the full built-in emoji set, with a set of pinned
  *  common reactions shown first so frequently-used emoji are always at the top. */
@@ -20,6 +20,11 @@ const BUILTIN_REACTION_DATA: { key: string; shortcode: string; imageUrl?: string
     .filter((e) => !PINNED_EMOJI.has(e.key))
     .map((e) => ({ key: e.key, shortcode: e.shortcode })),
 ];
+
+/** Set of glyphs belonging to each category, keyed by category id */
+const CATEGORY_GLYPHS = new Map<string, Set<string>>(
+  EMOJI_CATEGORIES.map((cat) => [cat.id, new Set(cat.entries.map(([, glyph]) => glyph))])
+);
 
 export interface CustomEmojiEntry {
   /** Reaction key — for custom emoji this is `:shortcode:` */
@@ -45,6 +50,7 @@ type ReactCallback = (eventId: string, key: string) => void;
 export class QuickReactPicker {
   private _el: HTMLElement;
   private _inputEl: HTMLInputElement;
+  private _categoryBarEl: HTMLElement;
   private _gridEl: HTMLElement;
   private _buttons: HTMLButtonElement[] = [];
   /** Parallel data array — one entry per button, same order as _buttons */
@@ -54,6 +60,8 @@ export class QuickReactPicker {
   private _targetEventId: string | null = null;
   private _onReact: ReactCallback | null = null;
   private _customEmoji: CustomEmojiEntry[] = [];
+  /** null = show all; otherwise the id of the active category */
+  private _activeCategoryId: string | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -82,6 +90,35 @@ export class QuickReactPicker {
     inputRow.appendChild(this._inputEl);
 
     this._el.appendChild(inputRow);
+
+    // ── Category bar ──────────────────────────────────────────────────────
+    this._categoryBarEl = document.createElement("div");
+    this._categoryBarEl.className = "quick-react-picker__cats";
+    this._categoryBarEl.setAttribute("aria-label", "Emoji categories");
+
+    // "All" button
+    const allBtn = document.createElement("button");
+    allBtn.type = "button";
+    allBtn.className = "quick-react-picker__cat-btn quick-react-picker__cat-btn--active";
+    allBtn.textContent = "★";
+    allBtn.title = "All";
+    allBtn.dataset.categoryId = "";
+    allBtn.addEventListener("click", () => this._selectCategory(null, allBtn));
+    this._categoryBarEl.appendChild(allBtn);
+
+    // One button per category
+    for (const cat of EMOJI_CATEGORIES) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "quick-react-picker__cat-btn";
+      btn.textContent = cat.icon;
+      btn.title = cat.name;
+      btn.dataset.categoryId = cat.id;
+      btn.addEventListener("click", () => this._selectCategory(cat.id, btn));
+      this._categoryBarEl.appendChild(btn);
+    }
+
+    this._el.appendChild(this._categoryBarEl);
 
     // ── Quick emoji grid ──────────────────────────────────────────────────
     this._gridEl = document.createElement("div");
@@ -143,6 +180,14 @@ export class QuickReactPicker {
     this._focusedBtnIndex = -1;
     this._updateBtnFocus();
     this._inputEl.value = "";
+    // Reset to "All" category
+    this._activeCategoryId = null;
+    const allBtn = this._categoryBarEl.firstElementChild as HTMLButtonElement | null;
+    if (allBtn) {
+      for (const btn of Array.from(this._categoryBarEl.children) as HTMLButtonElement[]) {
+        btn.classList.toggle("quick-react-picker__cat-btn--active", btn === allBtn);
+      }
+    }
     this._applyFilter("");
 
     if (anchor) {
@@ -233,16 +278,34 @@ export class QuickReactPicker {
    * Show only buttons whose emoji glyph or shortcode contains every space-separated
    * token in the query (case-insensitive substring match). Falls back to showing
    * all buttons when nothing matches, so typed text can still be sent as-is.
+   * When there is no query, the active category filter is applied instead.
    */
   private _applyFilter(raw: string): void {
     // Strip a leading colon so `:party` works the same as `party`
     const q = raw.replace(/^:/, "").toLowerCase().trim();
 
     if (!q) {
-      for (const btn of this._buttons) btn.style.display = "";
+      // No text query — apply category filter
+      const catGlyphs = this._activeCategoryId
+        ? CATEGORY_GLYPHS.get(this._activeCategoryId)
+        : null;
+
+      for (let i = 0; i < this._buttons.length; i++) {
+        const { key, imageUrl } = this._allData[i];
+        if (catGlyphs === null || catGlyphs === undefined) {
+          // "All" view — show everything
+          this._buttons[i].style.display = "";
+        } else if (imageUrl) {
+          // Custom emoji are always shown regardless of category
+          this._buttons[i].style.display = "";
+        } else {
+          this._buttons[i].style.display = catGlyphs.has(key) ? "" : "none";
+        }
+      }
       return;
     }
 
+    // Text search overrides category filter — search all emoji
     const tokens = q.split(/\s+/);
 
     let anyVisible = false;
@@ -268,6 +331,17 @@ export class QuickReactPicker {
     ) {
       this._returnToInput();
     }
+  }
+
+  /** Switch to a category (or null for "all") and update the bar highlight. */
+  private _selectCategory(categoryId: string | null, activeBtnEl: HTMLButtonElement): void {
+    this._activeCategoryId = categoryId;
+    // Update highlighted state on all category buttons
+    for (const btn of Array.from(this._categoryBarEl.children) as HTMLButtonElement[]) {
+      btn.classList.toggle("quick-react-picker__cat-btn--active", btn === activeBtnEl);
+    }
+    // Re-apply filter using current input value (which is likely empty)
+    this._applyFilter(this._inputEl.value);
   }
 
   private _pick(key: string): void {

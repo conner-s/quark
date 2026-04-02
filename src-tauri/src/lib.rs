@@ -88,6 +88,7 @@ pub fn run() {
             commands::get_user_spaces,
             // Profile
             commands::get_own_profile,
+            commands::set_presence_status,
             // Threads
             commands::get_thread_roots,
             commands::get_thread_timeline,

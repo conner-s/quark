@@ -17,7 +17,10 @@ import {
   openThread,
   openQuickReactPicker,
   setupReactionChipHandler,
+  setupMessageActionHandlers,
   handleImagePaste,
+  setupStatusBar,
+  editStatus,
 } from "./actions.js";
 import { AppState } from "./state.js";
 import { loadQuarkrc } from "../ipc/config.js";
@@ -53,6 +56,7 @@ function registerDefaultBindings(): void {
   keymapManager.nmap("t", "open-thread");
   keymapManager.nmap("m", "toggle-members");
   keymapManager.nmap("P", "open-profile");
+  keymapManager.nmap("S", "edit-status");
 
   // select — activates the focused item in panels that support it (roomlist, spaces)
   keymapManager.nmap("Enter", "select");
@@ -155,6 +159,10 @@ function dispatchAction(action: string, components: AppComponents): void {
 
     case "open-profile":
       void openProfileDialog();
+      break;
+
+    case "edit-status":
+      editStatus();
       break;
 
     case "close":
@@ -325,9 +333,13 @@ function applyRcDirectives(rc: ParsedRc): void {
 
 export function setupKeyboard(components: AppComponents): void {
   const { input, commandBar, shortcodePreview, timeline,
-          emojiPicker, gifPicker, stickerPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker } = components;
+          emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker,
+          roomHeader } = components;
 
   registerDefaultBindings();
+
+  // Member count in the header toggles the member list sidebar
+  roomHeader.setMemberCountClickHandler(() => toggleMemberList());
 
   // ── User keybindings ──────────────────────────────────────────────────────
   void loadQuarkrc().then(applyRcDirectives).catch(() => { /* no rc file is fine */ });
@@ -368,6 +380,9 @@ export function setupKeyboard(components: AppComponents): void {
 
   // Wire reaction chip clicks (bubbling custom events) → sendReaction
   setupReactionChipHandler();
+  // Wire hover action bar button clicks → react / reply
+  setupMessageActionHandlers();
+  setupStatusBar();
 
   // Sync mode indicators + blur/focus on mode change
   modeManager.on((_from, to) => {
@@ -448,13 +463,6 @@ export function setupKeyboard(components: AppComponents): void {
       if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
         e.preventDefault();
         emojiPicker.hide();
-      }
-      return;
-    }
-    if (stickerPicker.isVisible()) {
-      if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
-        e.preventDefault();
-        stickerPicker.hide();
       }
       return;
     }

@@ -48,3 +48,11 @@ export async function logout(): Promise<void> {
 export async function getOwnProfile(): Promise<OwnProfile> {
   return invoke<OwnProfile>("get_own_profile", {});
 }
+
+/**
+ * Set the current user's presence status message (m.presence status_msg).
+ * Pass an empty string to clear the status.
+ */
+export async function setPresenceStatus(statusMsg: string): Promise<void> {
+  return invoke<void>("set_presence_status", { statusMsg });
+}

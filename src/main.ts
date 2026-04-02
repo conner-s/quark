@@ -85,6 +85,34 @@ components.spaceStrip.onSelect((spaceId) => {
   void selectSpace(spaceId);
 });
 
+// ── GIF pause/resume on window focus ─────────────────────────────────────────
+// Freeze GIF animations while the window is hidden or blurred to avoid wasting
+// CPU/GPU when the user is not looking at the app.
+
+function pauseGifs(): void {
+  document.querySelectorAll<HTMLImageElement>('img[data-gif="1"]').forEach((img) => {
+    if (img.src && !img.dataset.gifSrc) {
+      img.dataset.gifSrc = img.src;
+      img.src = "";
+    }
+  });
+}
+
+function resumeGifs(): void {
+  document.querySelectorAll<HTMLImageElement>('img[data-gif="1"]').forEach((img) => {
+    if (img.dataset.gifSrc) {
+      img.src = img.dataset.gifSrc;
+      delete img.dataset.gifSrc;
+    }
+  });
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) pauseGifs(); else resumeGifs();
+});
+window.addEventListener("blur", pauseGifs);
+window.addEventListener("focus", resumeGifs);
+
 // ── Global error handler ──────────────────────────────────────────────────────
 
 window.addEventListener("unhandledrejection", (e) => {

@@ -3,7 +3,7 @@
 import { AppState } from "./state.js";
 import type { AppComponents } from "../ui/App.js";
 import type { TimelineEvent, RoomInfo } from "../ipc/types.js";
-import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage, resolveSenderAvatarUrl, ensureSenderAvatarDownloaded } from "./actions.js";
+import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage, resolveSenderAvatarUrl, ensureSenderAvatarDownloaded, applyIncomingRedaction } from "./actions.js";
 import { showToast } from "../ui/NotificationToast.js";
 import { handleIncomingMessage } from "./notifications.js";
 
@@ -40,6 +40,11 @@ interface SyncVerificationRequestPayload {
   user_id: string;
   device_id: string;
   flow_id: string;
+}
+
+interface SyncRedactionPayload {
+  room_id: string;
+  redacted_event_id: string;
 }
 
 // ── Tauri event listener shim ─────────────────────────────────────────────────
@@ -233,6 +238,16 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     }
   );
 
+  // ── quark://sync/redaction ────────────────────────────────────────────────
+  const unlistenRedaction = await tauriListen<SyncRedactionPayload>(
+    "quark://sync/redaction",
+    (payload) => {
+      const currentRoom = AppState.get("currentRoomId");
+      if (payload.room_id !== currentRoom) return;
+      applyIncomingRedaction(payload.redacted_event_id);
+    }
+  );
+
   _unlisteners = [
     unlistenMessage,
     unlistenRooms,
@@ -241,6 +256,7 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     unlistenConnected,
     unlistenReaction,
     unlistenVerification,
+    unlistenRedaction,
   ];
 
   // Mark as online
