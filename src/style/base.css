@@ -1616,36 +1616,16 @@ a:hover {
   display: flex;
   align-items: center;
   position: fixed;
-  top: 0;
-  right: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(var(--space-strip-width) + var(--room-list-width));
   z-index: 100;
   background-color: var(--bg);
-  border-bottom: var(--border-width) solid var(--border-color);
-  border-left: var(--border-width) solid var(--border-color);
+  border-top: var(--border-width) solid var(--border-color);
+  border-right: var(--border-width) solid var(--border-color);
   font-size: calc(var(--font-size) - 2px);
   user-select: none;
   pointer-events: auto;
-}
-
-.status-bar__mode {
-  padding: 2px 8px;
-  color: var(--bg);
-  background-color: var(--accent-primary);
-  font-weight: bold;
-  letter-spacing: 0.05em;
-  transition: background-color var(--transition-speed);
-}
-
-.status-bar__mode--insert {
-  background-color: var(--accent-secondary);
-}
-
-.status-bar__mode--command {
-  background-color: var(--accent-warning);
-}
-
-.status-bar__mode--visual {
-  background-color: var(--accent-primary);
 }
 
 .status-bar__sep {

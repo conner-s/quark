@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { StatusBar } from "./StatusBar.js";
-import { Mode } from "../vim/mode.js";
 
 describe("StatusBar", () => {
   let bar: StatusBar;
@@ -12,56 +11,6 @@ describe("StatusBar", () => {
 
   afterEach(() => {
     bar.getElement().remove();
-  });
-
-  describe("setMode", () => {
-    it("shows NOR in Normal mode by default", () => {
-      const modeEl = bar.getElement().querySelector(".status-bar__mode");
-      expect(modeEl?.textContent).toBe("NOR");
-    });
-
-    it("shows INS in Insert mode", () => {
-      bar.setMode(Mode.Insert);
-
-      const modeEl = bar.getElement().querySelector(".status-bar__mode");
-      expect(modeEl?.textContent).toBe("INS");
-    });
-
-    it("shows CMD in Command mode", () => {
-      bar.setMode(Mode.Command);
-
-      const modeEl = bar.getElement().querySelector(".status-bar__mode");
-      expect(modeEl?.textContent).toBe("CMD");
-    });
-
-    it("shows VIS in Visual mode", () => {
-      bar.setMode(Mode.Visual);
-
-      const modeEl = bar.getElement().querySelector(".status-bar__mode");
-      expect(modeEl?.textContent).toBe("VIS");
-    });
-
-    it("adds insert CSS class in Insert mode", () => {
-      bar.setMode(Mode.Insert);
-
-      const modeEl = bar.getElement().querySelector(".status-bar__mode");
-      expect(modeEl?.classList.contains("status-bar__mode--insert")).toBe(true);
-    });
-
-    it("adds command CSS class in Command mode", () => {
-      bar.setMode(Mode.Command);
-
-      const modeEl = bar.getElement().querySelector(".status-bar__mode");
-      expect(modeEl?.classList.contains("status-bar__mode--command")).toBe(true);
-    });
-
-    it("removes previous mode class when mode changes", () => {
-      bar.setMode(Mode.Insert);
-      bar.setMode(Mode.Normal);
-
-      const modeEl = bar.getElement().querySelector(".status-bar__mode");
-      expect(modeEl?.classList.contains("status-bar__mode--insert")).toBe(false);
-    });
   });
 
   describe("setRoom", () => {

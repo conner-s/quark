@@ -1,24 +1,7 @@
-// Bottom status bar — mode indicator, room name, encryption, connection
-
-import { Mode } from "../vim/mode.js";
-
-const MODE_LABELS: Record<string, string> = {
-  Normal: "NOR",
-  Insert: "INS",
-  Command: "CMD",
-  Visual: "VIS",
-};
-
-const MODE_CSS_CLASS: Record<string, string> = {
-  Normal: "",
-  Insert: "status-bar__mode--insert",
-  Command: "status-bar__mode--command",
-  Visual: "status-bar__mode--visual",
-};
+// Bottom-left status bar — connection and encryption status
 
 export class StatusBar {
   private _el: HTMLElement;
-  private _modeEl: HTMLElement;
   private _roomEl: HTMLElement;
   private _encEl: HTMLElement;
   private _connEl: HTMLElement;
@@ -29,67 +12,42 @@ export class StatusBar {
     this._el.setAttribute("role", "status");
     this._el.setAttribute("aria-label", "Status bar");
 
-    // ── Mode indicator (left) ────────────────────────────────────────────────
-    this._modeEl = document.createElement("span");
-    this._modeEl.className = "status-bar__mode";
-    this._modeEl.setAttribute("aria-live", "polite");
-    this._modeEl.setAttribute("aria-label", "Editor mode");
-    this._modeEl.textContent = "NOR";
-    this._el.appendChild(this._modeEl);
-
-    // ── Separator ────────────────────────────────────────────────────────────
-    this._el.appendChild(this._makeSep());
-
-    // ── Room name (centre-left) ──────────────────────────────────────────────
-    this._roomEl = document.createElement("span");
-    this._roomEl.className = "status-bar__room";
-    this._roomEl.setAttribute("aria-label", "Current room");
-    this._roomEl.textContent = "—";
-    this._el.appendChild(this._roomEl);
-
-    // ── Spacer pushes right-side items to the right ──────────────────────────
-    const spacer = document.createElement("span");
-    spacer.className = "status-bar__spacer";
-    spacer.setAttribute("aria-hidden", "true");
-    this._el.appendChild(spacer);
-
-    // ── Encryption indicator ─────────────────────────────────────────────────
-    this._encEl = document.createElement("span");
-    this._encEl.className = "status-bar__encryption";
-    this._encEl.setAttribute("aria-label", "Encryption status");
-    this._encEl.textContent = "🔓";
-    this._el.appendChild(this._encEl);
-
-    // ── Separator ────────────────────────────────────────────────────────────
-    this._el.appendChild(this._makeSep());
-
-    // ── Connection status ────────────────────────────────────────────────────
+    // ── Connection status (left) ─────────────────────────────────────────────
     this._connEl = document.createElement("span");
     this._connEl.className = "status-bar__connection";
     this._connEl.setAttribute("aria-label", "Connection status");
     this._connEl.setAttribute("aria-live", "polite");
     this._connEl.textContent = "offline";
     this._el.appendChild(this._connEl);
+
+    // ── Separator ────────────────────────────────────────────────────────────
+    this._el.appendChild(this._makeSep());
+
+    // ── Room name ────────────────────────────────────────────────────────────
+    this._roomEl = document.createElement("span");
+    this._roomEl.className = "status-bar__room";
+    this._roomEl.setAttribute("aria-label", "Current room");
+    this._roomEl.textContent = "—";
+    this._el.appendChild(this._roomEl);
+
+    // ── Spacer pushes encryption indicator to the right ──────────────────────
+    const spacer = document.createElement("span");
+    spacer.className = "status-bar__spacer";
+    spacer.setAttribute("aria-hidden", "true");
+    this._el.appendChild(spacer);
+
+    // ── Encryption indicator (right) ─────────────────────────────────────────
+    this._encEl = document.createElement("span");
+    this._encEl.className = "status-bar__encryption";
+    this._encEl.setAttribute("aria-label", "Encryption status");
+    this._encEl.textContent = "🔓";
+    this._el.appendChild(this._encEl);
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
   getElement(): HTMLElement {
     return this._el;
-  }
-
-  setMode(mode: Mode): void {
-    const label = mode as string;
-
-    // Remove all previous mode classes
-    for (const cls of Object.values(MODE_CSS_CLASS)) {
-      if (cls) this._modeEl.classList.remove(cls);
-    }
-
-    this._modeEl.textContent = MODE_LABELS[label] ?? label.slice(0, 3).toUpperCase();
-
-    const cls = MODE_CSS_CLASS[label];
-    if (cls) this._modeEl.classList.add(cls);
   }
 
   setRoom(name: string | null): void {
