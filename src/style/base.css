@@ -1667,6 +1667,38 @@ a:hover {
   color: var(--accent-error);
 }
 
+.status-bar__status {
+  padding: 2px 6px;
+  color: var(--accent-secondary);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+  transition: color var(--transition-speed);
+}
+
+.status-bar__status:hover {
+  color: var(--fg);
+}
+
+.status-bar__status--placeholder {
+  color: var(--roomlist-muted);
+  font-style: italic;
+}
+
+.status-bar__status-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--accent-secondary);
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 2px);
+  padding: 0 4px;
+  width: 120px;
+  outline: none;
+}
+
 /* ── Login screen ────────────────────────────────────────────────────── */
 
 .login-screen {

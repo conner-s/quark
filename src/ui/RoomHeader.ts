@@ -111,6 +111,12 @@ export class RoomHeader {
     this._applyData({ name, topic, memberCount, encrypted, avatarUrl });
   }
 
+  /** Update just the member count in-place (e.g. after the full member list loads). */
+  setMemberCount(count: number): void {
+    this._memberCountEl.textContent = `${count} member${count === 1 ? "" : "s"}`;
+    this._memberCountEl.setAttribute("aria-label", `${count} member${count === 1 ? "" : "s"}`);
+  }
+
   /**
    * Swap in a resolved avatar URL after an async download completes.
    * Replaces the fallback letter with the actual image without re-rendering

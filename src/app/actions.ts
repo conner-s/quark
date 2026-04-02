@@ -9,6 +9,7 @@ import {
   restoreSession as ipcRestoreSession,
   logout as ipcLogout,
   getOwnProfile,
+  setPresenceStatus as ipcSetPresenceStatus,
   getRooms,
   getRoomMembers,
   getTimeline,
@@ -358,6 +359,8 @@ export async function selectRoom(roomId: string): Promise<void> {
     // Update display names in place now that member data is available.
     // Avoids a full DOM rebuild — use targeted text swaps instead of setMessages.
     if (AppState.get("currentRoomId") === roomId) {
+      // Accurate member count now available — update header in-place
+      roomHeader.setMemberCount(members.length);
       for (const m of members) {
         if (m.display_name) {
           timeline.updateSenderName(m.user_id, m.display_name);
@@ -2009,4 +2012,23 @@ export function setupMessageActionHandlers(): void {
     if (!userId) return;
     void openProfileForUser(userId);
   });
+}
+
+/**
+ * Wire up the status bar's onSetStatus callback and load the initial status.
+ * Call once after login completes.
+ */
+export function setupStatusBar(): void {
+  const { statusBar } = getComponents();
+  statusBar.onSetStatus((msg) => {
+    void ipcSetPresenceStatus(msg).catch(() => { /* non-fatal */ });
+  });
+}
+
+/**
+ * Begin editing the status bar status message (triggered by the S key).
+ */
+export function editStatus(): void {
+  const { statusBar } = getComponents();
+  statusBar.beginEdit();
 }

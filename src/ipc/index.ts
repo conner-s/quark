@@ -32,7 +32,7 @@ export type {
 } from "./types.js";
 
 // ─── Client (auth) ────────────────────────────────────────────────────────────
-export { login, restoreSession, logout, getOwnProfile } from "./client.js";
+export { login, restoreSession, logout, getOwnProfile, setPresenceStatus } from "./client.js";
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────
 export { getRooms, joinRoom, leaveRoom, createRoom, getRoomMembers, markRoomRead } from "./rooms.js";

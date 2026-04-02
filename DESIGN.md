@@ -660,7 +660,7 @@ quark/
 - [ ] Settings UI
 - [ ] Permissions UI
 - [ ] Room configuration UI
-- [x] Polish pass over top right status UI. User state (online, status, etc.) should go in the bottom left. Mode is no longer needed since it's in the compose UI.
+- [x] Polish pass over top right status UI. User state (online, status, etc.) should go in the bottom left. Mode is no longer needed since it's in the compose UI. Presence status_msg shown in status bar; editable via click or S key.
 - [x] Mouse interactions — hover react (😀) and reply (↩) buttons on messages
 - [x] Mouse interactions — click on profile to open profile view
 - [ ] Pinned messages UI

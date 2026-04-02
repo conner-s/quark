@@ -19,6 +19,8 @@ import {
   setupReactionChipHandler,
   setupMessageActionHandlers,
   handleImagePaste,
+  setupStatusBar,
+  editStatus,
 } from "./actions.js";
 import { AppState } from "./state.js";
 import { loadQuarkrc } from "../ipc/config.js";
@@ -54,6 +56,7 @@ function registerDefaultBindings(): void {
   keymapManager.nmap("t", "open-thread");
   keymapManager.nmap("m", "toggle-members");
   keymapManager.nmap("P", "open-profile");
+  keymapManager.nmap("S", "edit-status");
 
   // select — activates the focused item in panels that support it (roomlist, spaces)
   keymapManager.nmap("Enter", "select");
@@ -156,6 +159,10 @@ function dispatchAction(action: string, components: AppComponents): void {
 
     case "open-profile":
       void openProfileDialog();
+      break;
+
+    case "edit-status":
+      editStatus();
       break;
 
     case "close":
@@ -371,6 +378,7 @@ export function setupKeyboard(components: AppComponents): void {
   setupReactionChipHandler();
   // Wire hover action bar button clicks → react / reply
   setupMessageActionHandlers();
+  setupStatusBar();
 
   // Sync mode indicators + blur/focus on mode change
   modeManager.on((_from, to) => {

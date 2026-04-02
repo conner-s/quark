@@ -257,6 +257,8 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return "$mock-sticker-event-id";
     case "get_own_profile":
       return { user_id: "@you:matrix.org", display_name: "You", avatar_url: null };
+    case "set_presence_status":
+      return;
     case "get_notification_config":
       return { enabled: true, show_body: true, show_sender: true, mute_rooms: [], quiet_hours: null };
 
