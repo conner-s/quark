@@ -99,3 +99,5 @@ export type { GifProvider } from "./gif.js";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 export { loadTheme, parseQuarkrc } from "./config.js";
+export { getAppConfig, setAppConfig, DEFAULT_APP_CONFIG } from "./app_config.js";
+export type { AppConfig, GeneralConfig, SyncConfig, MediaConfig, GifConfig, GifRating, EmojiConfig } from "./app_config.js";

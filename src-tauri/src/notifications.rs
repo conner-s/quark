@@ -116,6 +116,52 @@ pub fn is_in_quiet_hours(config: &NotificationConfig) -> bool {
     }
 }
 
+// ─── Persistence ─────────────────────────────────────────────────────────────
+
+fn notification_config_path() -> Option<std::path::PathBuf> {
+    directories::ProjectDirs::from("", "", "quark")
+        .map(|d| d.config_dir().join("notifications.toml"))
+}
+
+/// Load notification config from disk; returns defaults if absent or invalid.
+pub fn load_notification_config() -> NotificationConfig {
+    let Some(path) = notification_config_path() else { return NotificationConfig::default() };
+    if !path.exists() { return NotificationConfig::default() }
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("Failed to read notifications.toml: {e}");
+            return NotificationConfig::default();
+        }
+    };
+    match toml::from_str::<NotificationConfig>(&content) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::warn!("Failed to parse notifications.toml: {e}");
+            NotificationConfig::default()
+        }
+    }
+}
+
+/// Write notification config to `~/.config/quark/notifications.toml`.
+pub fn save_notification_config(config: &NotificationConfig) -> Result<(), String> {
+    let path = notification_config_path()
+        .ok_or_else(|| "Could not determine config directory".to_string())?;
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create config dir: {e}"))?;
+    }
+
+    let content = toml::to_string_pretty(config)
+        .map_err(|e| format!("Failed to serialize notifications config: {e}"))?;
+
+    std::fs::write(&path, content)
+        .map_err(|e| format!("Failed to write notifications.toml: {e}"))?;
+
+    Ok(())
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

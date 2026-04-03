@@ -1,13 +1,15 @@
-// Settings dialog — Notifications, Media, and Themes tabs
+// Settings dialog — General, Media, GIF, Emoji, Notifications, Themes tabs
 
 import { keymapManager } from "../vim/keybindings.js";
 import { getConfig, setNotificationConfig } from "../app/notifications.js";
 import type { NotificationConfig } from "../app/notifications.js";
 import { getCacheStats, clearMediaCache, setCacheSizeLimit } from "../ipc/media.js";
 import type { CacheStats } from "../ipc/media.js";
+import { getAppConfig, setAppConfig } from "../ipc/app_config.js";
+import type { AppConfig } from "../ipc/app_config.js";
 import { loadTheme } from "../app/actions.js";
 
-type SettingsTab = "notifications" | "media" | "themes";
+type SettingsTab = "general" | "media" | "gif" | "emoji" | "notifications" | "themes";
 
 const BUILTIN_THEMES = [
   "phosphor",
@@ -32,7 +34,7 @@ export class SettingsDialog {
   private _el: HTMLElement;
   private _panelEl: HTMLElement;
   private _contentEl: HTMLElement;
-  private _activeTab: SettingsTab = "notifications";
+  private _activeTab: SettingsTab = "general";
 
   private _tabEls: Record<SettingsTab, HTMLElement> = {} as Record<SettingsTab, HTMLElement>;
 
@@ -77,8 +79,11 @@ export class SettingsDialog {
     tabs.className = "settings-dialog__tabs";
     tabs.setAttribute("role", "tablist");
 
-    this._tabEls.notifications = this._makeTab("Notifications", "notifications", tabs);
+    this._tabEls.general = this._makeTab("General", "general", tabs);
     this._tabEls.media = this._makeTab("Media", "media", tabs);
+    this._tabEls.gif = this._makeTab("GIF", "gif", tabs);
+    this._tabEls.emoji = this._makeTab("Emoji", "emoji", tabs);
+    this._tabEls.notifications = this._makeTab("Notifications", "notifications", tabs);
     this._tabEls.themes = this._makeTab("Themes", "themes", tabs);
 
     this._panelEl.appendChild(tabs);
@@ -105,7 +110,7 @@ export class SettingsDialog {
 
   show(): void {
     this._el.style.display = "flex";
-    this._switchTab("notifications");
+    this._switchTab("general");
     this._panelEl.focus();
   }
 
@@ -142,24 +147,369 @@ export class SettingsDialog {
 
     this._contentEl.innerHTML = "";
 
-    if (tab === "notifications") {
-      void this._buildNotificationsTab();
-    } else if (tab === "media") {
-      void this._buildMediaTab();
-    } else {
-      this._buildThemesTab();
+    switch (tab) {
+      case "general":       void this._buildGeneralTab(); break;
+      case "media":         void this._buildMediaTab(); break;
+      case "gif":           void this._buildGifTab(); break;
+      case "emoji":         void this._buildEmojiTab(); break;
+      case "notifications": void this._buildNotificationsTab(); break;
+      case "themes":        this._buildThemesTab(); break;
     }
   }
 
-  private async _buildNotificationsTab(): Promise<void> {
+  // ── Shared helpers ────────────────────────────────────────────────────────────
+
+  private _makeCheckbox(label: string, checked: boolean, onChange: (v: boolean) => void): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "settings-dialog__row";
+    const lbl = document.createElement("label");
+    lbl.className = "settings-dialog__checkbox-label";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = checked;
+    cb.addEventListener("change", () => onChange(cb.checked));
+    lbl.appendChild(cb);
+    lbl.append(" " + label);
+    row.appendChild(lbl);
+    return row;
+  }
+
+  private _makeNumberRow(label: string, value: number, min: number, max: number, onChange: (v: number) => void): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "settings-dialog__row";
+    const lbl = document.createElement("span");
+    lbl.className = "settings-dialog__label";
+    lbl.textContent = label;
+    const input = document.createElement("input");
+    input.type = "number";
+    input.className = "settings-dialog__number-input";
+    input.value = String(value);
+    input.min = String(min);
+    input.max = String(max);
+    input.addEventListener("change", () => {
+      const v = parseInt(input.value, 10);
+      if (!isNaN(v)) onChange(v);
+    });
+    row.appendChild(lbl);
+    row.appendChild(input);
+    return row;
+  }
+
+  private _makeSelectRow(label: string, value: string, options: [string, string][], onChange: (v: string) => void): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "settings-dialog__row";
+    const lbl = document.createElement("span");
+    lbl.className = "settings-dialog__label";
+    lbl.textContent = label;
+    const sel = document.createElement("select");
+    sel.className = "settings-dialog__select";
+    for (const [val, display] of options) {
+      const opt = document.createElement("option");
+      opt.value = val;
+      opt.textContent = display;
+      if (val === value) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    sel.addEventListener("change", () => onChange(sel.value));
+    row.appendChild(lbl);
+    row.appendChild(sel);
+    return row;
+  }
+
+  private _makeTextRow(label: string, value: string, placeholder: string, onChange: (v: string) => void): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "settings-dialog__row";
+    const lbl = document.createElement("span");
+    lbl.className = "settings-dialog__label";
+    lbl.textContent = label;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "settings-dialog__text-input";
+    input.value = value;
+    input.placeholder = placeholder;
+    input.addEventListener("input", () => onChange(input.value));
+    row.appendChild(lbl);
+    row.appendChild(input);
+    return row;
+  }
+
+  private _makeSaveButton(onClick: () => Promise<void>): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "settings-dialog__btn";
+    btn.textContent = "[save]";
+    btn.addEventListener("click", async () => {
+      try {
+        await onClick();
+        btn.textContent = "[saved!]";
+      } catch {
+        btn.textContent = "[error]";
+      }
+      setTimeout(() => { btn.textContent = "[save]"; }, 1500);
+    });
+    return btn;
+  }
+
+  private _makeSectionTitle(text: string): HTMLElement {
+    const el = document.createElement("div");
+    el.className = "settings-dialog__section-title";
+    el.textContent = text;
+    return el;
+  }
+
+  private _makeLoadingSection(): { section: HTMLElement; loading: HTMLElement } {
     const section = document.createElement("div");
     section.className = "settings-dialog__section";
-
     const loading = document.createElement("div");
     loading.className = "settings-dialog__row";
     loading.textContent = "Loading...";
     section.appendChild(loading);
     this._contentEl.appendChild(section);
+    return { section, loading };
+  }
+
+  // ── General tab ───────────────────────────────────────────────────────────────
+
+  private async _buildGeneralTab(): Promise<void> {
+    const { section, loading } = this._makeLoadingSection();
+
+    let cfg: AppConfig;
+    try {
+      cfg = await getAppConfig();
+    } catch {
+      loading.textContent = "Failed to load config.";
+      return;
+    }
+
+    section.innerHTML = "";
+    section.appendChild(this._makeSectionTitle("General"));
+
+    let draft = structuredClone(cfg);
+
+    section.appendChild(this._makeCheckbox(
+      "Confirm before redacting messages",
+      draft.general.confirm_redact,
+      (v) => { draft = { ...draft, general: { ...draft.general, confirm_redact: v } }; },
+    ));
+
+    section.appendChild(this._makeSectionTitle("Sync"));
+
+    section.appendChild(this._makeCheckbox(
+      "Use Sliding Sync (MSC4186)",
+      draft.sync.sliding_sync,
+      (v) => { draft = { ...draft, sync: { ...draft.sync, sliding_sync: v } }; },
+    ));
+
+    section.appendChild(this._makeNumberRow(
+      "Timeline messages to load",
+      draft.sync.timeline_limit,
+      10, 500,
+      (v) => { draft = { ...draft, sync: { ...draft.sync, timeline_limit: v } }; },
+    ));
+
+    const actions = document.createElement("div");
+    actions.className = "settings-dialog__section settings-dialog__actions";
+    actions.appendChild(this._makeSaveButton(() => setAppConfig(draft)));
+    section.appendChild(actions);
+  }
+
+  // ── Media tab ─────────────────────────────────────────────────────────────────
+
+  private async _buildMediaTab(): Promise<void> {
+    const { section, loading } = this._makeLoadingSection();
+
+    let cfg: AppConfig | null = null;
+    let stats: CacheStats | null = null;
+
+    try {
+      [cfg, stats] = await Promise.all([getAppConfig(), getCacheStats()]);
+    } catch {
+      loading.textContent = "Failed to load media config.";
+      return;
+    }
+
+    section.innerHTML = "";
+    section.appendChild(this._makeSectionTitle("Image Display"));
+
+    let draft = structuredClone(cfg);
+
+    section.appendChild(this._makeCheckbox(
+      "Auto-load inline images",
+      draft.media.auto_load_images,
+      (v) => { draft = { ...draft, media: { ...draft.media, auto_load_images: v } }; },
+    ));
+
+    section.appendChild(this._makeNumberRow(
+      "Max image width (px)",
+      draft.media.max_image_width,
+      100, 4096,
+      (v) => { draft = { ...draft, media: { ...draft.media, max_image_width: v } }; },
+    ));
+
+    section.appendChild(this._makeNumberRow(
+      "Max image height (px)",
+      draft.media.max_image_height,
+      100, 4096,
+      (v) => { draft = { ...draft, media: { ...draft.media, max_image_height: v } }; },
+    ));
+
+    section.appendChild(this._makeNumberRow(
+      "Sticker max size (px)",
+      draft.media.sticker_max_size,
+      32, 1024,
+      (v) => { draft = { ...draft, media: { ...draft.media, sticker_max_size: v } }; },
+    ));
+
+    section.appendChild(this._makeSectionTitle("Cache"));
+
+    // Cache stats (read-only)
+    const fmtBytes = (b: number): string => {
+      if (b >= 1073741824) return `${(b / 1073741824).toFixed(1)} GB`;
+      if (b >= 1048576) return `${(b / 1048576).toFixed(1)} MB`;
+      if (b >= 1024) return `${(b / 1024).toFixed(1)} KB`;
+      return `${b} B`;
+    };
+
+    const makeReadRow = (label: string, value: string): HTMLElement => {
+      const row = document.createElement("div");
+      row.className = "settings-dialog__row";
+      const lbl = document.createElement("span");
+      lbl.className = "settings-dialog__label";
+      lbl.textContent = label;
+      const val = document.createElement("span");
+      val.className = "settings-dialog__value";
+      val.textContent = value;
+      row.appendChild(lbl);
+      row.appendChild(val);
+      return row;
+    };
+
+    section.appendChild(makeReadRow("Usage", `${stats.usage_percent.toFixed(1)}%`));
+    section.appendChild(makeReadRow("Cached files", String(stats.entry_count)));
+    section.appendChild(makeReadRow("Cache size", fmtBytes(stats.total_size_bytes)));
+
+    section.appendChild(this._makeNumberRow(
+      "Cache size limit (MB)",
+      draft.media.cache_size_mb,
+      10, 10000,
+      (v) => { draft = { ...draft, media: { ...draft.media, cache_size_mb: v } }; },
+    ));
+
+    // Actions row: save + clear cache
+    const actions = document.createElement("div");
+    actions.className = "settings-dialog__section settings-dialog__actions";
+    actions.appendChild(this._makeSaveButton(() => setAppConfig(draft)));
+
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "settings-dialog__btn settings-dialog__btn--danger";
+    clearBtn.textContent = "[clear cache]";
+    clearBtn.addEventListener("click", async () => {
+      try {
+        await clearMediaCache();
+        clearBtn.textContent = "[cleared!]";
+      } catch {
+        clearBtn.textContent = "[error]";
+      }
+      setTimeout(() => { clearBtn.textContent = "[clear cache]"; }, 1500);
+    });
+    actions.appendChild(clearBtn);
+
+    section.appendChild(actions);
+  }
+
+  // ── GIF tab ───────────────────────────────────────────────────────────────────
+
+  private async _buildGifTab(): Promise<void> {
+    const { section, loading } = this._makeLoadingSection();
+
+    let cfg: AppConfig;
+    try {
+      cfg = await getAppConfig();
+    } catch {
+      loading.textContent = "Failed to load config.";
+      return;
+    }
+
+    section.innerHTML = "";
+    section.appendChild(this._makeSectionTitle("GIF Provider"));
+
+    let draft = structuredClone(cfg);
+
+    section.appendChild(this._makeSelectRow(
+      "Provider",
+      draft.gif.provider,
+      [["tenor", "Tenor"], ["giphy", "Giphy"]],
+      (v) => { draft = { ...draft, gif: { ...draft.gif, provider: v as "tenor" | "giphy" } }; },
+    ));
+
+    section.appendChild(this._makeTextRow(
+      "API key",
+      draft.gif.api_key,
+      "paste your API key here",
+      (v) => { draft = { ...draft, gif: { ...draft.gif, api_key: v } }; },
+    ));
+
+    section.appendChild(this._makeSelectRow(
+      "Content rating",
+      draft.gif.rating,
+      [["g", "G"], ["pg", "PG"], ["pg-13", "PG-13"], ["r", "R"]],
+      (v) => { draft = { ...draft, gif: { ...draft.gif, rating: v as "g" | "pg" | "pg-13" | "r" } }; },
+    ));
+
+    section.appendChild(this._makeCheckbox(
+      "Cache search results",
+      draft.gif.cache_results,
+      (v) => { draft = { ...draft, gif: { ...draft.gif, cache_results: v } }; },
+    ));
+
+    const actions = document.createElement("div");
+    actions.className = "settings-dialog__section settings-dialog__actions";
+    actions.appendChild(this._makeSaveButton(() => setAppConfig(draft)));
+    section.appendChild(actions);
+  }
+
+  // ── Emoji tab ─────────────────────────────────────────────────────────────────
+
+  private async _buildEmojiTab(): Promise<void> {
+    const { section, loading } = this._makeLoadingSection();
+
+    let cfg: AppConfig;
+    try {
+      cfg = await getAppConfig();
+    } catch {
+      loading.textContent = "Failed to load config.";
+      return;
+    }
+
+    section.innerHTML = "";
+    section.appendChild(this._makeSectionTitle("Emoji Autocomplete"));
+
+    let draft = structuredClone(cfg);
+
+    section.appendChild(this._makeCheckbox(
+      "Enable :shortcode autocomplete",
+      draft.emoji.shortcode_autocomplete,
+      (v) => { draft = { ...draft, emoji: { ...draft.emoji, shortcode_autocomplete: v } }; },
+    ));
+
+    section.appendChild(this._makeNumberRow(
+      "Min chars to trigger autocomplete",
+      draft.emoji.autocomplete_min_chars,
+      1, 10,
+      (v) => { draft = { ...draft, emoji: { ...draft.emoji, autocomplete_min_chars: v } }; },
+    ));
+
+    const actions = document.createElement("div");
+    actions.className = "settings-dialog__section settings-dialog__actions";
+    actions.appendChild(this._makeSaveButton(() => setAppConfig(draft)));
+    section.appendChild(actions);
+  }
+
+  // ── Notifications tab ─────────────────────────────────────────────────────────
+
+  private async _buildNotificationsTab(): Promise<void> {
+    const { section, loading } = this._makeLoadingSection();
 
     let config: NotificationConfig;
     try {
@@ -171,38 +521,16 @@ export class SettingsDialog {
 
     section.innerHTML = "";
 
-    const makeCheckbox = (label: string, checked: boolean, onChange: (v: boolean) => void): HTMLElement => {
-      const row = document.createElement("div");
-      row.className = "settings-dialog__row";
-
-      const lbl = document.createElement("label");
-      lbl.className = "settings-dialog__checkbox-label";
-
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = checked;
-      cb.addEventListener("change", () => onChange(cb.checked));
-
-      lbl.appendChild(cb);
-      lbl.append(" " + label);
-      row.appendChild(lbl);
-      return row;
-    };
-
     let draft = { ...config };
 
-    section.appendChild(makeCheckbox("Enable notifications", draft.enabled, (v) => { draft = { ...draft, enabled: v }; }));
-    section.appendChild(makeCheckbox("Show message preview", draft.show_body, (v) => { draft = { ...draft, show_body: v }; }));
-    section.appendChild(makeCheckbox("Show sender name", draft.show_sender, (v) => { draft = { ...draft, show_sender: v }; }));
+    section.appendChild(this._makeCheckbox("Enable notifications", draft.enabled, (v) => { draft = { ...draft, enabled: v }; }));
+    section.appendChild(this._makeCheckbox("Show message preview", draft.show_body, (v) => { draft = { ...draft, show_body: v }; }));
+    section.appendChild(this._makeCheckbox("Show sender name", draft.show_sender, (v) => { draft = { ...draft, show_sender: v }; }));
 
     // Quiet hours
     const qhSection = document.createElement("div");
     qhSection.className = "settings-dialog__section";
-
-    const qhTitle = document.createElement("div");
-    qhTitle.className = "settings-dialog__section-title";
-    qhTitle.textContent = "Quiet Hours";
-    qhSection.appendChild(qhTitle);
+    qhSection.appendChild(this._makeSectionTitle("Quiet Hours"));
 
     const qhRow = document.createElement("div");
     qhRow.className = "settings-dialog__row settings-dialog__row--quiet-hours";
@@ -239,31 +567,17 @@ export class SettingsDialog {
 
     qhSection.appendChild(qhRow);
 
-    // Save button
     const footer = document.createElement("div");
     footer.className = "settings-dialog__section settings-dialog__actions";
 
-    const saveBtn = document.createElement("button");
-    saveBtn.type = "button";
-    saveBtn.className = "settings-dialog__btn";
-    saveBtn.textContent = "[save]";
-    saveBtn.addEventListener("click", async () => {
-      // Parse quiet hours
+    const saveBtn = this._makeSaveButton(async () => {
       let quiet_hours = null;
       if (startInput.value && endInput.value) {
         const [sh, sm] = startInput.value.split(":").map(Number);
         const [eh, em] = endInput.value.split(":").map(Number);
         quiet_hours = { start_hour: sh, start_minute: sm, end_hour: eh, end_minute: em };
       }
-      const finalConfig: NotificationConfig = { ...draft, quiet_hours };
-      try {
-        await setNotificationConfig(finalConfig);
-        saveBtn.textContent = "[saved!]";
-        setTimeout(() => { saveBtn.textContent = "[save]"; }, 1500);
-      } catch {
-        saveBtn.textContent = "[error]";
-        setTimeout(() => { saveBtn.textContent = "[save]"; }, 1500);
-      }
+      await setNotificationConfig({ ...draft, quiet_hours });
     });
     footer.appendChild(saveBtn);
 
@@ -271,116 +585,12 @@ export class SettingsDialog {
     section.appendChild(footer);
   }
 
-  private async _buildMediaTab(): Promise<void> {
-    const section = document.createElement("div");
-    section.className = "settings-dialog__section";
-
-    const loading = document.createElement("div");
-    loading.className = "settings-dialog__row";
-    loading.textContent = "Loading cache stats...";
-    section.appendChild(loading);
-    this._contentEl.appendChild(section);
-
-    let stats: CacheStats | null = null;
-    try {
-      stats = await getCacheStats();
-    } catch {
-      loading.textContent = "Failed to load cache stats.";
-      return;
-    }
-
-    section.innerHTML = "";
-
-    const makeRow = (label: string, value: string): HTMLElement => {
-      const row = document.createElement("div");
-      row.className = "settings-dialog__row";
-      const lbl = document.createElement("span");
-      lbl.className = "settings-dialog__label";
-      lbl.textContent = label;
-      const val = document.createElement("span");
-      val.className = "settings-dialog__value";
-      val.textContent = value;
-      row.appendChild(lbl);
-      row.appendChild(val);
-      return row;
-    };
-
-    const fmtBytes = (b: number): string => {
-      if (b >= 1024 * 1024 * 1024) return `${(b / 1024 / 1024 / 1024).toFixed(1)} GB`;
-      if (b >= 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
-      if (b >= 1024) return `${(b / 1024).toFixed(1)} KB`;
-      return `${b} B`;
-    };
-
-    section.appendChild(makeRow("Usage", `${stats.usage_percent.toFixed(1)}%`));
-    section.appendChild(makeRow("Cached files", String(stats.entry_count)));
-    section.appendChild(makeRow("Cache size", fmtBytes(stats.total_size_bytes)));
-    section.appendChild(makeRow("Max size", fmtBytes(stats.max_size_bytes)));
-
-    // Size limit row
-    const limitRow = document.createElement("div");
-    limitRow.className = "settings-dialog__row";
-    const limitLabel = document.createElement("span");
-    limitLabel.className = "settings-dialog__label";
-    limitLabel.textContent = "max size (MB)";
-    const limitInput = document.createElement("input");
-    limitInput.type = "number";
-    limitInput.className = "settings-dialog__number-input";
-    limitInput.value = String(Math.round(stats.max_size_bytes / 1024 / 1024));
-    limitInput.min = "10";
-    limitInput.max = "10000";
-    const setLimitBtn = document.createElement("button");
-    setLimitBtn.type = "button";
-    setLimitBtn.className = "settings-dialog__btn";
-    setLimitBtn.textContent = "[set]";
-    setLimitBtn.addEventListener("click", async () => {
-      const mb = parseInt(limitInput.value, 10);
-      if (!isNaN(mb) && mb >= 10) {
-        try {
-          await setCacheSizeLimit(mb);
-          setLimitBtn.textContent = "[set!]";
-          setTimeout(() => { setLimitBtn.textContent = "[set]"; }, 1500);
-        } catch {
-          setLimitBtn.textContent = "[err]";
-          setTimeout(() => { setLimitBtn.textContent = "[set]"; }, 1500);
-        }
-      }
-    });
-    limitRow.appendChild(limitLabel);
-    limitRow.appendChild(limitInput);
-    limitRow.appendChild(setLimitBtn);
-    section.appendChild(limitRow);
-
-    // Actions
-    const actionsRow = document.createElement("div");
-    actionsRow.className = "settings-dialog__section settings-dialog__actions";
-
-    const clearBtn = document.createElement("button");
-    clearBtn.type = "button";
-    clearBtn.className = "settings-dialog__btn settings-dialog__btn--danger";
-    clearBtn.textContent = "[clear cache]";
-    clearBtn.addEventListener("click", async () => {
-      try {
-        await clearMediaCache();
-        clearBtn.textContent = "[cleared!]";
-        setTimeout(() => { clearBtn.textContent = "[clear cache]"; }, 1500);
-      } catch {
-        clearBtn.textContent = "[error]";
-        setTimeout(() => { clearBtn.textContent = "[clear cache]"; }, 1500);
-      }
-    });
-    actionsRow.appendChild(clearBtn);
-    section.appendChild(actionsRow);
-  }
+  // ── Themes tab ────────────────────────────────────────────────────────────────
 
   private _buildThemesTab(): void {
     const section = document.createElement("div");
     section.className = "settings-dialog__section";
-
-    const note = document.createElement("div");
-    note.className = "settings-dialog__section-title";
-    note.textContent = "Built-in themes — click to apply";
-    section.appendChild(note);
+    section.appendChild(this._makeSectionTitle("Built-in themes — click to apply"));
 
     for (const name of BUILTIN_THEMES) {
       const row = document.createElement("div");
@@ -393,7 +603,6 @@ export class SettingsDialog {
       nameEl.addEventListener("click", () => {
         void loadTheme(name);
         _currentTheme = name;
-        // Update the current indicator
         for (const el of section.querySelectorAll(".settings-dialog__current")) {
           el.remove();
         }
@@ -418,12 +627,14 @@ export class SettingsDialog {
     this._contentEl.appendChild(section);
   }
 
+  // ── Keyboard handler ──────────────────────────────────────────────────────────
+
   private _handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
     if (e.key === "Tab") {
       e.preventDefault();
-      const tabs: SettingsTab[] = ["notifications", "media", "themes"];
+      const tabs: SettingsTab[] = ["general", "media", "gif", "emoji", "notifications", "themes"];
       const idx = tabs.indexOf(this._activeTab);
       this._switchTab(tabs[(idx + 1) % tabs.length]);
       return;
