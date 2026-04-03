@@ -76,9 +76,18 @@ body {
   overflow: hidden;
 }
 
-/* Member list open: add a 4th column */
+/* Thread view open: add a 4th column */
+.quark-layout--thread-open {
+  grid-template-columns: var(--space-strip-width) var(--room-list-width) 1fr var(--thread-view-width);
+}
+
+/* Member list open: add a 4th column (or 5th when thread is also open) */
 .quark-layout--member-list-open {
   grid-template-columns: var(--space-strip-width) var(--room-list-width) 1fr var(--member-list-width);
+}
+
+.quark-layout--thread-open.quark-layout--member-list-open {
+  grid-template-columns: var(--space-strip-width) var(--room-list-width) 1fr var(--thread-view-width) var(--member-list-width);
 }
 
 /* ── Space strip (leftmost narrow column) ────────────────────────────────── */
@@ -250,10 +259,255 @@ body {
   flex-shrink: 0;
 }
 
-/* ── Member list sidebar (column 4, toggled via .quark-layout--member-list-open) */
+/* ── Thread view sidebar (column 4, toggled via .quark-layout--thread-open) ── */
+
+.thread-view {
+  grid-column: 4;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--bg);
+  border-left: var(--border-width) solid var(--msg-thread-indicator);
+  min-width: 0;
+}
+
+.quark-layout:not(.quark-layout--thread-open) .thread-view {
+  width: 0;
+  overflow: hidden;
+  border: none;
+}
+
+.thread-view__header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.thread-view__title {
+  flex: 1;
+  color: var(--msg-thread-indicator);
+  font-size: calc(var(--font-size) - 1px);
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.thread-view__close {
+  background: none;
+  border: none;
+  color: var(--roomlist-muted);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 2px);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color var(--transition-speed);
+}
+
+.thread-view__close:hover,
+.thread-view__close:focus {
+  color: var(--accent-error);
+  outline: none;
+}
+
+/* ── Thread root message ─────────────────────────────────────────────────── */
+
+.thread-view__root {
+  flex-shrink: 0;
+  padding: 8px 10px;
+  background-color: color-mix(in srgb, var(--msg-thread-indicator) 6%, transparent);
+  border-bottom: var(--border-width) solid var(--border-color);
+  border-left: 3px solid var(--msg-thread-indicator);
+  font-family: var(--font-family-messages);
+}
+
+.thread-view__root-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.thread-view__root-sender {
+  color: var(--msg-thread-indicator);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 1px);
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.thread-view__root-timestamp {
+  color: var(--msg-timestamp);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 2px);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.thread-view__root-body {
+  color: var(--fg);
+  font-size: calc(var(--font-size) - 1px);
+  word-break: break-word;
+  white-space: pre-wrap;
+  line-height: var(--line-height);
+  opacity: 0.85;
+}
+
+/* ── Replies divider ────────────────────────────────────────────────────── */
+
+.thread-view__divider {
+  text-align: center;
+  color: var(--roomlist-muted);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 3px);
+  letter-spacing: 0.1em;
+  padding: 4px 0;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* ── Thread reply timeline ──────────────────────────────────────────────── */
+
+.thread-view__timeline {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+}
+
+.thread-view__message {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 10px 7px;
+  outline: none;
+  transition: background-color var(--transition-speed);
+  font-family: var(--font-family-messages);
+}
+
+.thread-view__message + .thread-view__message {
+  border-top: 1px dashed color-mix(in srgb, var(--border-color) 60%, transparent);
+}
+
+.thread-view__message:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.thread-view__message:focus {
+  background-color: var(--roomlist-active-bg);
+  box-shadow: inset 3px 0 0 var(--focus-color);
+}
+
+.thread-view__message-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.thread-view__message-sender {
+  color: var(--msg-other);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 2px);
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.thread-view__message-sender--own {
+  color: var(--msg-own);
+  text-shadow: 0 0 var(--glow-radius) var(--glow-color);
+}
+
+.thread-view__message-timestamp {
+  color: var(--msg-timestamp);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 3px);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.thread-view__message-body {
+  color: var(--fg);
+  font-size: calc(var(--font-size) - 1px);
+  word-break: break-word;
+  white-space: pre-wrap;
+  line-height: var(--line-height);
+}
+
+.thread-view__message--own {
+  background-color: color-mix(in srgb, var(--msg-own) 3%, transparent);
+}
+
+.thread-view__message-image,
+.thread-view__message-sticker {
+  max-width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  display: block;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+/* ── Thread reply input bar ─────────────────────────────────────────────── */
+
+.thread-view__input-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+  padding: 8px;
+  border-top: var(--border-width) solid var(--border-color);
+  background-color: var(--bg);
+}
+
+.thread-view__prompt {
+  color: var(--msg-thread-indicator);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 1px);
+  font-weight: bold;
+  padding: 6px 6px 6px 4px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.thread-view__input {
+  flex: 1;
+  background: transparent;
+  border: var(--border-width) solid color-mix(in srgb, var(--border-color) 70%, var(--msg-thread-indicator) 30%);
+  border-radius: 6px;
+  color: var(--fg);
+  font-family: var(--font-family-messages);
+  font-size: calc(var(--font-size) - 1px);
+  line-height: var(--line-height);
+  padding: 5px 10px;
+  outline: none;
+  caret-color: var(--cursor);
+  transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
+}
+
+.thread-view__input::placeholder {
+  color: var(--roomlist-muted);
+}
+
+.thread-view__input:focus {
+  border-color: color-mix(in srgb, var(--msg-thread-indicator) 60%, var(--border-color));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--msg-thread-indicator) 15%, transparent);
+}
+
+/* ── Member list sidebar (column 4, or 5 when thread view is also open) */
 
 .member-list {
   grid-column: 4;
+}
+
+.quark-layout--thread-open .member-list {
+  grid-column: 5;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1062,6 +1316,37 @@ span.reaction__emoji {
   color: var(--reaction-count);
   font-size: calc(var(--font-size) - 2px);
   line-height: 1;
+}
+
+/* ── Thread indicator (shown on thread root messages) ───────────────────── */
+
+.message__thread-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 8px;
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--msg-thread-indicator) 40%, transparent);
+  border-radius: 10px;
+  color: var(--msg-thread-indicator);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 3px);
+  font-weight: bold;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--transition-speed), border-color var(--transition-speed);
+}
+
+.message__thread-indicator:hover {
+  background-color: color-mix(in srgb, var(--msg-thread-indicator) 12%, transparent);
+  border-color: var(--msg-thread-indicator);
+}
+
+.message__thread-indicator:focus {
+  outline: none;
+  box-shadow: 0 0 0 var(--focus-width) var(--msg-thread-indicator);
 }
 
 /* ── Quick react picker ──────────────────────────────────────────────────── */

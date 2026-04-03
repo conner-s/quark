@@ -60,6 +60,7 @@
   /* ── Layout ──────────────────────────────────────────────────────────── */
   --space-strip-width: 64px;
   --room-list-width: 220px;
+  --thread-view-width: 300px;
   --member-list-width: 200px;
   --status-bar-height: 24px;
 

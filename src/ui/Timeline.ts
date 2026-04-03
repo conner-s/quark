@@ -113,6 +113,10 @@ export interface MessageData {
   replyTo?: ReplyPreviewData;
   /** Reactions */
   reactions?: ReactionGroup[];
+  /** If true, this message has thread replies — show a thread indicator */
+  isThreadRoot?: boolean;
+  /** Number of thread replies (shown in the indicator) */
+  threadReplyCount?: number;
 }
 
 function formatTimestamp(isoString: string): string {
@@ -298,6 +302,26 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     row.appendChild(createReactionBar(msg.reactions));
   }
 
+  // ── Thread indicator ───────────────────────────────────────────────────
+  if (msg.isThreadRoot) {
+    const indicator = document.createElement("button");
+    indicator.className = "message__thread-indicator";
+    indicator.setAttribute("tabindex", "0");
+    const count = msg.threadReplyCount ?? 0;
+    indicator.textContent = count > 0 ? `⌥ ${count} repl${count === 1 ? "y" : "ies"}` : "⌥ thread";
+    indicator.title = "Open thread (t)";
+    indicator.addEventListener("click", (e) => {
+      e.stopPropagation();
+      row.dispatchEvent(
+        new CustomEvent("quark:open-thread", {
+          bubbles: true,
+          detail: { eventId: msg.id },
+        })
+      );
+    });
+    row.appendChild(indicator);
+  }
+
   // ── Hover action bar ───────────────────────────────────────────────────
   if (msg.type !== "system") {
     const actions = document.createElement("div");
@@ -334,8 +358,24 @@ function buildMessageElement(msg: MessageData): HTMLElement {
       );
     });
 
+    const threadBtn = document.createElement("button");
+    threadBtn.className = "message__action-btn";
+    threadBtn.textContent = "⌥";
+    threadBtn.title = "Open thread (t)";
+    threadBtn.setAttribute("tabindex", "-1");
+    threadBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      row.dispatchEvent(
+        new CustomEvent("quark:open-thread", {
+          bubbles: true,
+          detail: { eventId: msg.id },
+        })
+      );
+    });
+
     actions.appendChild(reactBtn);
     actions.appendChild(replyBtn);
+    actions.appendChild(threadBtn);
     row.appendChild(actions);
   }
 

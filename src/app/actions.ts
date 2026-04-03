@@ -133,8 +133,19 @@ function roomInfoToEntry(r: RoomInfo): RoomEntry {
   };
 }
 
+/** Build a map of thread root event IDs → reply count from a batch of events. */
+function _buildThreadRootCounts(events: TimelineEvent[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const e of events) {
+    if (e.thread_root) {
+      counts.set(e.thread_root, (counts.get(e.thread_root) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
 /** Convert IPC TimelineEvent → Timeline MessageData */
-function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[]): MessageData {
+function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[], threadRootCounts?: Map<string, number>): MessageData {
   const msgType = (() => {
     if (e.msg_type === "m.image") return "image" as const;
     if (e.msg_type === "m.sticker") return "sticker" as const;
@@ -179,6 +190,8 @@ function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[]): 
       imageUrl: _resolveReactionImage(r.key),
     })),
     replyTo,
+    isThreadRoot: threadRootCounts ? threadRootCounts.has(e.event_id) : undefined,
+    threadReplyCount: threadRootCounts?.get(e.event_id),
   };
 }
 
@@ -348,7 +361,8 @@ export async function selectRoom(roomId: string): Promise<void> {
     AppState.set("currentTimeline", events);
 
     // Render with cached display names immediately — update once members arrive
-    const messages = events.map((e) => timelineEventToMessage(e, events));
+    const threadRootCounts = _buildThreadRootCounts(events);
+    const messages = events.map((e) => timelineEventToMessage(e, events, threadRootCounts));
     timeline.setMessages(messages);
 
     // Register scroll-to-top for pagination (re-registers on each room change)
@@ -444,7 +458,8 @@ async function loadMoreMessages(): Promise<void> {
     const existingEvents = AppState.get("currentTimeline");
     AppState.set("currentTimeline", [...page.events, ...existingEvents]);
 
-    const messages = page.events.map((e) => timelineEventToMessage(e, page.events));
+    const threadRootCounts = _buildThreadRootCounts(page.events);
+    const messages = page.events.map((e) => timelineEventToMessage(e, page.events, threadRootCounts));
     timeline.prependMessages(messages);
 
     _downloadMessageImages(page.events, timeline);
@@ -993,15 +1008,17 @@ export async function openThread(eventId: string): Promise<void> {
   }
 
   threadView.show();
+  getComponents().mainLayout.classList.add("quark-layout--thread-open");
 }
 
 /**
  * Close the thread view.
  */
 export function closeThread(): void {
-  const { threadView } = getComponents();
+  const { threadView, mainLayout } = getComponents();
   AppState.set("threadRootEventId", null);
   threadView.hide();
+  mainLayout.classList.remove("quark-layout--thread-open");
 }
 
 // ── Emoji picker state ────────────────────────────────────────────────────────
@@ -2167,6 +2184,11 @@ export function setupMessageActionHandlers(): void {
       startReply(eventId, evt.sender, evt.body.slice(0, 80));
       input.focus();
     }
+  });
+
+  document.addEventListener("quark:open-thread" as keyof DocumentEventMap, (e: Event) => {
+    const { eventId } = (e as CustomEvent<{ eventId: string }>).detail;
+    if (eventId) void openThread(eventId);
   });
 
   document.addEventListener("quark:open-profile" as keyof DocumentEventMap, (e: Event) => {
