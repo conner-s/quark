@@ -6,6 +6,8 @@ use matrix_sdk::{
     Client,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Semaphore;
 use tracing::warn;
 
 /// A child room/space in a space hierarchy.
@@ -77,7 +79,7 @@ pub async fn get_space_hierarchy(
 async fn enrich_with_order(
     client: &Client,
     parent_id: &RoomId,
-    mut children: Vec<SpaceChild>,
+    children: Vec<SpaceChild>,
 ) -> Vec<SpaceChild> {
     let room = match client.get_room(parent_id) {
         Some(r) => r,
@@ -85,41 +87,58 @@ async fn enrich_with_order(
     };
 
     let event_type = StateEventType::from("m.space.child");
+    let semaphore = Arc::new(Semaphore::new(8));
+    let mut tasks = tokio::task::JoinSet::new();
 
-    for child in &mut children {
-        let child_room_id_str = child.room_id.as_str();
+    for mut child in children {
+        let room = room.clone();
+        let event_type = event_type.clone();
+        let permit = semaphore.clone().acquire_owned().await.unwrap();
 
-        match room.get_state_event(event_type.clone(), child_room_id_str).await {
-            Ok(Some(raw)) => {
-                use serde_json::Value;
-                let raw_json: Option<Value> = match raw {
-                    matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState::Sync(r) => {
-                        r.deserialize_as::<Value>().ok()
-                    }
-                    matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState::Stripped(r) => {
-                        r.deserialize_as::<Value>().ok()
-                    }
-                };
-                if let Some(value) = raw_json {
-                    let content = value.get("content").unwrap_or(&value);
-                    if let Some(order) = content
-                        .get("order")
-                        .and_then(|v| v.as_str())
-                        .map(String::from)
-                    {
-                        child.order = Some(order);
+        tasks.spawn(async move {
+            let _permit = permit;
+            let child_room_id_str = child.room_id.clone();
+
+            match room.get_state_event(event_type, child_room_id_str.as_str()).await {
+                Ok(Some(raw)) => {
+                    use serde_json::Value;
+                    let raw_json: Option<Value> = match raw {
+                        matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState::Sync(r) => {
+                            r.deserialize_as::<Value>().ok()
+                        }
+                        matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState::Stripped(r) => {
+                            r.deserialize_as::<Value>().ok()
+                        }
+                    };
+                    if let Some(value) = raw_json {
+                        let content = value.get("content").unwrap_or(&value);
+                        if let Some(order) = content
+                            .get("order")
+                            .and_then(|v| v.as_str())
+                            .map(String::from)
+                        {
+                            child.order = Some(order);
+                        }
                     }
                 }
+                Ok(None) => {}
+                Err(e) => {
+                    warn!("Failed to get m.space.child for {}: {}", child.room_id, e);
+                }
             }
-            Ok(None) => {}
-            Err(e) => {
-                warn!("Failed to get m.space.child for {}: {}", child.room_id, e);
-            }
+            child
+        });
+    }
+
+    let mut enriched = Vec::new();
+    while let Some(res) = tasks.join_next().await {
+        if let Ok(child) = res {
+            enriched.push(child);
         }
     }
 
     // Sort by order field (lexicographic), then by room name
-    children.sort_by(|a, b| match (&a.order, &b.order) {
+    enriched.sort_by(|a, b| match (&a.order, &b.order) {
         (Some(oa), Some(ob)) => oa.cmp(ob),
         (Some(_), None) => std::cmp::Ordering::Less,
         (None, Some(_)) => std::cmp::Ordering::Greater,
@@ -130,7 +149,7 @@ async fn enrich_with_order(
         }
     });
 
-    children
+    enriched
 }
 
 /// List all space rooms the user has joined.

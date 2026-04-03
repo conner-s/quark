@@ -36,7 +36,7 @@ pub async fn get_thread_roots(
         .ok_or_else(|| format!("Room {} not found", room_id))?;
 
     let mut opts = MessagesOptions::backward();
-    opts.limit = UInt::from(500u32);
+    opts.limit = UInt::from(100u32);
 
     let messages = room
         .messages(opts)
@@ -118,7 +118,7 @@ pub async fn get_thread_timeline(
         .ok_or_else(|| format!("Room {} not found", room_id))?;
 
     let mut opts = MessagesOptions::backward();
-    opts.limit = UInt::from(500u32);
+    opts.limit = UInt::from(100u32);
 
     let messages = room
         .messages(opts)

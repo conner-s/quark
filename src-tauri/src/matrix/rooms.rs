@@ -8,6 +8,8 @@ use matrix_sdk::{
     Client, RoomMemberships,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Semaphore;
 use tracing::info;
 
 /// Serializable room info for IPC.
@@ -30,46 +32,58 @@ pub struct RoomInfo {
 /// Get info for all joined rooms.
 pub async fn get_rooms(client: &Client) -> Result<Vec<RoomInfo>, String> {
     let rooms = client.joined_rooms();
-    let mut result = Vec::with_capacity(rooms.len());
+    let semaphore = Arc::new(Semaphore::new(8));
+    let mut tasks = tokio::task::JoinSet::new();
 
     for room in rooms {
-        let name = room.compute_display_name().await.ok().map(|n| n.to_string());
-        let topic = room.topic();
-        let avatar_url = room.avatar_url().map(|url| url.to_string());
-        let is_direct = room.is_direct().await.unwrap_or(false);
-        let is_encrypted = room.is_encrypted().await.unwrap_or(false);
-        let member_count = room.joined_members_count();
+        let permit = semaphore.clone().acquire_owned().await.unwrap();
+        tasks.spawn(async move {
+            let _permit = permit;
+            let name = room.compute_display_name().await.ok().map(|n| n.to_string());
+            let topic = room.topic();
+            let avatar_url = room.avatar_url().map(|url| url.to_string());
+            let is_direct = room.is_direct().await.unwrap_or(false);
+            let is_encrypted = room.is_encrypted().await.unwrap_or(false);
+            let member_count = room.joined_members_count();
 
-        let unread = room.unread_notification_counts();
-        let notification_count = unread.notification_count;
-        let unread_count = unread.highlight_count;
+            let unread = room.unread_notification_counts();
+            let notification_count = unread.notification_count;
+            let unread_count = unread.highlight_count;
 
-        // Fetch the timestamp of the most recent event from the local store.
-        // MessagesOptions::backward() with limit 1 reads from the sqlite cache
-        // without a network round-trip when events are already present.
-        let last_activity_ts = {
-            let mut opts = matrix_sdk::room::MessagesOptions::backward();
-            opts.limit = matrix_sdk::ruma::UInt::from(1u32);
-            room.messages(opts)
-                .await
-                .ok()
-                .and_then(|page| page.chunk.into_iter().next())
-                .and_then(|ev| ev.raw().deserialize().ok())
-                .map(|deserialized| deserialized.origin_server_ts().get().into())
-        };
+            // Fetch the timestamp of the most recent event from the local store.
+            // MessagesOptions::backward() with limit 1 reads from the sqlite cache
+            // without a network round-trip when events are already present.
+            let last_activity_ts = {
+                let mut opts = matrix_sdk::room::MessagesOptions::backward();
+                opts.limit = matrix_sdk::ruma::UInt::from(1u32);
+                room.messages(opts)
+                    .await
+                    .ok()
+                    .and_then(|page| page.chunk.into_iter().next())
+                    .and_then(|ev| ev.raw().deserialize().ok())
+                    .map(|deserialized| deserialized.origin_server_ts().get().into())
+            };
 
-        result.push(RoomInfo {
-            room_id: room.room_id().to_string(),
-            name,
-            topic,
-            avatar_url,
-            unread_count,
-            notification_count,
-            is_direct,
-            is_encrypted,
-            member_count,
-            last_activity_ts,
+            RoomInfo {
+                room_id: room.room_id().to_string(),
+                name,
+                topic,
+                avatar_url,
+                unread_count,
+                notification_count,
+                is_direct,
+                is_encrypted,
+                member_count,
+                last_activity_ts,
+            }
         });
+    }
+
+    let mut result = Vec::new();
+    while let Some(res) = tasks.join_next().await {
+        if let Ok(info) = res {
+            result.push(info);
+        }
     }
 
     Ok(result)
@@ -301,35 +315,47 @@ pub async fn get_pinned_events(client: &Client, room_id: &str) -> Result<Vec<Pin
         .map(|arr| arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
         .unwrap_or_default();
 
-    let mut result = Vec::new();
+    // Fetch each pinned event directly by ID (one request per event) instead of
+    // scanning a large message batch for each pin. Cap at 20 and limit concurrency
+    // to 5 simultaneous fetches to avoid flooding the server.
+    let semaphore = Arc::new(Semaphore::new(5));
+    let mut tasks = tokio::task::JoinSet::new();
 
-    for event_id_str in pinned_ids.iter().take(50) {
-        let Ok(event_id) = EventId::parse(event_id_str) else { continue };
+    for event_id_str in pinned_ids.into_iter().take(20) {
+        let Ok(event_id) = EventId::parse(&event_id_str) else { continue };
+        let room = room.clone();
+        let permit = semaphore.clone().acquire_owned().await.unwrap();
 
-        // Try to find the event in the local timeline via messages()
-        let mut opts = matrix_sdk::room::MessagesOptions::backward();
-        opts.limit = matrix_sdk::ruma::UInt::from(100u32);
-        let Ok(page) = room.messages(opts).await else { continue };
-
-        let target_id = event_id.as_str();
-        let found = page.chunk.iter().find(|ev| ev.kind.event_id().map(|id| id.as_str() == target_id).unwrap_or(false));
-        if let Some(ev) = found {
-            use serde_json::Value;
-            let Ok(json_val) = ev.raw().deserialize_as::<Value>() else { continue };
+        tasks.spawn(async move {
+            let _permit = permit;
+            let Ok(timeline_event) = room.event(&event_id, None).await else {
+                return None;
+            };
+            let Ok(json_val) = timeline_event.raw().deserialize_as::<Value>() else {
+                return None;
+            };
             let sender = json_val.get("sender").and_then(|s| s.as_str()).unwrap_or("").to_string();
             let ts = json_val.get("origin_server_ts").and_then(|t| t.as_u64()).unwrap_or(0);
             let content = json_val.get("content").unwrap_or(&Value::Null);
             let body = content.get("body").and_then(|b| b.as_str()).unwrap_or("").to_string();
             let formatted_body = content.get("formatted_body").and_then(|b| b.as_str()).map(str::to_string);
-            result.push(PinnedEventInfo {
-                event_id: event_id_str.clone(),
+            Some(PinnedEventInfo {
+                event_id: event_id_str,
                 sender,
                 body,
                 formatted_body,
                 timestamp: ts,
-            });
+            })
+        });
+    }
+
+    let mut result = Vec::new();
+    while let Some(res) = tasks.join_next().await {
+        if let Ok(Some(info)) = res {
+            result.push(info);
         }
     }
+    result.sort_by_key(|e| e.timestamp);
 
     Ok(result)
 }

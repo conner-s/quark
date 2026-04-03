@@ -95,7 +95,7 @@ pub async fn get_reactions(
     let own_user_id = client.user_id().map(|id| id.to_string());
 
     let mut opts = MessagesOptions::backward();
-    opts.limit = UInt::from(200u32);
+    opts.limit = UInt::from(100u32);
 
     let messages = room
         .messages(opts)
