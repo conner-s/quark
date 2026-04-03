@@ -664,7 +664,7 @@ quark/
 - [x] Mouse interactions — hover react (😀) and reply (↩) buttons on messages
 - [x] Mouse interactions — click on profile to open profile view
 - [x] Pinned messages UI — `PinnedMessagesDialog` lists pinned events for the current room; opened with `:pinned`; `get_pinned_events` IPC backed by reading `m.room.pinned_events` state event
-- [x] Implement themes — `loadTheme` IPC + `applyTheme` apply CSS custom properties; `:theme <name>` command works; Themes tab in Settings lists all built-in themes
+- [x] Implement themes — `loadTheme` IPC + `applyTheme` apply CSS custom properties; `:theme <name>` command works; Themes tab in Settings lists all built-in themes; all 10 built-in themes embedded in `src/theme/builtins.ts` so switching works without file system access
 - [x] Make space UI bigger
 - [x] Show avatars in member list
 - [x] Profile images should snap to the top of the visible area if the message's position would place it out of view

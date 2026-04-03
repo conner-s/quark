@@ -45,6 +45,7 @@ import {
 } from "../ipc/index.js";
 
 import { applyTheme } from "../theme/loader.js";
+import { BUILTIN_THEME_MAP } from "../theme/builtins.js";
 
 import type { AppComponents } from "../ui/App.js";
 import type { RoomInfo, TimelineEvent, RoomMember } from "../ipc/types.js";
@@ -1586,13 +1587,24 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
 }
 
 /**
- * Load and apply a theme by name/path.
+ * Load and apply a theme by name (built-in) or file path (custom).
+ * Built-in themes are resolved from the embedded map without any IPC call.
+ * Custom themes (containing path separators or ending in .toml) are loaded
+ * via the Rust backend.
  */
-export async function loadTheme(name: string): Promise<void> {
+export async function loadTheme(nameOrPath: string): Promise<void> {
   try {
-    const theme = await ipcLoadTheme(name);
+    const builtin = BUILTIN_THEME_MAP[nameOrPath];
+    if (builtin) {
+      applyTheme(builtin);
+      showSuccess(`Theme "${nameOrPath}" applied`);
+      return;
+    }
+    // Fall back to IPC for custom file paths
+    const theme = await ipcLoadTheme(nameOrPath);
     applyTheme(theme);
-    showSuccess(`Theme "${name}" applied`);
+    const displayName = theme.meta?.name ?? nameOrPath;
+    showSuccess(`Theme "${displayName}" applied`);
   } catch (err) {
     showError(`Failed to load theme: ${err instanceof Error ? err.message : String(err)}`);
   }
