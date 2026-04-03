@@ -241,6 +241,12 @@ export class RoomDirectoryDialog {
       return;
     }
 
+    if (e.ctrlKey && e.key === "[") {
+      e.preventDefault();
+      this.hide();
+      return;
+    }
+
     const result = keymapManager.resolveKey(e.key, "picker");
 
     if (result.kind === "action") {

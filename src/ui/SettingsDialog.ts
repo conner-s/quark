@@ -52,6 +52,7 @@ export class SettingsDialog {
     // Panel
     this._panelEl = document.createElement("div");
     this._panelEl.className = "settings-dialog__panel";
+    this._panelEl.tabIndex = -1;
     this._el.appendChild(this._panelEl);
 
     // Header
@@ -425,6 +426,12 @@ export class SettingsDialog {
       const tabs: SettingsTab[] = ["notifications", "media", "themes"];
       const idx = tabs.indexOf(this._activeTab);
       this._switchTab(tabs[(idx + 1) % tabs.length]);
+      return;
+    }
+
+    if (e.ctrlKey && e.key === "[") {
+      e.preventDefault();
+      this.hide();
       return;
     }
 

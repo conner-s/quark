@@ -134,6 +134,12 @@ export class PinnedMessagesDialog {
   private _handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
+    if (e.ctrlKey && e.key === "[") {
+      e.preventDefault();
+      this.hide();
+      return;
+    }
+
     const result = keymapManager.resolveKey(e.key, "picker");
     if (result.kind === "action" && result.action === "close") {
       e.preventDefault();
