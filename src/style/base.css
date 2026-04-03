@@ -524,6 +524,7 @@ body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-gutter: stable; /* always reserve scrollbar space so message-bubble right edges stay fixed */
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -1432,6 +1433,11 @@ span.reaction__emoji {
  * = timeline padding-left (12px) + avatar width (32px) + wrapper gap (8px).
  * This aligns the compose box left-edge exactly with .message-group boxes above,
  * making the send animation a clean vertical translate.
+ *
+ * padding-right starts at 12px (= timeline padding-right) and is dynamically adjusted by
+ * App.ts via ResizeObserver to add the timeline's actual scrollbar gutter width
+ * (offsetWidth - clientWidth), keeping the compose-box right edge aligned with message
+ * bubbles regardless of OS scrollbar style (overlay = 0px extra, classic = N px extra).
  */
 .input-bar {
   display: flex;
@@ -1440,7 +1446,7 @@ span.reaction__emoji {
   flex-shrink: 0;
   background-color: var(--bg);
   margin-top: auto;
-  padding: 16px 16px 16px 8px;
+  padding: 16px 12px 16px 8px;
 }
 
 .input-bar__mode {

@@ -136,6 +136,20 @@ export function mountApp(container: HTMLElement): AppComponents {
 
   container.appendChild(mainLayout);
 
+  // ── Align compose-box right edge with message bubbles ────────────────────
+  // The timeline scrollbar takes space from its content area (classic scrollbars)
+  // or nothing (overlay scrollbars on macOS). Measure the actual gutter width at
+  // runtime so the input-bar's padding-right always matches — regardless of OS
+  // scrollbar style, user preferences, or DPI.
+  const timelineEl = timeline.getElement();
+  const inputEl = input.getElement();
+  const syncComposeRight = () => {
+    const gutterPx = timelineEl.offsetWidth - timelineEl.clientWidth;
+    inputEl.style.paddingRight = `${12 + gutterPx}px`;
+  };
+  syncComposeRight();
+  new ResizeObserver(syncComposeRight).observe(timelineEl);
+
   // ── Status bar (fixed bottom-right, floats over content) ─────────────────
   container.appendChild(statusBar.getElement());
 
