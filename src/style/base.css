@@ -2833,7 +2833,9 @@ a:hover {
 }
 
 .settings-dialog__time-input,
-.settings-dialog__number-input {
+.settings-dialog__number-input,
+.settings-dialog__select,
+.settings-dialog__text-input {
   background: transparent;
   border: var(--border-width) solid var(--border-color);
   color: var(--fg);
@@ -2844,12 +2846,23 @@ a:hover {
 }
 
 .settings-dialog__time-input:focus,
-.settings-dialog__number-input:focus {
+.settings-dialog__number-input:focus,
+.settings-dialog__select:focus,
+.settings-dialog__text-input:focus {
   border-color: var(--accent-primary);
 }
 
 .settings-dialog__number-input {
   width: 70px;
+}
+
+.settings-dialog__select {
+  cursor: pointer;
+}
+
+.settings-dialog__text-input {
+  flex: 1;
+  min-width: 0;
 }
 
 .settings-dialog__actions {

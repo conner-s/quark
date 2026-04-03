@@ -1,0 +1,216 @@
+//! Application configuration — persisted to `~/.config/quark/config.toml`.
+//!
+//! Covers [general], [sync], [media], [gif], and [emoji] sections as defined
+//! in DESIGN.md. Notification preferences live separately in notifications.rs.
+
+use serde::{Deserialize, Serialize};
+
+// ─── Section structs ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GeneralConfig {
+    /// Name of the active theme (built-in slug or path).
+    #[serde(default = "default_theme_name")]
+    pub theme: String,
+    /// Master notifications switch (also reflected in NotificationConfig.enabled).
+    #[serde(default = "bool_true")]
+    pub notifications: bool,
+    /// Ask for confirmation before redacting a message.
+    #[serde(default = "bool_true")]
+    pub confirm_redact: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SyncConfig {
+    /// Use Sliding Sync (MSC4186) when available.
+    #[serde(default = "bool_true")]
+    pub sliding_sync: bool,
+    /// Number of messages to load initially per room.
+    #[serde(default = "default_timeline_limit")]
+    pub timeline_limit: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MediaConfig {
+    /// Automatically display inline images in the timeline.
+    #[serde(default = "bool_true")]
+    pub auto_load_images: bool,
+    /// Maximum rendered width (px) for inline images.
+    #[serde(default = "default_max_image_width")]
+    pub max_image_width: u32,
+    /// Maximum rendered height (px) for inline images.
+    #[serde(default = "default_max_image_height")]
+    pub max_image_height: u32,
+    /// Maximum rendered size (px) for sticker images.
+    #[serde(default = "default_sticker_max_size")]
+    pub sticker_max_size: u32,
+    /// On-disk media cache size limit in megabytes.
+    #[serde(default = "default_cache_size_mb")]
+    pub cache_size_mb: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum GifProvider {
+    Tenor,
+    Giphy,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum GifRating {
+    #[serde(rename = "g")]
+    G,
+    #[serde(rename = "pg")]
+    Pg,
+    #[serde(rename = "pg-13")]
+    Pg13,
+    #[serde(rename = "r")]
+    R,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GifConfig {
+    #[serde(default = "default_gif_provider")]
+    pub provider: GifProvider,
+    /// User-supplied API key for the selected GIF provider.
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default = "default_gif_rating")]
+    pub rating: GifRating,
+    #[serde(default = "bool_true")]
+    pub cache_results: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EmojiConfig {
+    /// Enable `:shortcode` autocomplete in the compose box.
+    #[serde(default = "bool_true")]
+    pub shortcode_autocomplete: bool,
+    /// Minimum characters typed before autocomplete activates.
+    #[serde(default = "default_autocomplete_min_chars")]
+    pub autocomplete_min_chars: u32,
+}
+
+// ─── Root config ─────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AppConfig {
+    #[serde(default)]
+    pub general: GeneralConfig,
+    #[serde(default)]
+    pub sync: SyncConfig,
+    #[serde(default)]
+    pub media: MediaConfig,
+    #[serde(default)]
+    pub gif: GifConfig,
+    #[serde(default)]
+    pub emoji: EmojiConfig,
+}
+
+// ─── Default impls ────────────────────────────────────────────────────────────
+
+fn default_theme_name() -> String { "phosphor".to_string() }
+fn bool_true() -> bool { true }
+fn default_timeline_limit() -> u32 { 50 }
+fn default_max_image_width() -> u32 { 600 }
+fn default_max_image_height() -> u32 { 400 }
+fn default_sticker_max_size() -> u32 { 256 }
+fn default_cache_size_mb() -> u64 { 500 }
+fn default_gif_provider() -> GifProvider { GifProvider::Tenor }
+fn default_gif_rating() -> GifRating { GifRating::Pg }
+fn default_autocomplete_min_chars() -> u32 { 2 }
+
+impl Default for GeneralConfig {
+    fn default() -> Self {
+        Self { theme: default_theme_name(), notifications: true, confirm_redact: true }
+    }
+}
+
+impl Default for SyncConfig {
+    fn default() -> Self {
+        Self { sliding_sync: true, timeline_limit: default_timeline_limit() }
+    }
+}
+
+impl Default for MediaConfig {
+    fn default() -> Self {
+        Self {
+            auto_load_images: true,
+            max_image_width: default_max_image_width(),
+            max_image_height: default_max_image_height(),
+            sticker_max_size: default_sticker_max_size(),
+            cache_size_mb: default_cache_size_mb(),
+        }
+    }
+}
+
+impl Default for GifConfig {
+    fn default() -> Self {
+        Self { provider: GifProvider::Tenor, api_key: String::new(), rating: GifRating::Pg, cache_results: true }
+    }
+}
+
+impl Default for EmojiConfig {
+    fn default() -> Self {
+        Self { shortcode_autocomplete: true, autocomplete_min_chars: default_autocomplete_min_chars() }
+    }
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            general: GeneralConfig::default(),
+            sync: SyncConfig::default(),
+            media: MediaConfig::default(),
+            gif: GifConfig::default(),
+            emoji: EmojiConfig::default(),
+        }
+    }
+}
+
+// ─── I/O ─────────────────────────────────────────────────────────────────────
+
+/// Return the canonical path to `~/.config/quark/config.toml`.
+pub fn config_path() -> Option<std::path::PathBuf> {
+    directories::ProjectDirs::from("", "", "quark")
+        .map(|d| d.config_dir().join("config.toml"))
+}
+
+/// Load config from disk; return defaults if file is absent or unparseable.
+pub fn load_app_config() -> AppConfig {
+    let Some(path) = config_path() else { return AppConfig::default() };
+    if !path.exists() { return AppConfig::default() }
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("Failed to read config.toml: {e}");
+            return AppConfig::default();
+        }
+    };
+    match toml::from_str::<AppConfig>(&content) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::warn!("Failed to parse config.toml: {e}");
+            AppConfig::default()
+        }
+    }
+}
+
+/// Serialize config and write it to `~/.config/quark/config.toml`.
+pub fn save_app_config(config: &AppConfig) -> Result<(), String> {
+    let path = config_path()
+        .ok_or_else(|| "Could not determine config directory".to_string())?;
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create config dir: {e}"))?;
+    }
+
+    let content = toml::to_string_pretty(config)
+        .map_err(|e| format!("Failed to serialize config: {e}"))?;
+
+    std::fs::write(&path, content)
+        .map_err(|e| format!("Failed to write config.toml: {e}"))?;
+
+    Ok(())
+}

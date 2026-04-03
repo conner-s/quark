@@ -336,6 +336,15 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
         ? rooms.filter((r) => (r.name + " " + (r.topic ?? "")).toLowerCase().includes(filterStr))
         : rooms;
     }
+    case "get_app_config":
+      return {
+        general: { theme: "phosphor", notifications: true, confirm_redact: true },
+        sync: { sliding_sync: true, timeline_limit: 50 },
+        media: { auto_load_images: true, max_image_width: 600, max_image_height: 400, sticker_max_size: 256, cache_size_mb: 500 },
+        gif: { provider: "tenor", api_key: "", rating: "pg", cache_results: true },
+        emoji: { shortcode_autocomplete: true, autocomplete_min_chars: 2 },
+      };
+    case "set_app_config":
     case "set_notification_config":
     case "clear_media_cache":
     case "set_cache_size_limit":

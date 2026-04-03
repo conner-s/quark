@@ -8,7 +8,6 @@ pub mod notifications;
 
 use matrix::client::MatrixState;
 use media_cache::MediaCache;
-use notifications::NotificationConfig;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
@@ -24,13 +23,17 @@ pub fn run() {
         )
         .try_init();
 
-    // Default to a 200 MB cache. The user can change it at runtime via the
-    // set_cache_size_limit command.
-    let cache = MediaCache::new(200)
+    // Load persisted configs from disk (fall back to defaults if absent).
+    let app_config = config::app_config::load_app_config();
+    let notification_config = notifications::load_notification_config();
+
+    // Initialise the media cache using the persisted size limit.
+    let cache_size_mb = app_config.media.cache_size_mb;
+    let cache = MediaCache::new(cache_size_mb)
         .unwrap_or_else(|e| {
             tracing::warn!("Failed to initialise media cache: {e}. Using temp dir fallback.");
             let tmp = std::env::temp_dir().join("quark_media_cache");
-            MediaCache::with_dir(tmp, 200).expect("Could not create fallback cache")
+            MediaCache::with_dir(tmp, cache_size_mb).expect("Could not create fallback cache")
         });
 
     tauri::Builder::default()
@@ -38,7 +41,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(MatrixState(Mutex::new(None)))
         .manage(CacheState(Arc::new(cache)))
-        .manage(Mutex::new(NotificationConfig::default()))
+        .manage(Mutex::new(app_config))
+        .manage(Mutex::new(notification_config))
         .invoke_handler(tauri::generate_handler![
             // Auth
             commands::login,
@@ -97,6 +101,9 @@ pub fn run() {
             // GIF
             commands::search_gifs,
             commands::send_gif,
+            // App Config
+            commands::get_app_config,
+            commands::set_app_config,
             // Config
             commands::load_theme,
             commands::parse_quarkrc,

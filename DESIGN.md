@@ -634,7 +634,7 @@ quark/
 
 #### Configuration
 - [ ] Theme hot-reloading — filesystem watcher (`notify` crate) not hooked up; requires app restart to change theme
-- [ ] `config.toml` full loading — verify all `[general]`, `[sync]`, `[media]`, `[gif]`, `[emoji]` sections are read at startup
+- [x] `config.toml` full loading — `AppConfig` struct covers all `[general]`, `[sync]`, `[media]`, `[gif]`, `[emoji]` sections; loaded at startup via `load_app_config()`, persisted via `set_app_config` IPC; notification config persisted separately to `notifications.toml`; settings UI exposes all options across General, Media, GIF, Emoji, Notifications, and Themes tabs
 
 #### UI / Polish
 - [x] **Compose box animation** — input bar restyled as a message bubble; sent messages animate upward into the timeline with header/avatar fade-in; compose box pulses on send; consecutive own-messages merge into the same group

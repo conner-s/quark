@@ -1,5 +1,6 @@
 use crate::{
     config::{
+        app_config::AppConfig,
         quarkrc::ParsedRc,
         theme::Theme,
     },
@@ -641,6 +642,35 @@ pub async fn send_gif(
     .await
 }
 
+// ─── App Config Commands ──────────────────────────────────────────────────────
+
+/// Return the current application configuration.
+#[tauri::command]
+pub async fn get_app_config(
+    config_state: State<'_, Mutex<AppConfig>>,
+) -> Result<AppConfig, String> {
+    let guard = config_state.lock().map_err(|_| "App config lock poisoned")?;
+    Ok(guard.clone())
+}
+
+/// Persist updated application configuration to disk and update in-memory state.
+/// Also syncs the media cache size limit when `media.cache_size_mb` changes.
+#[tauri::command]
+pub async fn set_app_config(
+    config_state: State<'_, Mutex<AppConfig>>,
+    cache_state: State<'_, CacheState>,
+    config: AppConfig,
+) -> Result<(), String> {
+    crate::config::app_config::save_app_config(&config)?;
+    let new_cache_mb = config.media.cache_size_mb;
+    let mut guard = config_state.lock().map_err(|_| "App config lock poisoned")?;
+    *guard = config;
+    drop(guard);
+    // Sync MediaCache size limit in case it changed.
+    let _ = cache_state.0.set_max_size_mb(new_cache_mb);
+    Ok(())
+}
+
 // ─── Config Commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -719,12 +749,13 @@ pub async fn get_notification_config(
     Ok(guard.clone())
 }
 
-/// Replace the current notification configuration.
+/// Replace the current notification configuration and persist it to disk.
 #[tauri::command]
 pub async fn set_notification_config(
     config_state: State<'_, Mutex<NotificationConfig>>,
     config: NotificationConfig,
 ) -> Result<(), String> {
+    crate::notifications::save_notification_config(&config)?;
     let mut guard = config_state.lock().map_err(|_| "Notification config lock poisoned")?;
     *guard = config;
     Ok(())
