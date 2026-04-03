@@ -89,7 +89,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 4px 0;
+  padding: 4px 0 var(--status-bar-height);
   overflow-y: auto;
   overflow-x: hidden;
   background-color: var(--bg);
@@ -178,6 +178,7 @@ body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  padding-bottom: var(--status-bar-height);
 }
 
 .room-list__section-label {
@@ -1495,7 +1496,7 @@ span.reaction__emoji {
   border: var(--border-width) solid color-mix(in srgb, var(--border-color) 70%, var(--accent-primary) 30%);
   border-radius: 0px 8px 8px 0px;
   min-width: 0;
-  margin: 8px 4px 8px 0;
+  margin: 8px 0px 8px 0;
   /* Matches .message-group padding-top so text aligns with message body.
      Kept on the box (not the field) so the clone can animate it to 0 during
      flight, mirroring how the real group's padding-top is revealed on landing. */
@@ -1639,6 +1640,7 @@ a:hover {
   bottom: 0;
   left: 0;
   width: calc(var(--space-strip-width) + var(--room-list-width));
+  min-height: var(--status-bar-height);
   z-index: 100;
   background-color: var(--bg);
   border-top: var(--border-width) solid var(--border-color);
