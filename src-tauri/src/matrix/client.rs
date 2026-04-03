@@ -1,6 +1,10 @@
 use matrix_sdk::{
     config::SyncSettings,
-    ruma::{api::client::filter::FilterDefinition, presence::PresenceState},
+    ruma::{
+        api::client::filter::{FilterDefinition, RoomEventFilter, RoomFilter},
+        presence::PresenceState,
+        UInt,
+    },
     Client,
 };
 use serde::{Deserialize, Serialize};
@@ -141,7 +145,18 @@ pub async fn start_sync(client: Client, app_handle: Option<tauri::AppHandle>) {
     }
 
     tokio::spawn(async move {
-        let filter = FilterDefinition::default();
+        // Limit timeline events per room to avoid large initial-sync payloads.
+        // Incremental syncs only send new events regardless, so this only
+        // affects the first sync after login or a cache miss.
+        let mut timeline_filter = RoomEventFilter::default();
+        timeline_filter.limit = Some(UInt::from(20u32));
+
+        let mut room_filter = RoomFilter::default();
+        room_filter.timeline = timeline_filter;
+
+        let mut filter = FilterDefinition::default();
+        filter.room = room_filter;
+
         // Use Unavailable so Synapse does not write a presence update on every
         // sync poll — avoids lock contention on the presence table.
         let sync_settings = SyncSettings::default()

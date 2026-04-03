@@ -7,6 +7,8 @@ use matrix_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::Arc;
+use tokio::sync::Semaphore;
 use tracing::warn;
 
 /// A single emoji entry within a pack.
@@ -164,19 +166,49 @@ pub async fn get_emoji_packs(
         Ok(Some(raw)) => {
             if let Ok(value) = raw.deserialize_as::<Value>() {
                 if let Some(rooms_map) = value.get("rooms").and_then(|r| r.as_object()) {
+                    // Collect all (room, state_key, pack_id, subscribed_rid) work items
+                    // up front so we can fetch them concurrently.
+                    struct FetchItem {
+                        room: matrix_sdk::Room,
+                        state_key: String,
+                        pack_id: String,
+                        subscribed_rid: String,
+                    }
+
+                    let mut items: Vec<FetchItem> = Vec::new();
                     for (subscribed_rid, state_keys_val) in rooms_map {
                         let Ok(rid_parsed) = RoomId::parse(subscribed_rid) else { continue };
                         let Some(room) = client.get_room(&rid_parsed) else { continue };
 
-                        // state_keys_val is a map of state_key → {}
                         let state_keys: Vec<String> = state_keys_val
                             .as_object()
                             .map(|obj| obj.keys().cloned().collect())
                             .unwrap_or_else(|| vec!["".to_string()]);
 
-                        for state_key in &state_keys {
+                        for state_key in state_keys {
+                            let pack_id = if state_key.is_empty() {
+                                format!("emote_rooms_{}", subscribed_rid)
+                            } else {
+                                format!("emote_rooms_{}_{}", subscribed_rid, state_key)
+                            };
+                            items.push(FetchItem {
+                                room: room.clone(),
+                                state_key,
+                                pack_id,
+                                subscribed_rid: subscribed_rid.clone(),
+                            });
+                        }
+                    }
+
+                    let semaphore = Arc::new(Semaphore::new(8));
+                    let mut tasks = tokio::task::JoinSet::new();
+
+                    for item in items {
+                        let permit = semaphore.clone().acquire_owned().await.unwrap();
+                        tasks.spawn(async move {
+                            let _permit = permit;
                             let event_type = StateEventType::from("im.ponies.room_emotes");
-                            match room.get_state_event(event_type, state_key).await {
+                            match item.room.get_state_event(event_type, item.state_key.as_str()).await {
                                 Ok(Some(raw_ev)) => {
                                     let raw_json: Option<Value> = match raw_ev {
                                         matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState::Sync(r) => {
@@ -187,27 +219,27 @@ pub async fn get_emoji_packs(
                                         }
                                     };
                                     if let Some(v) = raw_json {
-                                        let content = v.get("content").unwrap_or(&v);
-                                        let pack_id = if state_key.is_empty() {
-                                            format!("emote_rooms_{}", subscribed_rid)
-                                        } else {
-                                            format!("emote_rooms_{}_{}", subscribed_rid, state_key)
-                                        };
-                                        if let Some(pack) = parse_ponies_pack(
-                                            &pack_id, "room", Some(subscribed_rid), content,
-                                        ) {
-                                            packs.push(pack);
-                                        }
+                                        let content = v.get("content").unwrap_or(&v).clone();
+                                        return parse_ponies_pack(
+                                            &item.pack_id, "room", Some(&item.subscribed_rid), &content,
+                                        );
                                     }
                                 }
                                 Ok(None) => {}
                                 Err(e) => {
                                     warn!(
                                         "Failed to fetch emote_rooms pack {}/{}: {}",
-                                        subscribed_rid, state_key, e
+                                        item.subscribed_rid, item.state_key, e
                                     );
                                 }
                             }
+                            None
+                        });
+                    }
+
+                    while let Some(res) = tasks.join_next().await {
+                        if let Ok(Some(pack)) = res {
+                            packs.push(pack);
                         }
                     }
                 }
