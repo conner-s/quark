@@ -674,6 +674,10 @@ quark/
 - [x] Split up messages more than 30 minutes apart
 - [ ] Add pinned message button to room header
 - [ ] Add jump to pinned message
+- [ ] Move typing indicators below message box
+- [ ] Subspaces should be treated as categories of rooms in the parent space by the UI
+- [ ] Pasting an image should put it in a preview above the message box, not immediately send
+- [ ] Resizable panes
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
@@ -737,5 +741,8 @@ quark/
 - [x] Newly sent messages don't have a profile picture — optimistic message in sendMessage was missing senderAvatarUrl; now resolved from _memberAvatarMxc/_avatarDataUrl cache using ownUserId
 - [ ] Room list still jumps from selected space to home with all rooms listed sometimes
 - [ ] Timeline jumps when loading images, placing user in the middle of message history upon newly loading a room
+- [ ] Image paste does not work on Linux
+- [ ] Emojis in emoji picker are sometimes too large, end up scrolling sideways.
+- [ ] Emoji categories in react emoji picker not implemented properly
 
 
