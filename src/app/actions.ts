@@ -296,6 +296,7 @@ export async function selectRoom(roomId: string): Promise<void> {
 
   AppState.set("currentRoomId", roomId);
   AppState.set("activePanel", "timeline");
+  if (AppState.get("threadRootEventId")) closeThread();
   _prevBatch = null;
   _paginationLoading = false;
   roomList.setActiveRoom(roomId);
