@@ -614,6 +614,11 @@ body {
   background-color: color-mix(in srgb, var(--msg-own) 3%, transparent);
 }
 
+.thread-inline__message--selected {
+  background-color: var(--roomlist-active-bg);
+  box-shadow: inset 3px 0 0 var(--msg-thread-indicator);
+}
+
 .thread-inline__message-header {
   display: flex;
   align-items: baseline;
@@ -657,52 +662,6 @@ body {
   display: block;
   border-radius: 3px;
   margin-top: 3px;
-}
-
-/* ── Reply compose ───────────────────────────────────────────────────────── */
-
-.thread-inline__input-bar {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  flex-shrink: 0;
-  padding: 6px 8px;
-  border-top: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-  background-color: color-mix(in srgb, var(--bg) 80%, transparent);
-}
-
-.thread-inline__prompt {
-  color: var(--msg-thread-indicator);
-  font-family: var(--font-family);
-  font-size: calc(var(--font-size) - 2px);
-  font-weight: bold;
-  padding: 4px 5px 4px 3px;
-  flex-shrink: 0;
-  user-select: none;
-}
-
-.thread-inline__input {
-  flex: 1;
-  background: transparent;
-  border: 1px solid color-mix(in srgb, var(--border-color) 70%, var(--msg-thread-indicator) 30%);
-  border-radius: 4px;
-  color: var(--fg);
-  font-family: var(--font-family-messages);
-  font-size: calc(var(--font-size) - 1px);
-  line-height: var(--line-height);
-  padding: 3px 8px;
-  outline: none;
-  caret-color: var(--cursor);
-  transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
-}
-
-.thread-inline__input::placeholder {
-  color: var(--roomlist-muted);
-}
-
-.thread-inline__input:focus {
-  border-color: color-mix(in srgb, var(--msg-thread-indicator) 60%, var(--border-color));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--msg-thread-indicator) 15%, transparent);
 }
 
 /* ── Member list sidebar (column 4, or 5 when thread view is also open) */
@@ -1319,6 +1278,20 @@ body {
 .reply-preview-bar__close:focus {
   color: var(--accent-error);
   outline: none;
+}
+
+/* Thread-mode variant — shown when the compose bar is sending to a thread */
+.reply-preview-bar--thread {
+  border-left-color: var(--msg-thread-indicator);
+  background-color: color-mix(in srgb, var(--msg-thread-indicator) 6%, transparent);
+}
+
+.reply-preview-bar--thread .reply-preview-bar__indicator {
+  color: var(--msg-thread-indicator);
+}
+
+.reply-preview-bar--thread .reply-preview-bar__sender {
+  color: var(--msg-thread-indicator);
 }
 
 /* ── Reply preview (in-timeline, on received/sent reply messages) ─────────── */

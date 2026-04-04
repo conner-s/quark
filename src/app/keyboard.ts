@@ -20,7 +20,6 @@ import {
   redactMessage,
   openThread,
   closeThread,
-  sendThreadReply,
   openQuickReactPicker,
   setupReactionChipHandler,
   setupMessageActionHandlers,
@@ -141,8 +140,14 @@ function dispatchAction(action: string, components: AppComponents): void {
     }
 
     case "open-thread": {
-      const msgId = timeline.selectedMessageId;
-      if (msgId) void openThread(msgId);
+      if (timeline.inlineThreadRootId) {
+        closeThread();
+      } else {
+        // selectedMessageId returns the thread-reply ID when a thread is
+        // navigated — we need the underlying timeline selection here.
+        const msgId = timeline.timelineSelectedMessageId;
+        if (msgId) void openThread(msgId);
+      }
       break;
     }
 
@@ -432,12 +437,9 @@ export function setupKeyboard(components: AppComponents): void {
     closeThread();
   });
 
-  // Inline thread close and reply callbacks
+  // Inline thread close callback (the [x] button inside the panel)
   components.timeline.onInlineThreadClose(() => {
     closeThread();
-  });
-  components.timeline.onInlineThreadReply((body) => {
-    void sendThreadReply(body);
   });
 
   // ── Shortcode preview wiring ────────────────────────────────────────────

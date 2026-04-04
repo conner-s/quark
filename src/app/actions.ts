@@ -549,6 +549,13 @@ export async function sendMessage(body: string): Promise<void> {
   const roomId = AppState.get("currentRoomId");
   if (!roomId || !body.trim()) return;
 
+  // Route to thread when one is open.
+  const threadRootId = AppState.get("threadRootEventId");
+  if (threadRootId) {
+    await sendThreadReply(body, threadRootId, roomId);
+    return;
+  }
+
   const { timeline, input, replyPreview } = getComponents();
   const replyToEventId = AppState.get("replyToEventId");
 
@@ -906,12 +913,15 @@ export function startReply(eventId: string, senderName: string, snippet: string)
 }
 
 /**
- * Cancel the current reply.
+ * Cancel the current reply without touching thread mode.
  */
 export function cancelReply(): void {
   const { replyPreview } = getComponents();
   AppState.set("replyToEventId", null);
-  replyPreview.hide();
+  // Don't hide if we're in thread mode — thread has its own banner.
+  if (!replyPreview.isThreadMode()) {
+    replyPreview.hide();
+  }
 }
 
 /**
@@ -977,6 +987,13 @@ export async function openThread(eventId: string): Promise<void> {
 
   const ownUserId = AppState.get("ownUserId");
 
+  // Show the thread banner in the reply-preview bar so the compose box is
+  // visually marked as "sending to thread".
+  const { replyPreview } = getComponents();
+  const rootEvent = AppState.get("currentTimeline").find((e) => e.event_id === eventId);
+  const rootSnippet = rootEvent ? rootEvent.body.slice(0, 80) : "";
+  replyPreview.showThread(rootSnippet);
+
   try {
     const replies = await getThreadTimeline(roomId, eventId);
     const replyData = replies.map((e) => ({
@@ -996,6 +1013,7 @@ export async function openThread(eventId: string): Promise<void> {
     });
   } catch (err) {
     showError(`Failed to load thread: ${err instanceof Error ? err.message : String(err)}`);
+    replyPreview.hide();
   }
 }
 
@@ -1003,34 +1021,83 @@ export async function openThread(eventId: string): Promise<void> {
  * Close the inline thread panel.
  */
 export function closeThread(): void {
-  const { timeline } = getComponents();
+  const { timeline, replyPreview } = getComponents();
   AppState.set("threadRootEventId", null);
   timeline.closeInlineThread();
+  if (replyPreview.isThreadMode()) replyPreview.hide();
 }
 
 /**
- * Send a reply in the currently-open thread.
- * Sends as a plain room message with in_reply_to set to the thread root until
- * the backend gains a dedicated thread-reply IPC command.
+ * Send a reply into the open inline thread.
+ * Uses a text-clone fly animation from the compose field to the thread panel.
  */
-export async function sendThreadReply(body: string): Promise<void> {
-  const roomId = AppState.get("currentRoomId");
-  const threadRootId = AppState.get("threadRootEventId");
-  if (!roomId || !threadRootId || !body.trim()) return;
-
-  const { timeline } = getComponents();
+async function sendThreadReply(body: string, threadRootId: string, roomId: string): Promise<void> {
+  const { timeline, input } = getComponents();
   const ownUserId = AppState.get("ownUserId");
   const ownName = AppState.get("ownDisplayName") ?? ownUserId ?? "me";
 
-  // Optimistically append the reply to the inline panel.
   const optimisticId = `local-thread-${Date.now()}`;
-  timeline.appendInlineReply({
+  const optimisticMsg = {
     id: optimisticId,
     senderName: ownName,
     isOwn: true,
     timestamp: new Date().toISOString(),
     body,
+  };
+
+  // Append hidden to thread panel so we can measure its position.
+  timeline.appendInlineReply(optimisticMsg);
+
+  const fieldEl = input.getFieldElement();
+  const fieldRect = fieldEl.getBoundingClientRect();
+  const fieldStyle = getComputedStyle(fieldEl);
+
+  // Find the just-appended message element's body as the target.
+  const targetEl = timeline.getInlineThreadMessageEl(optimisticId);
+  const targetRect = targetEl?.getBoundingClientRect() ?? null;
+
+  input.setValue("");
+
+  // Fly a text clone from the compose field to the target in the thread panel.
+  const textClone = document.createElement("div");
+  textClone.textContent = body;
+  Object.assign(textClone.style, {
+    position: "fixed",
+    left: `${fieldRect.left + parseFloat(fieldStyle.paddingLeft)}px`,
+    top: `${fieldRect.top + parseFloat(fieldStyle.paddingTop)}px`,
+    maxWidth: `${fieldRect.width - parseFloat(fieldStyle.paddingLeft) - parseFloat(fieldStyle.paddingRight)}px`,
+    fontFamily: fieldStyle.fontFamily,
+    fontSize: fieldStyle.fontSize,
+    lineHeight: fieldStyle.lineHeight,
+    color: "var(--msg-thread-indicator)",
+    padding: "0",
+    margin: "0",
+    zIndex: "500",
+    pointerEvents: "none",
+    background: "transparent",
+    whiteSpace: "pre-wrap",
+    overflow: "hidden",
+    opacity: "0.9",
   });
+  document.body.appendChild(textClone);
+
+  if (targetRect) {
+    const dx = targetRect.left - fieldRect.left - parseFloat(fieldStyle.paddingLeft);
+    const dy = targetRect.top - fieldRect.top - parseFloat(fieldStyle.paddingTop);
+
+    const anim = textClone.animate(
+      [
+        { transform: "translate(0,0)", opacity: "0.9" },
+        { transform: `translate(${dx}px,${dy}px)`, opacity: "0" },
+      ],
+      { duration: 240, easing: "cubic-bezier(0.25, 0.46, 0.45, 0.94)", fill: "forwards" }
+    );
+    void anim.finished.then(() => textClone.remove());
+  } else {
+    textClone.remove();
+  }
+
+  input.animateSent();
 
   try {
     await ipcSendMessage(roomId, body, undefined, threadRootId);

@@ -23,6 +23,7 @@ export class ReplyPreview {
   private _closeBtn: HTMLButtonElement;
 
   private _currentReply: ReplyPreviewData | null = null;
+  private _threadMode = false;
   private _onDismiss: DismissCallback | null = null;
 
   constructor() {
@@ -80,10 +81,11 @@ export class ReplyPreview {
 
   /** Display the preview for the given reply target. */
   show(data: ReplyPreviewData): void {
+    this._threadMode = false;
     this._currentReply = data;
+    this._el.classList.remove("reply-preview-bar--thread");
 
     this._senderEl.textContent = `<${data.senderName}>`;
-    // Truncate long snippets for display
     const MAX_SNIPPET = 80;
     const displaySnippet =
       data.snippet.length > MAX_SNIPPET
@@ -95,13 +97,35 @@ export class ReplyPreview {
     this._el.setAttribute("aria-label", `Replying to ${data.senderName}`);
   }
 
+  /** Show a thread-mode banner (sending goes to the open inline thread). */
+  showThread(snippet: string): void {
+    this._threadMode = true;
+    this._currentReply = null;
+    this._el.classList.add("reply-preview-bar--thread");
+
+    this._senderEl.textContent = "⌥ Thread";
+    const MAX_SNIPPET = 80;
+    this._snippetEl.textContent =
+      snippet.length > MAX_SNIPPET ? snippet.slice(0, MAX_SNIPPET) + "…" : snippet;
+
+    this._el.style.display = "";
+    this._el.setAttribute("aria-label", "Replying in thread");
+  }
+
   hide(): void {
     this._el.style.display = "none";
     this._currentReply = null;
+    this._threadMode = false;
+    this._el.classList.remove("reply-preview-bar--thread");
   }
 
   isVisible(): boolean {
     return this._el.style.display !== "none";
+  }
+
+  /** True when the bar is showing the thread-send indicator (not a reply). */
+  isThreadMode(): boolean {
+    return this._threadMode;
   }
 
   /** Returns the event ID currently being replied to, or null. */
