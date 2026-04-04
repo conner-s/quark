@@ -1177,7 +1177,7 @@ body {
 .message__actions {
   position: absolute;
   right: 4px;
-  top: 50%;
+  top: 0px;
   transform: translateY(-50%);
   display: none;
   gap: 2px;
