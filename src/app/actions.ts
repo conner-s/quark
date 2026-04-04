@@ -1795,15 +1795,18 @@ export async function refreshRooms(): Promise<void> {
     ]);
     AppState.set("roomListCache", rooms);
 
-    // Build the set of rooms that belong to any space
-    // (fetched lazily — we do one get_space_hierarchy call per space in background)
+    // Build the set of rooms/subspaces that belong to any space, and collect
+    // subspace IDs so they can be excluded from the sidebar strip.
     const spaceRoomIdSet = new Set<string>();
+    const subspaceIdSet = new Set<string>();
     await Promise.all(
       userSpaces.map(async (space) => {
         try {
           const children = await getSpaceChildren(space.room_id);
           for (const c of children) {
-            if (!c.is_space) spaceRoomIdSet.add(c.room_id);
+            // Add all children (rooms and subspaces) so they're hidden from the home list
+            spaceRoomIdSet.add(c.room_id);
+            if (c.is_space) subspaceIdSet.add(c.room_id);
           }
         } catch {
           // Non-critical — worst case the home view shows extra rooms
@@ -1812,15 +1815,16 @@ export async function refreshRooms(): Promise<void> {
     );
     AppState.set("spaceRoomIds", [...spaceRoomIdSet]);
 
-    // Populate space strip — without avatar URLs initially, then resolve mxc:// in background
-    const spaceItems: SpaceItem[] = userSpaces.map((s) => ({
+    // Populate space strip — exclude subspaces (they appear nested inside their parent space)
+    const topLevelSpaces = userSpaces.filter((s) => !subspaceIdSet.has(s.room_id));
+    const spaceItems: SpaceItem[] = topLevelSpaces.map((s) => ({
       id: s.room_id,
       name: s.name ?? s.room_id,
     }));
     spaceStrip.setSpaces(spaceItems);
 
     // Resolve space avatar mxc:// URLs in the background
-    for (const s of userSpaces) {
+    for (const s of topLevelSpaces) {
       if (s.avatar_url?.startsWith("mxc://")) {
         const mxcUrl = s.avatar_url;
         const roomId = s.room_id;
