@@ -1,0 +1,254 @@
+# Quark — Tauri v2 CI/CD Pipeline
+#
+# Produces installable artifacts for Linux, Windows, and macOS.
+#
+# Runner requirements:
+#   Linux:   Any runner with Docker executor (handled via image: below)
+#   Windows: A shell-executor runner tagged "windows" with:
+#              - Rust (stable), pnpm, Node 20, MSVC build tools, WebView2 SDK
+#   macOS:   A shell-executor runner tagged "macos" with:
+#              - Rust (stable), pnpm, Node 20, Xcode CLT
+#
+# Artifacts are retained for 30 days and downloadable from the GitLab UI.
+
+stages:
+  - test
+  - build
+
+# ─── shared defaults ────────────────────────────────────────────────────────
+
+default:
+  interruptible: true
+
+variables:
+  CARGO_TERM_COLOR: always
+  # Keep incremental artefacts out of the source tree so caches stay clean.
+  CARGO_TARGET_DIR: $CI_PROJECT_DIR/src-tauri/target
+
+# ─── cache templates ────────────────────────────────────────────────────────
+
+.cache_rust_linux: &cache_rust_linux
+  cache:
+    key:
+      files:
+        - src-tauri/Cargo.lock
+      prefix: rust-linux
+    paths:
+      - $HOME/.cargo/registry/index/
+      - $HOME/.cargo/registry/cache/
+      - $HOME/.cargo/git/db/
+      - src-tauri/target/
+
+.cache_rust_windows: &cache_rust_windows
+  cache:
+    key:
+      files:
+        - src-tauri/Cargo.lock
+      prefix: rust-windows
+    paths:
+      - C:\Users\gitlab-runner\.cargo\registry\index\
+      - C:\Users\gitlab-runner\.cargo\registry\cache\
+      - C:\Users\gitlab-runner\.cargo\git\db\
+      - src-tauri\target\
+
+.cache_rust_macos: &cache_rust_macos
+  cache:
+    key:
+      files:
+        - src-tauri/Cargo.lock
+      prefix: rust-macos
+    paths:
+      - $HOME/.cargo/registry/index/
+      - $HOME/.cargo/registry/cache/
+      - $HOME/.cargo/git/db/
+      - src-tauri/target/
+
+# ─── test ───────────────────────────────────────────────────────────────────
+
+test:
+  stage: test
+  image: node:20-bookworm-slim
+  <<: *cache_rust_linux
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends
+        curl
+        build-essential
+        pkg-config
+        libssl-dev
+        libsqlite3-dev
+    # Install Rust
+    - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+    - . "$HOME/.cargo/env"
+    # Install pnpm + deps
+    - corepack enable
+    - corepack prepare pnpm@latest --activate
+    - pnpm install --frozen-lockfile
+  script:
+    - pnpm test
+    - cargo test --manifest-path src-tauri/Cargo.toml
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ─── build: Linux ───────────────────────────────────────────────────────────
+#
+# Produces: .deb, .AppImage, .rpm  (whatever Tauri's "all" target emits)
+# Uses a Debian Bookworm image with WebKit/GTK system deps.
+
+build:linux:
+  stage: build
+  image: ubuntu:22.04
+  <<: *cache_rust_linux
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends
+        curl
+        file
+        build-essential
+        pkg-config
+        libssl-dev
+        libsqlite3-dev
+        libgtk-3-dev
+        libglib2.0-dev
+        libwebkit2gtk-4.1-dev
+        libjavascriptcoregtk-4.1-dev
+        libsoup-3.0-dev
+        librsvg2-dev
+        patchelf
+        libxdo-dev
+        libayatana-appindicator3-dev
+    # Install Rust
+    - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+    - . "$HOME/.cargo/env"
+    # Install Node + pnpm
+    - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    - apt-get install -y nodejs
+    - corepack enable
+    - corepack prepare pnpm@latest --activate
+    - pnpm install --frozen-lockfile
+  script:
+    - pnpm tauri build
+  artifacts:
+    name: "quark-linux-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - src-tauri/target/release/bundle/deb/*.deb
+      - src-tauri/target/release/bundle/appimage/*.AppImage
+      - src-tauri/target/release/bundle/rpm/*.rpm
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+
+# ─── build: Windows ─────────────────────────────────────────────────────────
+#
+# Requires a Windows shell-executor runner tagged "windows".
+# Pre-installed on the runner:
+#   - Rust (stable, msvc toolchain)
+#   - Node 20 + pnpm (or Volta)
+#   - MSVC Build Tools (Visual Studio 2022 or Build Tools equivalent)
+#   - WebView2 (ships with Windows 11; or install the Evergreen bootstrapper)
+#
+# Produces: .msi, .exe (NSIS installer)
+
+build:windows:
+  stage: build
+  tags:
+    - windows
+  <<: *cache_rust_windows
+  before_script:
+    - rustup update stable
+    - pnpm install --frozen-lockfile
+  script:
+    - pnpm tauri build
+  artifacts:
+    name: "quark-windows-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - src-tauri/target/release/bundle/msi/*.msi
+      - src-tauri/target/release/bundle/nsis/*.exe
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+
+# ─── build: macOS ───────────────────────────────────────────────────────────
+#
+# Requires a macOS shell-executor runner tagged "macos".
+# Pre-installed on the runner:
+#   - Xcode Command Line Tools  (xcode-select --install)
+#   - Rust (stable)             (curl https://sh.rustup.rs … )
+#   - Node 20 + pnpm            (brew install node pnpm)
+#
+# Code-signing: set CI/CD variables APPLE_SIGNING_IDENTITY, APPLE_CERTIFICATE,
+# APPLE_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
+# and Tauri will sign & notarise automatically when they are present.
+# Without them the build succeeds but the .app will not be notarised.
+#
+# Produces: .dmg, .app (inside a .tar.gz)
+
+build:macos:
+  stage: build
+  tags:
+    - macos
+  <<: *cache_rust_macos
+  before_script:
+    - rustup update stable
+    - pnpm install --frozen-lockfile
+  script:
+    - pnpm tauri build
+  artifacts:
+    name: "quark-macos-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - src-tauri/target/release/bundle/dmg/*.dmg
+      - src-tauri/target/release/bundle/macos/*.app.tar.gz
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+
+# ─── release ────────────────────────────────────────────────────────────────
+#
+# When a tag is pushed, create a GitLab release that links all three bundles.
+# Requires the "release-cli" image; the runner must have internet access.
+
+release:
+  stage: build
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - job: build:linux
+      artifacts: true
+    - job: build:windows
+      artifacts: true
+    - job: build:macos
+      artifacts: true
+  script:
+    - echo "Creating release for $CI_COMMIT_TAG"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: "Quark $CI_COMMIT_TAG"
+    description: "Automated release — see CHANGELOG or commit history for details."
+    assets:
+      links:
+        - name: "Linux (.deb)"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/src-tauri/target/release/bundle/deb/?job=build:linux"
+        - name: "Linux (.AppImage)"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/src-tauri/target/release/bundle/appimage/?job=build:linux"
+        - name: "Windows (.msi)"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/src-tauri/target/release/bundle/msi/?job=build:windows"
+        - name: "Windows (.exe)"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/src-tauri/target/release/bundle/nsis/?job=build:windows"
+        - name: "macOS (.dmg)"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/src-tauri/target/release/bundle/dmg/?job=build:macos"
+  rules:
+    - if: $CI_COMMIT_TAG
