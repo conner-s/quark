@@ -485,6 +485,27 @@ async function loadMoreMessages(): Promise<void> {
 }
 
 /**
+ * Jump to a specific message by event ID, paginating backwards through history
+ * until the message is found or history is exhausted.
+ */
+export async function jumpToMessage(eventId: string): Promise<void> {
+  const { timeline } = getComponents();
+
+  // Fast path — message is already rendered
+  if (timeline.scrollToMessage(eventId)) return;
+
+  // Paginate backwards until found or history exhausted
+  showToast("Searching for message…", "info");
+
+  while (_prevBatch && !_paginationLoading) {
+    await loadMoreMessages();
+    if (timeline.scrollToMessage(eventId)) return;
+  }
+
+  showToast("Message not found in history", "info");
+}
+
+/**
  * Select a space: fetch children, filter room list.
  */
 export async function selectSpace(spaceId: string): Promise<void> {

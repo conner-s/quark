@@ -26,6 +26,7 @@ import {
   handleImagePaste,
   setupStatusBar,
   editStatus,
+  jumpToMessage,
 } from "./actions.js";
 import { AppState } from "./state.js";
 import { loadQuarkrc } from "../ipc/config.js";
@@ -374,12 +375,10 @@ export function setupKeyboard(components: AppComponents): void {
   roomHeader.setPinnedClickHandler(() => void openPinnedMessages());
 
   // Clicking a pinned message jumps to it in the timeline
-  pinnedMessagesDialog.onJumpToMessage((eventId) => {
-    const found = timeline.scrollToMessage(eventId);
-    if (!found) {
-      showToast("Message not in current view — load more history to find it", "info");
-    }
-  });
+  pinnedMessagesDialog.onJumpToMessage((eventId) => void jumpToMessage(eventId));
+
+  // Reply preview jumps to the original when message is not loaded
+  timeline.onJumpToMessage((eventId) => void jumpToMessage(eventId));
 
   // Image lightbox — wire timeline image clicks
   timeline.onImageClick((src, alt) => {

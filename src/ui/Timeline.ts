@@ -541,6 +541,8 @@ export class Timeline {
   private _onFocusCallback: (() => void) | null = null;
   /** Fired when an image message is clicked — passes (src, alt). */
   private _onImageClickCallback: ((src: string, alt: string) => void) | null = null;
+  /** Fired when a jump-to-message is requested but the message is not in the current view. */
+  private _onJumpToMessageCallback: ((eventId: string) => void) | null = null;
   private _scrollTopFired = false;
   /** Handle for the cleanup timeout of the scroll animation, so we can cancel it */
   private _scrollAnimCleanupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -586,7 +588,8 @@ export class Timeline {
     // Reply preview "jump to original" — fired by reply-preview clicks
     this._listEl.addEventListener("quark:jump-to-message", (e: Event) => {
       const { eventId } = (e as CustomEvent<{ eventId: string }>).detail;
-      this.scrollToMessage(eventId);
+      const found = this.scrollToMessage(eventId);
+      if (!found) this._onJumpToMessageCallback?.(eventId);
     });
 
     // Clicking inside the timeline notifies panels.ts so that activePanel is
@@ -635,6 +638,11 @@ export class Timeline {
   /** Register a callback fired when the user clicks an image message. */
   onImageClick(cb: (src: string, alt: string) => void): void {
     this._onImageClickCallback = cb;
+  }
+
+  /** Register a callback fired when a jump-to-message is requested but the message isn't loaded. */
+  onJumpToMessage(cb: (eventId: string) => void): void {
+    this._onJumpToMessageCallback = cb;
   }
 
   /** Show a "Loading…" indicator above the message list. */
@@ -1281,6 +1289,8 @@ export class Timeline {
   }
 
   updateMessageMedia(eventId: string, dataUrl: string): void {
+    const idx = this._messages.findIndex((m) => m.id === eventId);
+    if (idx >= 0) this._messages[idx].mediaUrl = dataUrl;
     const el = this.getMessageElementById(eventId);
     if (!el) return;
     const img = el.querySelector<HTMLImageElement>(".message__image, .message__sticker");
