@@ -1395,6 +1395,10 @@ body {
 
 /* ── Image messages ──────────────────────────────────────────────────────── */
 
+.message--image {
+  padding-left: 0;
+}
+
 .message__image {
   display: block;
   max-width: 600px;
@@ -2101,7 +2105,7 @@ span.reaction__emoji {
 /* ── Typing indicator ────────────────────────────────────────────────────── */
 
 .typing-indicator {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 6px;
   padding: 0 20px 6px 60px;
@@ -2112,10 +2116,12 @@ span.reaction__emoji {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Reserve space always — only show content when active to avoid layout shift */
+  visibility: hidden;
 }
 
 .typing-indicator--active {
-  display: flex;
+  visibility: visible;
 }
 
 .typing-indicator__dots {

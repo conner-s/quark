@@ -259,6 +259,7 @@ function buildMessageElement(msg: MessageData): HTMLElement {
   const type = msg.type ?? "text";
 
   if (type === "image") {
+    row.classList.add("message--image");
     const img = document.createElement("img");
     img.className = "message__image";
     img.src = msg.mediaUrl ?? "";
@@ -1089,6 +1090,12 @@ export class Timeline {
     return this._messages[this._selectedIndex].id;
   }
 
+  /** Returns the full MessageData of the currently selected timeline message, or null. */
+  get selectedMessage(): MessageData | null {
+    if (this._selectedIndex < 0 || this._selectedIndex >= this._messages.length) return null;
+    return this._messages[this._selectedIndex];
+  }
+
   /** Move selection down. Navigates thread replies when a thread is open. */
   selectNext(): void {
     if (this._inlineThreadRootId !== null) { this.threadSelectNext(); return; }
@@ -1383,15 +1390,16 @@ export class Timeline {
    * Scroll to a message by event ID and briefly highlight it.
    * No-ops silently if the event ID is not in the rendered timeline.
    */
-  scrollToMessage(eventId: string): void {
+  scrollToMessage(eventId: string): boolean {
     const el = this.getMessageElementById(eventId);
-    if (!el) return;
+    if (!el) return false;
     el.scrollIntoView({ block: "center", behavior: "smooth" });
     el.classList.remove("message--highlight"); // reset if re-triggered
     // Force reflow so re-adding the class actually restarts the animation
     void el.offsetWidth;
     el.classList.add("message--highlight");
     el.addEventListener("animationend", () => el.classList.remove("message--highlight"), { once: true });
+    return true;
   }
 
   /**

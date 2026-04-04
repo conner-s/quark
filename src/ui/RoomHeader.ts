@@ -69,9 +69,24 @@ export class RoomHeader {
 
     this._el.appendChild(left);
 
-    // ── Right section: member count + encryption ──────────────────────────────
+    // ── Right section: pinned + member count + encryption ────────────────────
     this._metaEl = document.createElement("div");
     this._metaEl.className = "room-header__meta";
+
+    // Pinned messages button — leftmost in meta section
+    this._pinnedBtnEl = document.createElement("button");
+    this._pinnedBtnEl.type = "button";
+    this._pinnedBtnEl.className = "room-header__pinned-btn";
+    this._pinnedBtnEl.title = "Pinned messages (:pinned)";
+    this._pinnedBtnEl.setAttribute("aria-label", "View pinned messages");
+    this._pinnedBtnEl.textContent = "📌 pinned";
+    this._metaEl.appendChild(this._pinnedBtnEl);
+
+    const pinnedSep = document.createElement("span");
+    pinnedSep.className = "room-header__sep";
+    pinnedSep.setAttribute("aria-hidden", "true");
+    pinnedSep.textContent = " │ ";
+    this._metaEl.appendChild(pinnedSep);
 
     this._memberCountEl = document.createElement("span");
     this._memberCountEl.className = "room-header__members";
@@ -90,15 +105,6 @@ export class RoomHeader {
     this._metaEl.appendChild(this._encEl);
 
     this._el.appendChild(this._metaEl);
-
-    // Pinned messages button
-    this._pinnedBtnEl = document.createElement("button");
-    this._pinnedBtnEl.type = "button";
-    this._pinnedBtnEl.className = "room-header__pinned-btn";
-    this._pinnedBtnEl.title = "Pinned messages (:pinned)";
-    this._pinnedBtnEl.setAttribute("aria-label", "View pinned messages");
-    this._pinnedBtnEl.textContent = "📌 pinned";
-    this._el.appendChild(this._pinnedBtnEl);
 
     // Single delegated listener — fires for clicks on avatar or member count
     this._el.addEventListener("click", (e) => {

@@ -76,7 +76,7 @@ function registerDefaultBindings(): void {
 // ── Action dispatcher ─────────────────────────────────────────────────────────
 
 function dispatchAction(action: string, components: AppComponents): void {
-  const { input, commandBar, timeline } = components;
+  const { input, commandBar, timeline, imageLightbox } = components;
 
   switch (action) {
     case "mode-insert":
@@ -158,9 +158,16 @@ function dispatchAction(action: string, components: AppComponents): void {
     }
 
     case "select":
-    case "select-room":
-      AppState.select();
+    case "select-room": {
+      // If in the timeline and the selected message is an image, open the lightbox
+      const sel = timeline.selectedMessage;
+      if (sel?.type === "image" && sel.mediaUrl && AppState.get("activePanel") === "timeline") {
+        imageLightbox.show(sel.mediaUrl, sel.mediaAlt ?? sel.body);
+      } else {
+        AppState.select();
+      }
       break;
+    }
 
     case "edit":
       document.dispatchEvent(new CustomEvent("quark:action", { detail: { action } }));
@@ -368,7 +375,10 @@ export function setupKeyboard(components: AppComponents): void {
 
   // Clicking a pinned message jumps to it in the timeline
   pinnedMessagesDialog.onJumpToMessage((eventId) => {
-    timeline.scrollToMessage(eventId);
+    const found = timeline.scrollToMessage(eventId);
+    if (!found) {
+      showToast("Message not in current view — load more history to find it", "info");
+    }
   });
 
   // Image lightbox — wire timeline image clicks
