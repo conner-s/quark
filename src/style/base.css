@@ -929,6 +929,7 @@ body {
 
 .room-header__members {
   color: color-mix(in srgb, var(--fg) 65%, transparent);
+  padding: 0px 4px;
 }
 
 .room-header__members--clickable {
@@ -941,10 +942,12 @@ body {
 
 .room-header__encryption--on {
   color: var(--accent-success);
+  padding: 0px 4px;
 }
 
 .room-header__encryption--off {
   color: var(--roomlist-muted);
+  padding: 0px 4px;
 }
 
 .room-header__pinned-btn {
@@ -954,7 +957,7 @@ body {
   font-family: var(--font-family);
   font-size: calc(var(--font-size) - 1px);
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 0px 4px;
   border-radius: 2px;
   flex-shrink: 0;
   transition: color 120ms;
@@ -1396,7 +1399,7 @@ body {
 /* ── Image messages ──────────────────────────────────────────────────────── */
 
 .message--image {
-  padding-left: 0;
+  padding-left: 8px;
 }
 
 .message__image {
@@ -1406,6 +1409,7 @@ body {
   width: auto;
   height: auto;
   object-fit: contain;
+  object-position: left;
   margin-top: 4px;
   cursor: zoom-in;
 }
