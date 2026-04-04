@@ -24,6 +24,7 @@ import { RoomInfoDialog } from "./RoomInfoDialog.js";
 import { PinnedMessagesDialog } from "./PinnedMessagesDialog.js";
 import { RoomDirectoryDialog } from "./RoomDirectoryDialog.js";
 import { ImageLightbox } from "./ImageLightbox.js";
+import { QuickNavPalette } from "./QuickNavPalette.js";
 
 // ── AppComponents ─────────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ export interface AppComponents {
   pinnedMessagesDialog: PinnedMessagesDialog;
   roomDirectoryDialog: RoomDirectoryDialog;
   imageLightbox: ImageLightbox;
+  quickNavPalette: QuickNavPalette;
 
   // Status
   statusBar: StatusBar;
@@ -104,6 +106,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   const pinnedMessagesDialog = new PinnedMessagesDialog();
   const roomDirectoryDialog = new RoomDirectoryDialog();
   const imageLightbox = new ImageLightbox();
+  const quickNavPalette = new QuickNavPalette();
 
   // ── Login screen ─────────────────────────────────────────────────────────
   container.appendChild(loginScreen.getElement());
@@ -184,6 +187,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   document.body.appendChild(pinnedMessagesDialog.getElement());
   document.body.appendChild(roomDirectoryDialog.getElement());
   document.body.appendChild(imageLightbox.getElement());
+  document.body.appendChild(quickNavPalette.getElement());
 
   return {
     loginScreen,
@@ -210,6 +214,7 @@ export function mountApp(container: HTMLElement): AppComponents {
     pinnedMessagesDialog,
     roomDirectoryDialog,
     imageLightbox,
+    quickNavPalette,
     typingIndicator,
     mainLayout,
   };

@@ -29,6 +29,7 @@ import {
   jumpToMessage,
   jumpToLatest,
   loadTheme,
+  selectRoom,
 } from "./actions.js";
 import { AppState } from "./state.js";
 import { loadQuarkrc } from "../ipc/config.js";
@@ -372,7 +373,7 @@ export function setupKeyboard(components: AppComponents): void {
   const { input, commandBar, shortcodePreview, timeline,
           emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker,
           settingsDialog, roomInfoDialog, pinnedMessagesDialog, roomDirectoryDialog,
-          roomHeader, imageLightbox } = components;
+          roomHeader, imageLightbox, quickNavPalette } = components;
 
   registerDefaultBindings();
 
@@ -398,6 +399,11 @@ export function setupKeyboard(components: AppComponents): void {
 
   // ── User keybindings ──────────────────────────────────────────────────────
   void loadQuarkrc().then(applyRcDirectives).catch(() => { /* no rc file is fine */ });
+
+  // Wire quick nav palette → selectRoom
+  quickNavPalette.onSelect((roomId) => {
+    void selectRoom(roomId);
+  });
 
   // Wire quick react picker → sendReaction
   quickReactPicker.onReact((eventId, key) => {
@@ -530,6 +536,17 @@ export function setupKeyboard(components: AppComponents): void {
         profileDialog.isVisible() || devicePicker.isVisible() ||
         settingsDialog.isVisible() || roomInfoDialog.isVisible() ||
         pinnedMessagesDialog.isVisible() || roomDirectoryDialog.isVisible()) return;
+
+    // Quick nav palette — Ctrl+K opens from any mode (except when already open)
+    if (e.ctrlKey && e.key === "k" && !quickNavPalette.isVisible()) {
+      if (AppState.get("loggedIn")) {
+        e.preventDefault();
+        quickNavPalette.show();
+        return;
+      }
+    }
+
+    if (quickNavPalette.isVisible()) return;
 
     // Escape (or Ctrl+[) always resets to Normal (if not already) and clears sequences
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
