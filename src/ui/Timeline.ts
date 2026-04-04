@@ -2,6 +2,7 @@
 
 import { createReactionBar, updateReactionBar, type ReactionGroup } from "./Reactions.js";
 import { invoke } from "../ipc/invoke.js";
+import type { ThreadMessageData } from "./ThreadView.js";
 
 // ── URL linkification ─────────────────────────────────────────────────────────
 
@@ -761,6 +762,236 @@ export class Timeline {
   /** Force scroll to the latest message */
   scrollToBottom(): void {
     this._scrollToBottom();
+  }
+
+  // ── Inline thread panel ────────────────────────────────────────────────────
+
+  private _inlineThreadEl: HTMLElement | null = null;
+  private _inlineThreadRootId: string | null = null;
+  private _inlineThreadReplyCallback: ((body: string) => void) | null = null;
+  private _inlineThreadCloseCallback: (() => void) | null = null;
+
+  /** Register callback fired when the user submits a reply in the inline thread. */
+  onInlineThreadReply(cb: (body: string) => void): void {
+    this._inlineThreadReplyCallback = cb;
+  }
+
+  /** Register callback fired when the user closes the inline thread. */
+  onInlineThreadClose(cb: () => void): void {
+    this._inlineThreadCloseCallback = cb;
+  }
+
+  /** The event ID of the currently-open inline thread root, or null. */
+  get inlineThreadRootId(): string | null {
+    return this._inlineThreadRootId;
+  }
+
+  /**
+   * Insert (or replace) the inline thread panel directly after the wrapper
+   * element that contains the thread root message, then animate it open.
+   */
+  openInlineThread(rootEventId: string, replies: ThreadMessageData[]): void {
+    // Remove any previously-open panel immediately (no close animation — the
+    // new panel snaps open in the correct position).
+    this._removeInlineThread(false);
+
+    const rootMsgEl = this._listEl.querySelector<HTMLElement>(`[data-message-id="${rootEventId}"]`);
+    const anchor =
+      rootMsgEl?.closest<HTMLElement>(".message-group-wrapper") ??
+      rootMsgEl?.closest<HTMLElement>(".message--ungrouped");
+    if (!anchor) return;
+
+    this._inlineThreadRootId = rootEventId;
+    const panel = this._buildInlinePanel(rootEventId, replies);
+    this._inlineThreadEl = panel;
+    anchor.insertAdjacentElement("afterend", panel);
+
+    // Animate open on the next frame so the browser has painted the 0fr state.
+    requestAnimationFrame(() => {
+      panel.classList.add("thread-inline--open");
+    });
+
+    // After the panel opens, scroll the anchor back into view so the root
+    // message stays visible above the expanded panel.
+    setTimeout(() => {
+      anchor.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, 240);
+  }
+
+  /** Animate the inline thread panel closed then remove it from the DOM. */
+  closeInlineThread(): void {
+    this._removeInlineThread(true);
+  }
+
+  /** Append a new reply to the already-open inline thread panel. */
+  appendInlineReply(msg: ThreadMessageData): void {
+    if (!this._inlineThreadEl) return;
+    const tl = this._inlineThreadEl.querySelector<HTMLElement>(".thread-inline__timeline");
+    if (!tl) return;
+    tl.appendChild(this._buildInlineMsgEl(msg));
+    tl.scrollTop = tl.scrollHeight;
+  }
+
+  /** Swap in a resolved data URL for a media message inside the inline thread. */
+  updateInlineThreadMedia(eventId: string, dataUrl: string): void {
+    if (!this._inlineThreadEl) return;
+    const el = this._inlineThreadEl.querySelector<HTMLElement>(`[data-message-id="${eventId}"]`);
+    const img = el?.querySelector<HTMLImageElement>(".thread-inline__message-image, .thread-inline__message-sticker");
+    if (img) img.src = dataUrl;
+  }
+
+  private _removeInlineThread(animate: boolean): void {
+    const panel = this._inlineThreadEl;
+    if (!panel) return;
+    this._inlineThreadEl = null;
+    this._inlineThreadRootId = null;
+
+    if (!animate) {
+      panel.remove();
+      return;
+    }
+    panel.classList.remove("thread-inline--open");
+    const onDone = () => panel.remove();
+    panel.addEventListener("transitionend", onDone, { once: true });
+    // Fallback: if transition somehow doesn't fire (e.g., tab hidden), clean up.
+    setTimeout(onDone, 350);
+  }
+
+  private _buildInlinePanel(rootEventId: string, replies: ThreadMessageData[]): HTMLElement {
+    const panel = document.createElement("div");
+    panel.className = "thread-inline";
+    panel.dataset.threadRoot = rootEventId;
+
+    const inner = document.createElement("div");
+    inner.className = "thread-inline__inner";
+
+    // ── Header ──────────────────────────────────────────────────────────────
+    const header = document.createElement("div");
+    header.className = "thread-inline__header";
+
+    const title = document.createElement("span");
+    title.className = "thread-inline__title";
+    title.textContent = "⌥ Thread";
+    header.appendChild(title);
+
+    const countEl = document.createElement("span");
+    countEl.className = "thread-inline__count";
+    const n = replies.length;
+    countEl.textContent = n > 0 ? `${n} repl${n === 1 ? "y" : "ies"}` : "no replies yet";
+    header.appendChild(countEl);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "thread-inline__close";
+    closeBtn.type = "button";
+    closeBtn.textContent = "[x]";
+    closeBtn.setAttribute("aria-label", "Close thread");
+    closeBtn.addEventListener("click", () => this._inlineThreadCloseCallback?.());
+    header.appendChild(closeBtn);
+
+    inner.appendChild(header);
+
+    // ── Reply timeline ───────────────────────────────────────────────────────
+    const timelineEl = document.createElement("div");
+    timelineEl.className = "thread-inline__timeline";
+    timelineEl.setAttribute("role", "list");
+    timelineEl.setAttribute("aria-label", "Thread replies");
+
+    for (const msg of replies) {
+      timelineEl.appendChild(this._buildInlineMsgEl(msg));
+    }
+
+    inner.appendChild(timelineEl);
+
+    // ── Reply compose ────────────────────────────────────────────────────────
+    const inputBar = document.createElement("div");
+    inputBar.className = "thread-inline__input-bar";
+
+    const prompt = document.createElement("span");
+    prompt.className = "thread-inline__prompt";
+    prompt.textContent = ":>";
+    prompt.setAttribute("aria-hidden", "true");
+    inputBar.appendChild(prompt);
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "thread-inline__input";
+    input.placeholder = "Reply in thread…";
+    input.setAttribute("aria-label", "Thread reply");
+    input.setAttribute("autocomplete", "off");
+    input.setAttribute("autocorrect", "off");
+    input.setAttribute("autocapitalize", "off");
+    input.setAttribute("spellcheck", "false");
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        const value = input.value.trim();
+        if (value) {
+          this._inlineThreadReplyCallback?.(value);
+          input.value = "";
+        }
+      } else if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
+        e.preventDefault();
+        input.blur();
+        this._inlineThreadCloseCallback?.();
+      }
+    });
+    inputBar.appendChild(input);
+
+    inner.appendChild(inputBar);
+    panel.appendChild(inner);
+    return panel;
+  }
+
+  private _buildInlineMsgEl(msg: ThreadMessageData): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "thread-inline__message" + (msg.isOwn ? " thread-inline__message--own" : "");
+    row.setAttribute("role", "listitem");
+    row.dataset.messageId = msg.id;
+
+    const hdr = document.createElement("div");
+    hdr.className = "thread-inline__message-header";
+
+    const senderEl = document.createElement("span");
+    senderEl.className =
+      "thread-inline__message-sender" + (msg.isOwn ? " thread-inline__message-sender--own" : "");
+    senderEl.textContent = msg.senderName;
+    hdr.appendChild(senderEl);
+
+    const tsEl = document.createElement("span");
+    tsEl.className = "thread-inline__message-timestamp";
+    try {
+      const d = new Date(msg.timestamp);
+      tsEl.textContent = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+    } catch { /* leave empty */ }
+    tsEl.setAttribute("title", msg.timestamp);
+    hdr.appendChild(tsEl);
+
+    row.appendChild(hdr);
+
+    const type = msg.type ?? "text";
+    if (type === "image" || type === "sticker") {
+      const img = document.createElement("img");
+      img.className = `thread-inline__message-${type}`;
+      img.src = msg.mediaUrl ?? "";
+      img.alt = msg.mediaAlt ?? type;
+      img.loading = "lazy";
+      row.appendChild(img);
+    } else {
+      const body = document.createElement("div");
+      body.className = "thread-inline__message-body";
+      if (msg.htmlBody) {
+        body.innerHTML = msg.htmlBody;
+      } else {
+        body.textContent = msg.body;
+      }
+      row.appendChild(body);
+    }
+
+    if (msg.reactions && msg.reactions.length > 0) {
+      row.appendChild(createReactionBar(msg.reactions));
+    }
+
+    return row;
   }
 
   /** The event ID of the currently selected message, or null. */

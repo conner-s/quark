@@ -20,6 +20,7 @@ import {
   redactMessage,
   openThread,
   closeThread,
+  sendThreadReply,
   openQuickReactPicker,
   setupReactionChipHandler,
   setupMessageActionHandlers,
@@ -426,9 +427,17 @@ export function setupKeyboard(components: AppComponents): void {
     cancelReply();
   });
 
-  // Thread view close → closeThread
+  // Thread view close → closeThread (sidebar fallback)
   components.threadView.onClose(() => {
     closeThread();
+  });
+
+  // Inline thread close and reply callbacks
+  components.timeline.onInlineThreadClose(() => {
+    closeThread();
+  });
+  components.timeline.onInlineThreadReply((body) => {
+    void sendThreadReply(body);
   });
 
   // ── Shortcode preview wiring ────────────────────────────────────────────

@@ -656,7 +656,7 @@ quark/
 - [x] Polish pass over top bar displaying room info. Take cues from the message UI.
 - [x] Polish pass over verification UI; currently unstyled at the bottom
 - [x] Emoji and sticker picker styling. Should show in box above compose area.
-- [ ] Threads animate open a space between message bubbles and display there.
+- [x] Threads animate open a space between message bubbles and display there.
 - [x] Settings UI — `SettingsDialog` overlay with Notifications, Media Cache, and Themes tabs; opened with `:settings` or `?` key
 - [ ] Permissions UI
 - [x] Room info/configuration UI — `RoomInfoDialog` shows room name/topic/member count/encryption/ID, mute toggle, and leave button; opened with `:info` or `I` key
@@ -672,6 +672,8 @@ quark/
 - [x] Detect links
 - [x] Add more info to profile screen
 - [x] Split up messages more than 30 minutes apart
+- [ ] Add pinned message button to room header
+- [ ] Add jump to pinned message
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
@@ -733,5 +735,7 @@ quark/
 - [x] Redacted messages don't disappear until reloading the chat — redactMessage now calls timeline.removeMessage() after successful IPC; removes from DOM and _messages array, collapses single-message groups
 - [x] Selecting a room in some spaces returns the room list to the home view — selectRoom was calling roomList.setRooms() with all cached rooms when clearing unread badge; now uses updateRoomBadge() to update only the specific room item in place
 - [x] Newly sent messages don't have a profile picture — optimistic message in sendMessage was missing senderAvatarUrl; now resolved from _memberAvatarMxc/_avatarDataUrl cache using ownUserId
+- [ ] Room list still jumps from selected space to home with all rooms listed sometimes
+- [ ] Timeline jumps when loading images, placing user in the middle of message history upon newly loading a room
 
 

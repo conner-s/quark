@@ -965,60 +965,78 @@ export async function redactMessage(eventId: string): Promise<void> {
 }
 
 /**
- * Open a thread view for a given root event.
+ * Open the inline thread panel for a given root event.
+ * The panel expands directly below the root message in the timeline.
  */
 export async function openThread(eventId: string): Promise<void> {
   const roomId = AppState.get("currentRoomId");
   if (!roomId) return;
 
-  const { threadView } = getComponents();
+  const { timeline } = getComponents();
   AppState.set("threadRootEventId", eventId);
 
-  // Find root message in timeline cache
-  const cached = AppState.get("currentTimeline");
-  const rootEvent = cached.find((e) => e.event_id === eventId);
-
-  if (rootEvent) {
-    threadView.setRoot({
-      id: rootEvent.event_id,
-      senderName: rootEvent.sender,
-      timestamp: new Date(rootEvent.timestamp).toISOString(),
-      body: rootEvent.body,
-      htmlBody: rootEvent.formatted_body ?? undefined,
-    });
-  }
+  const ownUserId = AppState.get("ownUserId");
 
   try {
     const replies = await getThreadTimeline(roomId, eventId);
-    threadView.setReplies(
-      replies.map((e) => ({
-        id: e.event_id,
-        senderName: e.sender,
-        timestamp: new Date(e.timestamp).toISOString(),
-        body: e.body,
-        htmlBody: e.formatted_body ?? undefined,
-        type: (e.msg_type === "m.image" ? "image" : e.msg_type === "m.sticker" ? "sticker" : "text") as "text" | "image" | "sticker",
-        mediaUrl: e.media_url ?? undefined,
-        mediaAlt: e.body,
-      }))
-    );
-    _downloadMessageImages(replies, threadView);
+    const replyData = replies.map((e) => ({
+      id: e.event_id,
+      senderName: resolveDisplayName(e.sender),
+      isOwn: ownUserId ? e.sender === ownUserId : false,
+      timestamp: new Date(e.timestamp).toISOString(),
+      body: e.body,
+      htmlBody: e.formatted_body ?? undefined,
+      type: (e.msg_type === "m.image" ? "image" : e.msg_type === "m.sticker" ? "sticker" : "text") as "text" | "image" | "sticker",
+      mediaUrl: e.media_url ?? undefined,
+      mediaAlt: e.body,
+    }));
+    timeline.openInlineThread(eventId, replyData);
+    _downloadMessageImages(replies, {
+      updateMessageMedia: (id: string, url: string) => timeline.updateInlineThreadMedia(id, url),
+    });
   } catch (err) {
     showError(`Failed to load thread: ${err instanceof Error ? err.message : String(err)}`);
   }
-
-  threadView.show();
-  getComponents().mainLayout.classList.add("quark-layout--thread-open");
 }
 
 /**
- * Close the thread view.
+ * Close the inline thread panel.
  */
 export function closeThread(): void {
-  const { threadView, mainLayout } = getComponents();
+  const { timeline } = getComponents();
   AppState.set("threadRootEventId", null);
-  threadView.hide();
-  mainLayout.classList.remove("quark-layout--thread-open");
+  timeline.closeInlineThread();
+}
+
+/**
+ * Send a reply in the currently-open thread.
+ * Sends as a plain room message with in_reply_to set to the thread root until
+ * the backend gains a dedicated thread-reply IPC command.
+ */
+export async function sendThreadReply(body: string): Promise<void> {
+  const roomId = AppState.get("currentRoomId");
+  const threadRootId = AppState.get("threadRootEventId");
+  if (!roomId || !threadRootId || !body.trim()) return;
+
+  const { timeline } = getComponents();
+  const ownUserId = AppState.get("ownUserId");
+  const ownName = AppState.get("ownDisplayName") ?? ownUserId ?? "me";
+
+  // Optimistically append the reply to the inline panel.
+  const optimisticId = `local-thread-${Date.now()}`;
+  timeline.appendInlineReply({
+    id: optimisticId,
+    senderName: ownName,
+    isOwn: true,
+    timestamp: new Date().toISOString(),
+    body,
+  });
+
+  try {
+    await ipcSendMessage(roomId, body, undefined, threadRootId);
+  } catch (err) {
+    showError(`Failed to send thread reply: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 // ── Emoji picker state ────────────────────────────────────────────────────────
