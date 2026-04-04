@@ -33,12 +33,12 @@ modules:
     build-options:
       build-args:
         - --share=network
-      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node22/bin
+      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node22/bin:/run/build/quark/npm-global/bin
       env:
         CARGO_HOME: /run/build/quark/cargo
     build-commands:
-      # Install pnpm
-      - npm install -g pnpm
+      # Install pnpm to a writable local prefix (SDK dirs are read-only)
+      - npm install --global --prefix /run/build/quark/npm-global pnpm
       # Install JS dependencies and build the frontend (outputs to dist/)
       - pnpm install --frozen-lockfile
       - pnpm build
