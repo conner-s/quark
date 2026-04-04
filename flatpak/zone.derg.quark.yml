@@ -1,0 +1,61 @@
+app-id: zone.derg.quark
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.node22
+command: quark
+
+finish-args:
+  # Display
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  # Network (Matrix)
+  - --share=network
+  # Config and data persistence
+  - --filesystem=~/.local/share/quark:create
+  - --filesystem=~/.config/quark:create
+  # Notifications
+  - --talk-name=org.freedesktop.Notifications
+  # Tray icon (optional, KDE/SNI)
+  - --talk-name=org.kde.StatusNotifierWatcher
+
+modules:
+  - name: quark
+    buildsystem: simple
+    # NOTE: --share=network in build-args is needed because Cargo and pnpm
+    # fetch dependencies at build time. For a Flathub submission, replace with
+    # pre-generated offline sources using flatpak-cargo-generator.py and
+    # flatpak-node-generator, then remove build-args.
+    build-options:
+      build-args:
+        - --share=network
+      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node22/bin
+      env:
+        CARGO_HOME: /run/build/quark/cargo
+    build-commands:
+      # Install pnpm
+      - npm install -g pnpm
+      # Install JS dependencies and build the frontend (outputs to dist/)
+      - pnpm install --frozen-lockfile
+      - pnpm build
+      # Build the Tauri binary; --bundles none skips .deb/.rpm packaging
+      - cargo tauri build --bundles none
+      # Install binary
+      - install -Dm755 src-tauri/target/release/quark /app/bin/quark
+      # Install icons
+      - install -Dm644 src-tauri/icons/128x128.png
+          /app/share/icons/hicolor/128x128/apps/zone.derg.quark.png
+      - install -Dm644 src-tauri/icons/128x128@2x.png
+          /app/share/icons/hicolor/256x256/apps/zone.derg.quark.png
+      # Install .desktop and AppStream metadata
+      - install -Dm644 flatpak/zone.derg.quark.desktop
+          /app/share/applications/zone.derg.quark.desktop
+      - install -Dm644 flatpak/zone.derg.quark.metainfo.xml
+          /app/share/metainfo/zone.derg.quark.metainfo.xml
+    sources:
+      - type: dir
+        path: ..

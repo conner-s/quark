@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "flatpak:build": "flatpak-builder --user --install --force-clean flatpak-build flatpak/zone.derg.quark.yml"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
