@@ -362,8 +362,11 @@ export async function selectRoom(roomId: string): Promise<void> {
     AppState.set("currentTimeline", events);
 
     // Render with cached display names immediately — update once members arrive
+    // Thread replies (thread_root set) are excluded from the main timeline;
+    // they belong in the thread panel only.
     const threadRootCounts = _buildThreadRootCounts(events);
-    const messages = events.map((e) => timelineEventToMessage(e, events, threadRootCounts));
+    const mainEvents = events.filter((e) => !e.thread_root);
+    const messages = mainEvents.map((e) => timelineEventToMessage(e, events, threadRootCounts));
     timeline.setMessages(messages);
 
     // Register scroll-to-top for pagination (re-registers on each room change)
@@ -460,7 +463,8 @@ async function loadMoreMessages(): Promise<void> {
     AppState.set("currentTimeline", [...page.events, ...existingEvents]);
 
     const threadRootCounts = _buildThreadRootCounts(page.events);
-    const messages = page.events.map((e) => timelineEventToMessage(e, page.events, threadRootCounts));
+    const mainEvents = page.events.filter((e) => !e.thread_root);
+    const messages = mainEvents.map((e) => timelineEventToMessage(e, page.events, threadRootCounts));
     timeline.prependMessages(messages);
 
     _downloadMessageImages(page.events, timeline);
@@ -1048,6 +1052,8 @@ async function sendThreadReply(body: string, threadRootId: string, roomId: strin
 
   // Append hidden to thread panel so we can measure its position.
   timeline.appendInlineReply(optimisticMsg);
+  // Optimistically update the reply count indicator on the thread root.
+  timeline.incrementThreadReplyCount(threadRootId);
 
   const fieldEl = input.getFieldElement();
   const fieldRect = fieldEl.getBoundingClientRect();

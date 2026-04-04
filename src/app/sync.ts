@@ -123,18 +123,21 @@ export async function startSync(components: AppComponents): Promise<() => void> 
         const alreadyInDom = !!timeline.getMessageElementById(payload.event.event_id);
         if (!alreadyInState && !alreadyInDom && !consumeOwnSentEvent(payload.event.event_id)) {
           const openThreadId = AppState.get("threadRootEventId");
-          const isThreadReply =
-            openThreadId !== null && payload.event.thread_root === openThreadId;
 
-          if (isThreadReply) {
-            // Route to the inline thread panel instead of the main timeline.
-            timeline.appendInlineReply({
-              id: payload.event.event_id,
-              senderName: resolveDisplayName(payload.event.sender),
-              isOwn: false,
-              timestamp: new Date(payload.event.timestamp).toISOString(),
-              body: payload.event.body,
-            });
+          if (payload.event.thread_root) {
+            // Thread replies never appear in the main timeline. Route to the
+            // thread panel if the matching thread is open, and always update
+            // the reply count indicator on the thread root message.
+            if (openThreadId !== null && payload.event.thread_root === openThreadId) {
+              timeline.appendInlineReply({
+                id: payload.event.event_id,
+                senderName: resolveDisplayName(payload.event.sender),
+                isOwn: false,
+                timestamp: new Date(payload.event.timestamp).toISOString(),
+                body: payload.event.body,
+              });
+            }
+            timeline.incrementThreadReplyCount(payload.event.thread_root);
           } else {
             timeline.appendMessage(timelineEventToMessage(payload.event));
             downloadSyncMessageImage(payload.event, timeline);

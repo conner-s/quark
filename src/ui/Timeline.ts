@@ -1352,6 +1352,44 @@ export class Timeline {
     el.addEventListener("animationend", () => el.classList.remove("message--highlight"), { once: true });
   }
 
+  /**
+   * Increment (or create) the thread reply count indicator on a thread root
+   * message. Called when a thread reply arrives via sync or optimistic send.
+   */
+  incrementThreadReplyCount(threadRootEventId: string): void {
+    const el = this.getMessageElementById(threadRootEventId);
+    if (!el) return;
+
+    let indicator = el.querySelector<HTMLButtonElement>(".message__thread-indicator");
+    if (indicator) {
+      const match = indicator.textContent?.match(/(\d+)/);
+      const count = match ? parseInt(match[1], 10) + 1 : 1;
+      indicator.textContent = `⌥ ${count} repl${count === 1 ? "y" : "ies"}`;
+    } else {
+      // First reply to this message — create the indicator
+      indicator = document.createElement("button");
+      indicator.className = "message__thread-indicator";
+      indicator.setAttribute("tabindex", "0");
+      indicator.title = "Open thread (t)";
+      indicator.textContent = "⌥ 1 reply";
+      indicator.addEventListener("click", (e) => {
+        e.stopPropagation();
+        el.dispatchEvent(
+          new CustomEvent("quark:open-thread", {
+            bubbles: true,
+            detail: { eventId: threadRootEventId },
+          })
+        );
+      });
+      const actionsDiv = el.querySelector<HTMLElement>(".message__actions");
+      if (actionsDiv) {
+        el.insertBefore(indicator, actionsDiv);
+      } else {
+        el.appendChild(indicator);
+      }
+    }
+  }
+
   /** Returns the last message-group-wrapper element, or null. */
   getLastGroupWrapper(): HTMLElement | null {
     const last = this._listEl.lastElementChild;
