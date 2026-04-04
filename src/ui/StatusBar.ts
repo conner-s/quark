@@ -1,8 +1,7 @@
-// Bottom-left status bar — connection, room name, and editable presence status
+// Bottom-left status bar — connection status and editable presence status
 
 export class StatusBar {
   private _el: HTMLElement;
-  private _roomEl: HTMLElement;
   private _encEl: HTMLElement;
   private _connEl: HTMLElement;
   private _statusEl: HTMLElement;
@@ -22,16 +21,6 @@ export class StatusBar {
     this._connEl.setAttribute("aria-live", "polite");
     this._connEl.textContent = "offline";
     this._el.appendChild(this._connEl);
-
-    // ── Separator ────────────────────────────────────────────────────────────
-    this._el.appendChild(this._makeSep());
-
-    // ── Room name ────────────────────────────────────────────────────────────
-    this._roomEl = document.createElement("span");
-    this._roomEl.className = "status-bar__room";
-    this._roomEl.setAttribute("aria-label", "Current room");
-    this._roomEl.textContent = "—";
-    this._el.appendChild(this._roomEl);
 
     // ── Spacer pushes right-side items to the right ──────────────────────────
     const spacer = document.createElement("span");
@@ -63,10 +52,6 @@ export class StatusBar {
 
   getElement(): HTMLElement {
     return this._el;
-  }
-
-  setRoom(name: string | null): void {
-    this._roomEl.textContent = name ?? "—";
   }
 
   setEncrypted(encrypted: boolean): void {

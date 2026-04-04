@@ -72,6 +72,8 @@ class AppStateManager {
   private _listeners: Map<string, Set<StateChangeListener>> = new Map();
   private _anyListeners: Set<StateChangeListener> = new Set();
   private _panelNavCallbacks: Map<ActivePanel, PanelNavCallbacks> = new Map();
+  /** Cached presence status messages keyed by user ID. */
+  private _userStatusCache: Map<string, string | null> = new Map();
 
   // ── Read ──────────────────────────────────────────────────────────────────
 
@@ -144,6 +146,16 @@ class AppStateManager {
 
   close(): void {
     this._panelNavCallbacks.get(this._state.activePanel)?.close?.();
+  }
+
+  // ── User status cache ─────────────────────────────────────────────────────
+
+  cacheUserStatus(userId: string, statusMsg: string | null): void {
+    this._userStatusCache.set(userId, statusMsg);
+  }
+
+  getUserStatus(userId: string): string | null {
+    return this._userStatusCache.get(userId) ?? null;
   }
 
   /** Programmatically move focus to a specific panel, calling its focusActive callback. */

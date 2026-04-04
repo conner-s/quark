@@ -6,6 +6,8 @@ export interface ProfileData {
   userId: string;
   displayName: string | null;
   avatarUrl: string | null;
+  /** Presence status message, if known. */
+  statusMessage?: string | null;
   /** If provided, a [message] button is shown that calls this when clicked. */
   onMessage?: () => void;
 }
@@ -20,6 +22,8 @@ export class ProfileDialog {
   private _displayNameEl: HTMLElement;
   private _userIdEl: HTMLElement;
   private _homeserverEl: HTMLElement;
+  private _statusMsgEl: HTMLElement;
+  private _statusMsgRow: HTMLElement;
   private _copyBtn: HTMLButtonElement;
   private _dmBtn: HTMLButtonElement;
   private _actionsEl: HTMLElement;
@@ -110,6 +114,18 @@ export class ProfileDialog {
     hsRow.appendChild(this._homeserverEl);
     info.appendChild(hsRow);
 
+    this._statusMsgRow = document.createElement("div");
+    this._statusMsgRow.className = "profile-dialog__row";
+    const statusLabel = document.createElement("span");
+    statusLabel.className = "profile-dialog__label";
+    statusLabel.textContent = "status";
+    this._statusMsgEl = document.createElement("span");
+    this._statusMsgEl.className = "profile-dialog__value profile-dialog__value--status";
+    this._statusMsgRow.appendChild(statusLabel);
+    this._statusMsgRow.appendChild(this._statusMsgEl);
+    this._statusMsgRow.style.display = "none";
+    info.appendChild(this._statusMsgRow);
+
     this._el.appendChild(info);
 
     // ── Actions ───────────────────────────────────────────────────────────
@@ -172,6 +188,13 @@ export class ProfileDialog {
     this._userIdEl.textContent = data.userId;
     const colonIdx = data.userId.indexOf(":");
     this._homeserverEl.textContent = colonIdx !== -1 ? data.userId.slice(colonIdx + 1) : data.userId;
+
+    if (data.statusMessage) {
+      this._statusMsgEl.textContent = data.statusMessage;
+      this._statusMsgRow.style.display = "";
+    } else {
+      this._statusMsgRow.style.display = "none";
+    }
 
     // Wire up DM button
     if (data.onMessage) {

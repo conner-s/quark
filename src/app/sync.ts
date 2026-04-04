@@ -26,6 +26,7 @@ interface SyncTypingPayload {
 interface SyncPresencePayload {
   user_id: string;
   presence: "online" | "unavailable" | "offline";
+  status_msg: string | null;
 }
 
 interface SyncReactionPayload {
@@ -211,11 +212,14 @@ export async function startSync(components: AppComponents): Promise<() => void> 
   // ── quark://sync/presence ─────────────────────────────────────────────────
   const unlistenPresence = await tauriListen<SyncPresencePayload>(
     "quark://sync/presence",
-    (_payload) => {
-      // If member list is visible, refresh it
-      if (AppState.get("memberListVisible")) {
-        // A full refresh would require re-fetching member list from IPC.
-        // For now we just note the update is received.
+    (payload) => {
+      const ownUserId = AppState.get("ownUserId");
+      if (payload.user_id === ownUserId) {
+        // Own user's presence — update the status bar
+        statusBar.setStatusMessage(payload.status_msg ?? "");
+      } else {
+        // Cache other users' status messages for profile views
+        AppState.cacheUserStatus(payload.user_id, payload.status_msg ?? null);
       }
     }
   );

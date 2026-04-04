@@ -1169,6 +1169,7 @@ export class Timeline {
     if (this._inlineThreadRootId !== null) { this.threadSelectLast(); return; }
     if (this._messages.length === 0) return;
     this._setSelected(this._messages.length - 1);
+    this._scrollToBottom();
   }
 
   /** Clear selection (clears thread selection when a thread is open). */
@@ -1584,6 +1585,7 @@ export class Timeline {
   private _scrollToBottom(): void {
     this._el.scrollTop = this._el.scrollHeight;
     this._scrolledUp = false;
+    this._updateJumpToLatestVisibility();
   }
 
   /**

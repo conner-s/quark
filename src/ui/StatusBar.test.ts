@@ -13,28 +13,6 @@ describe("StatusBar", () => {
     bar.getElement().remove();
   });
 
-  describe("setRoom", () => {
-    it("shows — by default", () => {
-      const roomEl = bar.getElement().querySelector(".status-bar__room");
-      expect(roomEl?.textContent).toBe("—");
-    });
-
-    it("updates room name display", () => {
-      bar.setRoom("#general:matrix.org");
-
-      const roomEl = bar.getElement().querySelector(".status-bar__room");
-      expect(roomEl?.textContent).toBe("#general:matrix.org");
-    });
-
-    it("shows — when null is passed", () => {
-      bar.setRoom("#general:matrix.org");
-      bar.setRoom(null);
-
-      const roomEl = bar.getElement().querySelector(".status-bar__room");
-      expect(roomEl?.textContent).toBe("—");
-    });
-  });
-
   describe("setEncrypted", () => {
     it("shows lock icon when encrypted", () => {
       bar.setEncrypted(true);

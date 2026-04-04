@@ -346,8 +346,6 @@ export async function selectRoom(roomId: string): Promise<void> {
     roomInfo?.is_encrypted,
     cachedRoomAvatar
   );
-  statusBar.setRoom(roomName);
-
   // Resolve the room avatar in the background if not already cached
   if (roomInfo?.avatar_url && roomInfo.room_id && !_roomAvatarDataUrl.has(roomInfo.room_id)) {
     const mxcUrl = roomInfo.avatar_url;
@@ -1412,7 +1410,8 @@ export async function openProfileForUser(userId: string): Promise<void> {
     const onMessage = userId !== ownUserId
       ? () => { void openOrCreateDm(userId); }
       : undefined;
-    profileDialog.show({ userId, displayName, avatarUrl, onMessage });
+    const statusMessage = AppState.getUserStatus(userId);
+    profileDialog.show({ userId, displayName, avatarUrl, statusMessage, onMessage });
   } catch (err) {
     showError(`Failed to load profile: ${err instanceof Error ? err.message : String(err)}`);
   }

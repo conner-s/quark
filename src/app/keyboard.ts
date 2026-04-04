@@ -28,6 +28,7 @@ import {
   editStatus,
   jumpToMessage,
   jumpToLatest,
+  loadTheme,
 } from "./actions.js";
 import { AppState } from "./state.js";
 import { loadQuarkrc } from "../ipc/config.js";
@@ -356,6 +357,8 @@ function applyRcDirectives(rc: ParsedRc): void {
       if (context) keymapManager.unmap(context, directive.key);
     } else if (directive.type === "let" && directive.name === "mapleader") {
       keymapManager.setLeaderKey(directive.value);
+    } else if (directive.type === "colorscheme") {
+      void loadTheme(directive.name);
     }
   }
   if (rc.errors.length > 0) {
