@@ -744,5 +744,6 @@ quark/
 - [x] Image paste does not work on Linux — added fallback to clipboardData.files (used by some Linux clipboard managers) and async navigator.clipboard.read() for Wayland/WebKit2GTK where clipboardData is not populated for text inputs
 - [x] Emojis in emoji picker are sometimes too large, end up scrolling sideways — added overflow-x: hidden to grid and overflow: hidden + min-width: 0 to cells
 - [x] Emoji categories in react emoji picker not implemented properly — _focusGrid and all navigation keys (h/l/j/k/Tab) now skip hidden buttons so keyboard focus lands on a visible emoji when a category filter is active
+- [x] Links sometimes open inside the app, navigating away from the chat UI — HTML body anchor tags now have href removed and a click handler added that opens via plugin:shell|open instead of letting the WebView follow the link
 
 

@@ -291,6 +291,22 @@ function buildMessageElement(msg: MessageData): HTMLElement {
           img.removeAttribute("src");
         }
       }
+      // Intercept all anchor clicks so they open in the system browser rather
+      // than navigating the Tauri WebView away from the chat UI.
+      for (const a of body.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+        const href = a.getAttribute("href") ?? "";
+        a.removeAttribute("href");
+        a.setAttribute("role", "link");
+        a.style.cursor = "pointer";
+        a.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (href.startsWith("http://") || href.startsWith("https://")) {
+            void invoke("plugin:shell|open", { path: href }).catch(() => {
+              window.open(href, "_blank", "noopener,noreferrer");
+            });
+          }
+        });
+      }
     } else {
       appendLinkifiedText(body, msg.body);
     }
