@@ -98,6 +98,7 @@ pub fn run() {
             // Threads
             commands::get_thread_roots,
             commands::get_thread_timeline,
+            commands::send_thread_reply,
             // GIF
             commands::search_gifs,
             commands::send_gif,

@@ -147,6 +147,12 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       MOCK_TIMELINE.push(ev);
       return ev.event_id;
     }
+    case "send_thread_reply": {
+      const body = args?.body as string ?? "";
+      const ev = mockEvent("@you:matrix.org", body, 0);
+      ev.thread_root = args?.threadRootEventId as string ?? null;
+      return ev.event_id;
+    }
     case "create_room": {
       const opts = args?.options as { name?: string; invite?: string[]; is_direct?: boolean } | undefined;
       const roomId = `!mock-${Date.now()}:matrix.org`;

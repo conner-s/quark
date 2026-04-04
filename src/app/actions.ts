@@ -24,6 +24,7 @@ import {
   createRoom,
   markRoomRead,
   getThreadTimeline,
+  sendThreadReplyIpc,
   loadTheme as ipcLoadTheme,
   getCrossSigningStatus,
   bootstrapCrossSigning,
@@ -1100,7 +1101,8 @@ async function sendThreadReply(body: string, threadRootId: string, roomId: strin
   input.animateSent();
 
   try {
-    await ipcSendMessage(roomId, body, undefined, threadRootId);
+    const eventId = await sendThreadReplyIpc(roomId, threadRootId, body);
+    _ownSentEventIds.add(eventId);
   } catch (err) {
     showError(`Failed to send thread reply: ${err instanceof Error ? err.message : String(err)}`);
   }

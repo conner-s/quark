@@ -122,10 +122,25 @@ export async function startSync(components: AppComponents): Promise<() => void> 
         // DOM (race: echo arrived after confirmMessage but before add-to-set).
         const alreadyInDom = !!timeline.getMessageElementById(payload.event.event_id);
         if (!alreadyInState && !alreadyInDom && !consumeOwnSentEvent(payload.event.event_id)) {
-          timeline.appendMessage(timelineEventToMessage(payload.event));
-          downloadSyncMessageImage(payload.event, timeline);
-          ensureSenderAvatarDownloaded(payload.event.sender, timeline);
-          resolveInlineEmojiForTimeline(timeline);
+          const openThreadId = AppState.get("threadRootEventId");
+          const isThreadReply =
+            openThreadId !== null && payload.event.thread_root === openThreadId;
+
+          if (isThreadReply) {
+            // Route to the inline thread panel instead of the main timeline.
+            timeline.appendInlineReply({
+              id: payload.event.event_id,
+              senderName: resolveDisplayName(payload.event.sender),
+              isOwn: false,
+              timestamp: new Date(payload.event.timestamp).toISOString(),
+              body: payload.event.body,
+            });
+          } else {
+            timeline.appendMessage(timelineEventToMessage(payload.event));
+            downloadSyncMessageImage(payload.event, timeline);
+            ensureSenderAvatarDownloaded(payload.event.sender, timeline);
+            resolveInlineEmojiForTimeline(timeline);
+          }
         }
       } else {
         // Update unread count on room list item

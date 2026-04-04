@@ -91,7 +91,7 @@ export {
 } from "./spaces.js";
 
 // ─── Threads ──────────────────────────────────────────────────────────────────
-export { getThreadRoots, getThreadTimeline } from "./threads.js";
+export { getThreadRoots, getThreadTimeline, sendThreadReplyIpc } from "./threads.js";
 
 // ─── GIF ──────────────────────────────────────────────────────────────────────
 export { searchGifs, sendGif } from "./gif.js";

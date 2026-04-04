@@ -561,6 +561,25 @@ pub async fn get_thread_timeline(
     crate::matrix::threads::get_thread_timeline(&client, &room_id, &thread_root_event_id).await
 }
 
+#[tauri::command]
+pub async fn send_thread_reply(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    thread_root_event_id: String,
+    body: String,
+    formatted_body: Option<String>,
+) -> Result<String, String> {
+    let client = get_client(&state)?;
+    crate::matrix::threads::send_thread_reply(
+        &client,
+        &room_id,
+        &thread_root_event_id,
+        &body,
+        formatted_body.as_deref(),
+    )
+    .await
+}
+
 // ─── GIF Commands ─────────────────────────────────────────────────────────────
 
 #[tauri::command]

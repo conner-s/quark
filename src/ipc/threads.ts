@@ -26,3 +26,21 @@ export async function getThreadTimeline(
     threadRootEventId,
   });
 }
+
+/**
+ * Send a reply in a thread. Returns the new event ID.
+ * Matches the Rust `send_thread_reply` command.
+ */
+export async function sendThreadReplyIpc(
+  roomId: string,
+  threadRootEventId: string,
+  body: string,
+  formattedBody?: string,
+): Promise<string> {
+  return invoke<string>("send_thread_reply", {
+    roomId,
+    threadRootEventId,
+    body,
+    formattedBody,
+  });
+}
