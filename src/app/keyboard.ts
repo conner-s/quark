@@ -19,6 +19,7 @@ import {
   startReply,
   redactMessage,
   openThread,
+  closeThread,
   openQuickReactPicker,
   setupReactionChipHandler,
   setupMessageActionHandlers,
@@ -427,7 +428,7 @@ export function setupKeyboard(components: AppComponents): void {
 
   // Thread view close → closeThread
   components.threadView.onClose(() => {
-    AppState.set("threadRootEventId", null);
+    closeThread();
   });
 
   // ── Shortcode preview wiring ────────────────────────────────────────────
