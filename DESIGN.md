@@ -672,12 +672,15 @@ quark/
 - [x] Detect links
 - [x] Add more info to profile screen
 - [x] Split up messages more than 30 minutes apart
-- [ ] Add pinned message button to room header
-- [ ] Add jump to pinned message
-- [ ] Move typing indicators below message box
-- [ ] Subspaces should be treated as categories of rooms in the parent space by the UI
-- [ ] Pasting an image should put it in a preview above the message box, not immediately send
-- [ ] Resizable panes
+- [x] Add pinned message button to room header — 📌 pinned button added to room header; opens PinnedMessagesDialog; wired via `setPinnedClickHandler`
+- [x] Add jump to pinned message — clicking a pinned message in the dialog closes it and calls `timeline.scrollToMessage(eventId)`
+- [x] Move typing indicators below message box — dedicated `typing-indicator` div below input bar with animated dots; no longer uses status bar
+- [x] Subspaces should be treated as categories of rooms in the parent space by the UI — `selectSpace` detects `is_space` children and calls `roomList.setSections()` with subspace names as labels
+- [x] Pasting an image should put it in a preview above the message box, not immediately send — `Input` shows paste preview with Send/Cancel buttons; only uploads on confirm
+- [x] Resizable panes — drag handles on room list (right edge), member list (left edge), thread view (left edge) update CSS variables via `attachResizeHandle`
+- [x] Show reconfigured binds in help window — `HelpDialog` queries `keymapManager.getEntries()` and highlights any user-remapped keys in accent color with default shown in tooltip
+- [x] Remove outline from image, keep it left aligned — removed border from `.message__image`; images were already `display: block` (left-aligned)
+- [x] Image lightbox with ability to zoom and download — `ImageLightbox` overlay with zoom +/-, 1:1 reset, and download button; opens on click of any `.message__image`
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.

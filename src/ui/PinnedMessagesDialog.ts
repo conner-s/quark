@@ -9,6 +9,7 @@ export class PinnedMessagesDialog {
   private _el: HTMLElement;
   private _panelEl: HTMLElement;
   private _listEl: HTMLElement;
+  private _onJumpToMessage: ((eventId: string) => void) | null = null;
 
   constructor() {
     // Backdrop
@@ -66,6 +67,11 @@ export class PinnedMessagesDialog {
 
   isVisible(): boolean { return this._el.style.display !== "none"; }
 
+  /** Register a callback for when the user clicks a pinned message to jump to it. */
+  onJumpToMessage(handler: (eventId: string) => void): void {
+    this._onJumpToMessage = handler;
+  }
+
   async show(): Promise<void> {
     const roomId = AppState.get("currentRoomId");
 
@@ -105,6 +111,10 @@ export class PinnedMessagesDialog {
     for (const ev of events) {
       const item = document.createElement("div");
       item.className = "pinned-dialog__item";
+      item.setAttribute("role", "button");
+      item.setAttribute("tabindex", "0");
+      item.title = "Click to jump to message";
+      item.dataset.eventId = ev.event_id;
 
       const senderEl = document.createElement("span");
       senderEl.className = "pinned-dialog__sender";
@@ -121,6 +131,17 @@ export class PinnedMessagesDialog {
       bodyEl.className = "pinned-dialog__body";
       bodyEl.textContent = ev.body;
       item.appendChild(bodyEl);
+
+      const jumpTo = () => {
+        if (ev.event_id && this._onJumpToMessage) {
+          this.hide();
+          this._onJumpToMessage(ev.event_id);
+        }
+      };
+      item.addEventListener("click", jumpTo);
+      item.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpTo(); }
+      });
 
       this._listEl.appendChild(item);
     }

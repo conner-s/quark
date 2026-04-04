@@ -1,6 +1,7 @@
 // Thread timeline panel — scoped to a single thread
 
 import { createReactionBar, type ReactionGroup } from "./Reactions.js";
+import { attachResizeHandle } from "./ResizeHandle.js";
 
 export interface ThreadMessageData {
   id: string;
@@ -133,6 +134,9 @@ export class ThreadView {
     });
     this._inputBarEl.appendChild(this._inputField);
     this._el.appendChild(this._inputBarEl);
+
+    // Drag-to-resize handle at the left edge
+    attachResizeHandle(this._el, "--thread-view-width", "left", 200, 600);
   }
 
   getElement(): HTMLElement {

@@ -12,6 +12,10 @@ interface BindingEntry {
   keys: string;
   mode: string;
   description: string;
+  /** keymapManager action ID — used to look up the live binding */
+  action?: string;
+  /** keymapManager context for the action */
+  context?: string;
 }
 
 const COMMANDS: CommandEntry[] = [
@@ -34,28 +38,32 @@ const COMMANDS: CommandEntry[] = [
 
 const BINDINGS: BindingEntry[] = [
   // Mode transitions
-  { keys: "i",       mode: "normal",   description: "Enter insert mode" },
-  { keys: ":",       mode: "normal",   description: "Enter command mode" },
-  { keys: "v",       mode: "normal",   description: "Enter visual mode" },
-  { keys: "Escape",  mode: "any",      description: "Return to normal mode" },
+  { keys: "i",       mode: "normal",   description: "Enter insert mode",               action: "mode-insert",     context: "global" },
+  { keys: ":",       mode: "normal",   description: "Enter command mode",              action: "mode-command",    context: "global" },
+  { keys: "v",       mode: "normal",   description: "Enter visual mode",               action: "mode-visual",     context: "global" },
+  { keys: "Escape",  mode: "any",      description: "Return to normal mode / cancel" },
   // Timeline navigation (normal / timeline)
-  { keys: "j / ↓",  mode: "normal",   description: "Select next message" },
-  { keys: "k / ↑",  mode: "normal",   description: "Select previous message" },
-  { keys: "gg",      mode: "normal",   description: "Jump to first message" },
-  { keys: "G",       mode: "normal",   description: "Jump to last message" },
+  { keys: "j / ↓",  mode: "normal",   description: "Select next message",             action: "nav-down",        context: "global" },
+  { keys: "k / ↑",  mode: "normal",   description: "Select previous message",         action: "nav-up",          context: "global" },
+  { keys: "gg",      mode: "normal",   description: "Jump to first message",           action: "jump-top",        context: "global" },
+  { keys: "G",       mode: "normal",   description: "Jump to last message",            action: "jump-bottom",     context: "global" },
   // Room list navigation
   { keys: "j / k",   mode: "roomlist", description: "Navigate rooms" },
   { keys: "Enter",   mode: "roomlist", description: "Open selected room" },
   // Message actions
-  { keys: "r",       mode: "normal",   description: "Reply to selected message" },
-  { keys: "e",       mode: "normal",   description: "React to selected message" },
-  { keys: "E",       mode: "normal",   description: "Edit selected message" },
-  { keys: "dd",      mode: "normal",   description: "Redact (delete) selected message" },
-  { keys: "t",       mode: "normal",   description: "Open thread for selected message" },
-  { keys: "m",       mode: "normal",   description: "Toggle member list panel" },
+  { keys: "r",       mode: "normal",   description: "Reply to selected message",       action: "reply",           context: "global" },
+  { keys: "e",       mode: "normal",   description: "React to selected message",       action: "react",           context: "global" },
+  { keys: "E",       mode: "normal",   description: "Edit selected message",           action: "edit",            context: "global" },
+  { keys: "dd",      mode: "normal",   description: "Redact (delete) selected message",action: "redact",          context: "global" },
+  { keys: "t",       mode: "normal",   description: "Open thread for selected message",action: "open-thread",     context: "global" },
+  { keys: "m",       mode: "normal",   description: "Toggle member list panel",        action: "toggle-members",  context: "global" },
+  { keys: "P",       mode: "normal",   description: "Open profile dialog",             action: "open-profile",    context: "global" },
+  { keys: "I",       mode: "normal",   description: "Open room info dialog",           action: "open-room-info",  context: "global" },
+  { keys: "S",       mode: "normal",   description: "Edit presence status",            action: "edit-status",     context: "global" },
+  { keys: "?",       mode: "normal",   description: "Open settings",                   action: "open-settings",   context: "global" },
   // Insert mode
-  { keys: "Ctrl-e",  mode: "insert",   description: "Open emoji picker" },
-  { keys: "Ctrl-g",  mode: "insert",   description: "Open GIF picker" },
+  { keys: "Ctrl-e",  mode: "insert",   description: "Open emoji picker",              action: "emoji",           context: "insert" },
+  { keys: "Ctrl-g",  mode: "insert",   description: "Open GIF picker",                action: "gif",             context: "insert" },
   { keys: "Enter",   mode: "insert",   description: "Send message" },
   { keys: ":word:",  mode: "insert",   description: "Shortcode emoji autocomplete" },
 ];
@@ -207,6 +215,15 @@ export class HelpDialog {
   private _buildBindingsTable(): void {
     this._buildHeadings(["KEYS", "MODE", "DESCRIPTION"]);
 
+    // Build a lookup: action → [sequences] from the live keymapManager
+    const liveEntries = keymapManager.getEntries();
+    const actionToSeqs = new Map<string, string[]>();
+    for (const e of liveEntries) {
+      const key = `${e.context}:${e.action}`;
+      if (!actionToSeqs.has(key)) actionToSeqs.set(key, []);
+      actionToSeqs.get(key)!.push(e.sequence);
+    }
+
     const table = document.createElement("div");
     table.className = "help-dialog__table";
     table.setAttribute("role", "list");
@@ -220,7 +237,26 @@ export class HelpDialog {
 
       const keysEl = document.createElement("span");
       keysEl.className = "help-dialog__key";
-      keysEl.textContent = b.keys;
+
+      // Check if there's a live binding for this action and whether it differs from the default
+      let displayKeys = b.keys;
+      let isCustomized = false;
+      if (b.action && b.context) {
+        const liveSeqs = actionToSeqs.get(`${b.context}:${b.action}`);
+        if (liveSeqs && liveSeqs.length > 0) {
+          const liveKey = liveSeqs.join(" / ");
+          if (liveKey !== b.keys) {
+            isCustomized = true;
+            displayKeys = liveKey;
+          }
+        }
+      }
+
+      keysEl.textContent = displayKeys;
+      if (isCustomized) {
+        keysEl.title = `Remapped (default: ${b.keys})`;
+        keysEl.style.color = "var(--accent-primary)";
+      }
       row.appendChild(keysEl);
 
       const modeEl = document.createElement("span");

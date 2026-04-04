@@ -56,7 +56,7 @@ import { showToast, showError, showSuccess } from "../ui/NotificationToast.js";
 import { showMainLayout } from "../ui/App.js";
 
 // UI component types for building display data
-import type { RoomEntry } from "../ui/RoomList.js";
+import type { RoomEntry, RoomSection } from "../ui/RoomList.js";
 import type { MessageData, ReplyPreviewData } from "../ui/Timeline.js";
 import type { MemberEntry } from "../ui/MemberList.js";
 import type { SpaceItem } from "../ui/SpaceStrip.js";
@@ -291,7 +291,7 @@ export async function logout(): Promise<void> {
  * Select a room: fetch timeline, update header, mark read.
  */
 export async function selectRoom(roomId: string): Promise<void> {
-  const { roomList, roomHeader, timeline, memberList, statusBar } = getComponents();
+  const { roomList, roomHeader, timeline, memberList, statusBar, typingIndicator } = getComponents();
   const prevRoom = AppState.get("currentRoomId");
 
   AppState.set("currentRoomId", roomId);
@@ -300,6 +300,11 @@ export async function selectRoom(roomId: string): Promise<void> {
   _prevBatch = null;
   _paginationLoading = false;
   roomList.setActiveRoom(roomId);
+
+  // Clear typing indicator when switching rooms
+  const typingTextEl = typingIndicator.querySelector(".typing-indicator__text");
+  if (typingTextEl) typingTextEl.textContent = "";
+  typingIndicator.classList.remove("typing-indicator--active");
 
   // Clear unread badge optimistically in local cache, then send read receipt.
   // Use updateRoomBadge (not setRooms) so the current space filter is preserved.
@@ -532,16 +537,51 @@ export async function selectSpace(spaceId: string): Promise<void> {
   try {
     const children = await getSpaceChildren(spaceId);
     // The backend already sorts by m.space.child order field (then alphabetically).
-    // Preserve that order by iterating children and finding matching cached rooms.
     const cache = AppState.get("roomListCache");
     const cacheById = new Map(cache.map((r) => [r.room_id, r]));
-    const ordered = children
-      .filter((c) => !c.is_space)
-      .flatMap((c) => {
+
+    // Check if there are any subspaces — if so, render as categories
+    const subspaces = children.filter((c) => c.is_space);
+    const topRooms = children.filter((c) => !c.is_space);
+
+    if (subspaces.length > 0) {
+      // Build sections: top-level rooms first (unlabeled), then each subspace as a category
+      const sections: RoomSection[] = [];
+
+      // Top-level rooms (not in any subspace) — unlabeled section
+      const topEntries = topRooms.flatMap((c) => {
         const r = cacheById.get(c.room_id);
         return r ? [roomInfoToEntry(r)] : [];
       });
-    roomList.setRooms(ordered);
+      if (topEntries.length > 0) {
+        sections.push({ label: "", rooms: topEntries });
+      }
+
+      // Each subspace becomes a labeled category
+      await Promise.all(subspaces.map(async (sub) => {
+        try {
+          const subChildren = await getSpaceChildren(sub.room_id);
+          const subRooms = subChildren
+            .filter((c) => !c.is_space)
+            .flatMap((c) => {
+              const r = cacheById.get(c.room_id);
+              return r ? [roomInfoToEntry(r)] : [];
+            });
+          sections.push({ label: sub.name ?? sub.room_id, rooms: subRooms });
+        } catch {
+          // Skip subspace on error
+        }
+      }));
+
+      roomList.setSections(sections);
+    } else {
+      const ordered = topRooms.flatMap((c) => {
+        const r = cacheById.get(c.room_id);
+        return r ? [roomInfoToEntry(r)] : [];
+      });
+      roomList.setRooms(ordered);
+    }
+
     AppState.focusPanel("roomlist");
   } catch (err) {
     showError(`Failed to load space: ${err instanceof Error ? err.message : String(err)}`);

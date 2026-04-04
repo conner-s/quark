@@ -99,7 +99,7 @@ let _unlisteners: UnlistenFn[] = [];
  * Returns a cleanup function.
  */
 export async function startSync(components: AppComponents): Promise<() => void> {
-  const { timeline, roomList, statusBar } = components;
+  const { timeline, roomList, statusBar, typingIndicator } = components;
 
   // ── quark://sync/message ──────────────────────────────────────────────────
   const unlistenMessage = await tauriListen<SyncNewMessagePayload>(
@@ -191,14 +191,19 @@ export async function startSync(components: AppComponents): Promise<() => void> 
       const currentRoom = AppState.get("currentRoomId");
       if (payload.room_id !== currentRoom) return;
 
+      const { typingIndicator } = components;
+      const textEl = typingIndicator.querySelector(".typing-indicator__text");
+
       if (payload.user_ids.length > 0) {
         const names = payload.user_ids.join(", ");
-        statusBar.setRoom(`${names} is typing…`);
+        const label = payload.user_ids.length === 1
+          ? `${names} is typing…`
+          : `${names} are typing…`;
+        if (textEl) textEl.textContent = label;
+        typingIndicator.classList.add("typing-indicator--active");
       } else {
-        // Restore room name
-        const cached = AppState.get("roomListCache");
-        const room = cached.find((r) => r.room_id === currentRoom);
-        statusBar.setRoom(room?.name ?? currentRoom ?? null);
+        if (textEl) textEl.textContent = "";
+        typingIndicator.classList.remove("typing-indicator--active");
       }
     }
   );

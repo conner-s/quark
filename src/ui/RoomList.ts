@@ -1,5 +1,7 @@
 // Room list panel
 
+import { attachResizeHandle } from "./ResizeHandle.js";
+
 export interface RoomEntry {
   id: string;
   name: string;
@@ -8,10 +10,17 @@ export interface RoomEntry {
   muted?: boolean;
 }
 
+export interface RoomSection {
+  /** Section label (empty string = no label) */
+  label: string;
+  rooms: RoomEntry[];
+}
+
 export class RoomList {
   private _el: HTMLElement;
   private _scrollEl: HTMLElement;
   private _rooms: RoomEntry[] = [];
+  private _sections: RoomSection[] | null = null;
   private _activeId: string | null = null;
   private _onSelect: ((id: string) => void) | null = null;
 
@@ -31,6 +40,9 @@ export class RoomList {
     this._el.appendChild(this._scrollEl);
 
     this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
+
+    // Drag-to-resize handle at the right edge
+    attachResizeHandle(this._el, "--room-list-width", "right", 120, 500);
   }
 
   getElement(): HTMLElement {
@@ -43,6 +55,17 @@ export class RoomList {
 
   setRooms(rooms: RoomEntry[]): void {
     this._rooms = rooms;
+    this._sections = null;
+    this._render();
+  }
+
+  /**
+   * Render the room list as labeled sections (e.g. subspace categories).
+   * Each section has a collapsible label and a list of rooms.
+   */
+  setSections(sections: RoomSection[]): void {
+    this._sections = sections;
+    this._rooms = sections.flatMap((s) => s.rooms);
     this._render();
   }
 
@@ -88,8 +111,23 @@ export class RoomList {
   private _render(): void {
     this._scrollEl.innerHTML = "";
 
-    for (const room of this._rooms) {
-      this._scrollEl.appendChild(this._createItem(room));
+    if (this._sections) {
+      for (const section of this._sections) {
+        if (section.label) {
+          const label = document.createElement("div");
+          label.className = "room-list__section-label";
+          label.textContent = section.label;
+          label.setAttribute("aria-hidden", "true");
+          this._scrollEl.appendChild(label);
+        }
+        for (const room of section.rooms) {
+          this._scrollEl.appendChild(this._createItem(room));
+        }
+      }
+    } else {
+      for (const room of this._rooms) {
+        this._scrollEl.appendChild(this._createItem(room));
+      }
     }
 
     this._updateActive();

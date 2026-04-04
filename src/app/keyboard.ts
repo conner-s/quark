@@ -356,12 +356,25 @@ export function setupKeyboard(components: AppComponents): void {
   const { input, commandBar, shortcodePreview, timeline,
           emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker,
           settingsDialog, roomInfoDialog, pinnedMessagesDialog, roomDirectoryDialog,
-          roomHeader } = components;
+          roomHeader, imageLightbox } = components;
 
   registerDefaultBindings();
 
   // Member count in the header toggles the member list sidebar
   roomHeader.setMemberCountClickHandler(() => toggleMemberList());
+
+  // Pinned messages button in the header opens the pinned messages dialog
+  roomHeader.setPinnedClickHandler(() => void openPinnedMessages());
+
+  // Clicking a pinned message jumps to it in the timeline
+  pinnedMessagesDialog.onJumpToMessage((eventId) => {
+    timeline.scrollToMessage(eventId);
+  });
+
+  // Image lightbox — wire timeline image clicks
+  timeline.onImageClick((src, alt) => {
+    imageLightbox.show(src, alt);
+  });
 
   // ── User keybindings ──────────────────────────────────────────────────────
   void loadQuarkrc().then(applyRcDirectives).catch(() => { /* no rc file is fine */ });

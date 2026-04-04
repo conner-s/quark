@@ -57,6 +57,11 @@ export class KeymapManager {
     this._leaderKey = key;
   }
 
+  /** Return a copy of all registered keymap entries. */
+  getEntries(): KeymapEntry[] {
+    return [...this._entries];
+  }
+
   // ── Registration helpers ────────────────────────────────────────────────
 
   map(context: KeyContext, sequence: string, action: string, noremap = false): void {

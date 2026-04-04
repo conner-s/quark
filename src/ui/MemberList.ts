@@ -1,5 +1,7 @@
 // Room member sidebar
 
+import { attachResizeHandle } from "./ResizeHandle.js";
+
 export type PresenceStatus = "online" | "unavailable" | "offline";
 export type PowerLevel = "admin" | "mod" | "member";
 
@@ -107,6 +109,8 @@ export class MemberList {
     this._scrollEl.setAttribute("role", "list");
     this._el.appendChild(this._scrollEl);
 
+    // Drag-to-resize handle at the left edge
+    attachResizeHandle(this._el, "--member-list-width", "left", 120, 400);
   }
 
   getElement(): HTMLElement {

@@ -30,6 +30,8 @@ export class RoomHeader {
   private _encEl: HTMLElement;
   private _avatarClickHandler: (() => void) | null = null;
   private _memberCountClickHandler: (() => void) | null = null;
+  private _pinnedClickHandler: (() => void) | null = null;
+  private _pinnedBtnEl: HTMLButtonElement;
 
   constructor() {
     this._el = document.createElement("div");
@@ -89,6 +91,15 @@ export class RoomHeader {
 
     this._el.appendChild(this._metaEl);
 
+    // Pinned messages button
+    this._pinnedBtnEl = document.createElement("button");
+    this._pinnedBtnEl.type = "button";
+    this._pinnedBtnEl.className = "room-header__pinned-btn";
+    this._pinnedBtnEl.title = "Pinned messages (:pinned)";
+    this._pinnedBtnEl.setAttribute("aria-label", "View pinned messages");
+    this._pinnedBtnEl.textContent = "📌 pinned";
+    this._el.appendChild(this._pinnedBtnEl);
+
     // Single delegated listener — fires for clicks on avatar or member count
     this._el.addEventListener("click", (e) => {
       if (this._avatarClickHandler &&
@@ -99,6 +110,11 @@ export class RoomHeader {
       if (this._memberCountClickHandler &&
           (e.target === this._memberCountEl || this._memberCountEl.contains(e.target as Node))) {
         this._memberCountClickHandler();
+        return;
+      }
+      if (this._pinnedClickHandler &&
+          (e.target === this._pinnedBtnEl || this._pinnedBtnEl.contains(e.target as Node))) {
+        this._pinnedClickHandler();
       }
     });
 
@@ -133,6 +149,13 @@ export class RoomHeader {
   setAvatarClickHandler(handler: (() => void) | null): void {
     this._avatarClickHandler = handler;
     this._updateAvatarCursor();
+  }
+
+  /**
+   * Register a callback to invoke when the pinned messages button is clicked.
+   */
+  setPinnedClickHandler(handler: (() => void) | null): void {
+    this._pinnedClickHandler = handler;
   }
 
   /**

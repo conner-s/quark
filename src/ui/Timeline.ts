@@ -538,6 +538,8 @@ export class Timeline {
   private _onScrollTopCallback: (() => void) | null = null;
   /** Fired when the user clicks inside the timeline area (used to update activePanel). */
   private _onFocusCallback: (() => void) | null = null;
+  /** Fired when an image message is clicked — passes (src, alt). */
+  private _onImageClickCallback: ((src: string, alt: string) => void) | null = null;
   private _scrollTopFired = false;
   /** Handle for the cleanup timeout of the scroll animation, so we can cancel it */
   private _scrollAnimCleanupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -593,7 +595,17 @@ export class Timeline {
     // the clicked message.
     this._el.addEventListener("click", (e) => {
       this._onFocusCallback?.();
-      const msgEl = (e.target as HTMLElement).closest<HTMLElement>("[data-message-id]");
+
+      // Image lightbox — intercept clicks on message images
+      const target = e.target as HTMLElement;
+      if (target instanceof HTMLImageElement && target.classList.contains("message__image")) {
+        e.preventDefault();
+        e.stopPropagation();
+        this._onImageClickCallback?.(target.src, target.alt);
+        return;
+      }
+
+      const msgEl = target.closest<HTMLElement>("[data-message-id]");
       if (msgEl) {
         const eventId = msgEl.dataset.messageId;
         const idx = this._messages.findIndex((m) => m.id === eventId);
@@ -617,6 +629,11 @@ export class Timeline {
    */
   onFocus(cb: () => void): void {
     this._onFocusCallback = cb;
+  }
+
+  /** Register a callback fired when the user clicks an image message. */
+  onImageClick(cb: (src: string, alt: string) => void): void {
+    this._onImageClickCallback = cb;
   }
 
   /** Show a "Loading…" indicator above the message list. */

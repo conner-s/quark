@@ -21,6 +21,10 @@ export class Input {
   private _modeEl: HTMLElement;
   private _fieldEl: HTMLInputElement;
   private _composeBoxEl: HTMLElement;
+  private _pastePreviewEl: HTMLElement;
+  private _pastePreviewImg: HTMLImageElement;
+  private _inputBarEl: HTMLElement;
+  private _pendingPasteBlob: Blob | null = null;
   private _currentMode: string = "Normal";
   private _onEmojiClick: (() => void) | null = null;
   private _onAttachClick: (() => void) | null = null;
@@ -29,9 +33,47 @@ export class Input {
 
   constructor() {
     this._el = document.createElement("div");
-    this._el.className = "input-bar";
+    this._el.className = "input-bar-wrap";
     this._el.setAttribute("role", "region");
     this._el.setAttribute("aria-label", "Message input");
+
+    // ── Paste image preview (hidden by default, shown above compose bar) ──
+    this._pastePreviewEl = document.createElement("div");
+    this._pastePreviewEl.className = "paste-preview";
+    this._pastePreviewEl.style.display = "none";
+    this._pastePreviewEl.setAttribute("role", "group");
+    this._pastePreviewEl.setAttribute("aria-label", "Image paste preview");
+
+    this._pastePreviewImg = document.createElement("img");
+    this._pastePreviewImg.className = "paste-preview__img";
+    this._pastePreviewImg.alt = "Pasted image";
+    this._pastePreviewEl.appendChild(this._pastePreviewImg);
+
+    const previewLabel = document.createElement("span");
+    previewLabel.className = "paste-preview__label";
+    previewLabel.textContent = "Send image?";
+    this._pastePreviewEl.appendChild(previewLabel);
+
+    const sendBtn = document.createElement("button");
+    sendBtn.type = "button";
+    sendBtn.className = "paste-preview__btn paste-preview__btn--send";
+    sendBtn.textContent = "Send";
+    sendBtn.addEventListener("click", () => this._confirmPaste());
+    this._pastePreviewEl.appendChild(sendBtn);
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "paste-preview__btn paste-preview__btn--cancel";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => this._cancelPaste());
+    this._pastePreviewEl.appendChild(cancelBtn);
+
+    this._el.appendChild(this._pastePreviewEl);
+
+    // ── The actual input bar ──────────────────────────────────────────────
+    const inputBar = document.createElement("div");
+    inputBar.className = "input-bar";
+    this._inputBarEl = inputBar;
 
     // Mode indicator (stays on far left, full height)
     this._modeEl = document.createElement("span");
@@ -39,7 +81,7 @@ export class Input {
     this._modeEl.setAttribute("aria-live", "polite");
     this._modeEl.setAttribute("aria-label", "Editor mode");
     this._modeEl.textContent = "NOR";
-    this._el.appendChild(this._modeEl);
+    inputBar.appendChild(this._modeEl);
 
     // Compose box — directly after mode indicator, no avatar
     this._composeBoxEl = document.createElement("div");
@@ -74,7 +116,7 @@ export class Input {
             const blob = item.getAsFile();
             if (blob) {
               e.preventDefault();
-              this._onImagePaste(blob);
+              this._showPastePreview(blob);
               return;
             }
           }
@@ -86,7 +128,7 @@ export class Input {
         for (const file of Array.from(files)) {
           if (file.type.startsWith("image/")) {
             e.preventDefault();
-            this._onImagePaste(file);
+            this._showPastePreview(file);
             return;
           }
         }
@@ -98,7 +140,7 @@ export class Input {
           for (const ci of clipItems) {
             for (const type of ci.types) {
               if (type.startsWith("image/")) {
-                void ci.getType(type).then((blob) => this._onImagePaste?.(blob));
+                void ci.getType(type).then((blob) => this._showPastePreview(blob));
                 return;
               }
             }
@@ -133,7 +175,8 @@ export class Input {
 
     this._composeBoxEl.appendChild(actionsEl);
 
-    this._el.appendChild(this._composeBoxEl);
+    inputBar.appendChild(this._composeBoxEl);
+    this._el.appendChild(inputBar);
   }
 
   /** Register a callback invoked when the field is clicked to enter insert mode. */
@@ -154,6 +197,11 @@ export class Input {
   /** Register a callback invoked when an image is pasted into the compose field. */
   onImagePaste(handler: (blob: Blob) => void): void {
     this._onImagePaste = handler;
+  }
+
+  /** Returns the inner input-bar div (used for scrollbar sync padding). */
+  getInputBarElement(): HTMLElement {
+    return this._inputBarEl;
   }
 
   /** Returns the compose box element (for position measurement and animation). */
@@ -241,6 +289,31 @@ export class Input {
 
   onInput(handler: (value: string) => void): void {
     this._fieldEl.addEventListener("input", () => handler(this._fieldEl.value));
+  }
+
+  // ── Private ─────────────────────────────────────────────────────────────────
+
+  private _showPastePreview(blob: Blob): void {
+    this._pendingPasteBlob = blob;
+    const url = URL.createObjectURL(blob);
+    this._pastePreviewImg.src = url;
+    // Clean up the old object URL when the image loads
+    this._pastePreviewImg.onload = () => URL.revokeObjectURL(url);
+    this._pastePreviewEl.style.display = "flex";
+  }
+
+  private _confirmPaste(): void {
+    const blob = this._pendingPasteBlob;
+    if (blob) {
+      this._onImagePaste?.(blob);
+    }
+    this._cancelPaste();
+  }
+
+  private _cancelPaste(): void {
+    this._pendingPasteBlob = null;
+    this._pastePreviewImg.src = "";
+    this._pastePreviewEl.style.display = "none";
   }
 
 }

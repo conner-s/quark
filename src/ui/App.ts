@@ -23,6 +23,7 @@ import { SettingsDialog } from "./SettingsDialog.js";
 import { RoomInfoDialog } from "./RoomInfoDialog.js";
 import { PinnedMessagesDialog } from "./PinnedMessagesDialog.js";
 import { RoomDirectoryDialog } from "./RoomDirectoryDialog.js";
+import { ImageLightbox } from "./ImageLightbox.js";
 
 // ── AppComponents ─────────────────────────────────────────────────────────────
 
@@ -58,9 +59,13 @@ export interface AppComponents {
   roomInfoDialog: RoomInfoDialog;
   pinnedMessagesDialog: PinnedMessagesDialog;
   roomDirectoryDialog: RoomDirectoryDialog;
+  imageLightbox: ImageLightbox;
 
   // Status
   statusBar: StatusBar;
+
+  // Typing indicator element (below compose box)
+  typingIndicator: HTMLElement;
 
   // Layout roots (for show/hide)
   mainLayout: HTMLElement;
@@ -98,6 +103,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   const roomInfoDialog = new RoomInfoDialog();
   const pinnedMessagesDialog = new PinnedMessagesDialog();
   const roomDirectoryDialog = new RoomDirectoryDialog();
+  const imageLightbox = new ImageLightbox();
 
   // ── Login screen ─────────────────────────────────────────────────────────
   container.appendChild(loginScreen.getElement());
@@ -126,6 +132,18 @@ export function mountApp(container: HTMLElement): AppComponents {
   contentArea.appendChild(commandBar.getElement());
   contentArea.appendChild(input.getElement());
 
+  // Typing indicator sits below the input bar
+  const typingIndicator = document.createElement("div");
+  typingIndicator.className = "typing-indicator";
+  const typingDots = document.createElement("span");
+  typingDots.className = "typing-indicator__dots";
+  typingDots.innerHTML = "<span></span><span></span><span></span>";
+  typingIndicator.appendChild(typingDots);
+  const typingText = document.createElement("span");
+  typingText.className = "typing-indicator__text";
+  typingIndicator.appendChild(typingText);
+  contentArea.appendChild(typingIndicator);
+
   mainLayout.appendChild(contentArea);
 
   // Column 4: Thread view sidebar (hidden by default)
@@ -142,10 +160,10 @@ export function mountApp(container: HTMLElement): AppComponents {
   // runtime so the input-bar's padding-right always matches — regardless of OS
   // scrollbar style, user preferences, or DPI.
   const timelineEl = timeline.getElement();
-  const inputEl = input.getElement();
+  const inputBarEl = input.getInputBarElement();
   const syncComposeRight = () => {
     const gutterPx = timelineEl.offsetWidth - timelineEl.clientWidth;
-    inputEl.style.paddingRight = `${12 + gutterPx}px`;
+    inputBarEl.style.paddingRight = `${12 + gutterPx}px`;
   };
   syncComposeRight();
   new ResizeObserver(syncComposeRight).observe(timelineEl);
@@ -165,6 +183,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   document.body.appendChild(roomInfoDialog.getElement());
   document.body.appendChild(pinnedMessagesDialog.getElement());
   document.body.appendChild(roomDirectoryDialog.getElement());
+  document.body.appendChild(imageLightbox.getElement());
 
   return {
     loginScreen,
@@ -190,6 +209,8 @@ export function mountApp(container: HTMLElement): AppComponents {
     roomInfoDialog,
     pinnedMessagesDialog,
     roomDirectoryDialog,
+    imageLightbox,
+    typingIndicator,
     mainLayout,
   };
 }
