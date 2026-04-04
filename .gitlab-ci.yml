@@ -89,6 +89,7 @@ test:
     - corepack enable
     - corepack prepare pnpm@latest --activate
     - pnpm install --frozen-lockfile
+    - pnpm build
   script:
     - pnpm test
     - cargo test --manifest-path src-tauri/Cargo.toml
