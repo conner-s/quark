@@ -111,6 +111,7 @@ build:linux:
   before_script:
     - apt-get update -qq
     - apt-get install -y -qq --no-install-recommends
+        ca-certificates
         curl
         file
         build-essential
