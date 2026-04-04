@@ -3049,7 +3049,7 @@ a:hover {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6),
               0 0 0 1px color-mix(in srgb, var(--accent-primary) 20%, transparent);
   z-index: 300;
-  width: 320px;
+  width: auto;
   animation: profile-dialog-in 80ms ease;
 }
 
@@ -3137,13 +3137,12 @@ a:hover {
   color: var(--roomlist-muted);
   font-size: calc(var(--font-size) - 2px);
   letter-spacing: 0.05em;
-  min-width: 80px;
+  min-width: 100px;
   flex-shrink: 0;
 }
 
 .profile-dialog__value {
   color: var(--fg);
-  word-break: break-all;
 }
 
 .profile-dialog__value--muted {
