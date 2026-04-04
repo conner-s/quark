@@ -60,6 +60,7 @@ pub fn run() {
             commands::search_room_directory,
             // Timeline
             commands::get_timeline,
+            commands::get_event_context,
             commands::send_message,
             commands::edit_message,
             commands::redact_message,

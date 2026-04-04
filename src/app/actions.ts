@@ -43,6 +43,7 @@ import {
   getEmojiPacks,
   getStickerPacks,
   sendSticker as ipcSendSticker,
+  getEventContext,
 } from "../ipc/index.js";
 
 import { applyTheme } from "../theme/loader.js";
@@ -86,6 +87,10 @@ export function consumeOwnSentEvent(eventId: string): boolean {
 
 /** Pagination token for loading older messages; null when at the start of history. */
 let _prevBatch: string | null = null;
+/** Pagination token for loading newer messages; only set when in context view. */
+let _nextBatch: string | null = null;
+/** True when the timeline is showing a context window around a jumped-to message, not the live end. */
+let _inContextView = false;
 /** Prevents concurrent "load more" fetches. */
 let _paginationLoading = false;
 
@@ -298,6 +303,8 @@ export async function selectRoom(roomId: string): Promise<void> {
   AppState.set("activePanel", "timeline");
   if (AppState.get("threadRootEventId")) closeThread();
   _prevBatch = null;
+  _nextBatch = null;
+  _inContextView = false;
   _paginationLoading = false;
   roomList.setActiveRoom(roomId);
 
@@ -485,24 +492,77 @@ async function loadMoreMessages(): Promise<void> {
 }
 
 /**
- * Jump to a specific message by event ID, paginating backwards through history
- * until the message is found or history is exhausted.
+ * Jump to a specific message by event ID.
+ * If already rendered, scrolls to it. Otherwise fetches surrounding context from
+ * the server and rebuilds the timeline centered on the target message.
  */
 export async function jumpToMessage(eventId: string): Promise<void> {
   const { timeline } = getComponents();
+  const roomId = AppState.get("currentRoomId");
+  if (!roomId) return;
 
   // Fast path — message is already rendered
   if (timeline.scrollToMessage(eventId)) return;
 
-  // Paginate backwards until found or history exhausted
-  showToast("Searching for message…", "info");
+  // Fetch context around the target event and rebuild the timeline
+  try {
+    const ctx = await getEventContext(roomId, eventId, 25);
 
-  while (_prevBatch && !_paginationLoading) {
-    await loadMoreMessages();
-    if (timeline.scrollToMessage(eventId)) return;
+    _prevBatch = ctx.prev_batch;
+    _nextBatch = ctx.next_batch;
+    _inContextView = ctx.next_batch !== null;
+
+    AppState.set("currentTimeline", ctx.events);
+    const threadRootCounts = _buildThreadRootCounts(ctx.events);
+    const mainEvents = ctx.events.filter((e) => !e.thread_root);
+    const messages = mainEvents.map((e) => timelineEventToMessage(e, ctx.events, threadRootCounts));
+    timeline.setMessages(messages);
+    timeline.setContextView(_inContextView);
+    timeline.scrollToMessage(eventId);
+
+    _downloadMessageImages(ctx.events, timeline);
+    _downloadInlineEmoji(timeline);
+    void _downloadReactionEmoji(ctx.events, timeline);
+  } catch (err) {
+    showError(`Failed to load message: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Jump back to the live end of the timeline (latest messages).
+ * Called when the user presses the "jump to latest" button or G in context view.
+ */
+export async function jumpToLatest(): Promise<void> {
+  const { timeline } = getComponents();
+  const roomId = AppState.get("currentRoomId");
+  if (!roomId) return;
+
+  if (!_inContextView) {
+    // Not in context view — just scroll to the bottom of what's loaded
+    timeline.selectLast();
+    return;
   }
 
-  showToast("Message not found in history", "info");
+  try {
+    const page = await getTimeline(roomId, { limit: 50 });
+    _prevBatch = page.prev_batch;
+    _nextBatch = null;
+    _inContextView = false;
+
+    AppState.set("currentTimeline", page.events);
+    const threadRootCounts = _buildThreadRootCounts(page.events);
+    const mainEvents = page.events.filter((e) => !e.thread_root);
+    const messages = mainEvents.map((e) => timelineEventToMessage(e, page.events, threadRootCounts));
+    timeline.setMessages(messages);
+    timeline.setContextView(false);
+    timeline.selectLast();
+
+    _downloadMessageImages(page.events, timeline);
+    _downloadInlineEmoji(timeline);
+    void _downloadReactionEmoji(page.events, timeline);
+  } catch (err) {
+    showError(`Failed to load latest messages: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /**

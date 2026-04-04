@@ -54,6 +54,20 @@ pub struct TimelinePage {
     pub prev_batch: Option<String>,
 }
 
+/// Events surrounding a specific event, returned by `get_event_context`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventContextPage {
+    /// All events in the context window, oldest first. Includes the target event.
+    pub events: Vec<TimelineEvent>,
+    /// The event ID that was requested.
+    pub target_event_id: String,
+    /// Pagination token for loading messages older than this context window.
+    pub prev_batch: Option<String>,
+    /// Pagination token for loading messages newer than this context window.
+    /// `None` means this context window reaches the live end of the timeline.
+    pub next_batch: Option<String>,
+}
+
 /// Fetch recent timeline events for a room.
 /// Also aggregates any reaction events found in the same batch and attaches
 /// them to their target messages so the frontend can display them immediately.
@@ -453,6 +467,65 @@ pub async fn send_image(
     let event_id = response.event_id.to_string();
     info!(event_id = %event_id, "Image sent");
     Ok(event_id)
+}
+
+/// Fetch events surrounding a specific event using the Matrix /context endpoint.
+/// Returns a window of messages centered on the target event, ordered oldest-first.
+pub async fn get_event_context(
+    client: &Client,
+    room_id: &str,
+    event_id: &str,
+    context_size: usize,
+) -> Result<EventContextPage, String> {
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let event_id = <&matrix_sdk::ruma::EventId>::try_from(event_id)
+        .map_err(|e| format!("Invalid event ID: {e}"))?;
+
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {} not found", room_id))?;
+
+    let size = UInt::try_from(context_size as u64).unwrap_or(UInt::from(25u32));
+    let response = room
+        .event_with_context(event_id, false, size, None)
+        .await
+        .map_err(|e| format!("Failed to fetch event context: {e}"))?;
+
+    let mut events: Vec<TimelineEvent> = Vec::new();
+
+    // events_before is reverse-chronological (newest first), so reverse it
+    for ev in response.events_before.into_iter().rev() {
+        if let Ok(deserialized) = ev.raw().deserialize() {
+            if let Some(te) = convert_sync_timeline_event(deserialized) {
+                events.push(te);
+            }
+        }
+    }
+
+    // Target event
+    if let Some(target) = response.event {
+        if let Ok(deserialized) = target.raw().deserialize() {
+            if let Some(te) = convert_sync_timeline_event(deserialized) {
+                events.push(te);
+            }
+        }
+    }
+
+    // events_after is already chronological
+    for ev in response.events_after {
+        if let Ok(deserialized) = ev.raw().deserialize() {
+            if let Some(te) = convert_sync_timeline_event(deserialized) {
+                events.push(te);
+            }
+        }
+    }
+
+    Ok(EventContextPage {
+        events,
+        target_event_id: event_id.to_string(),
+        prev_batch: response.prev_batch_token,
+        next_batch: response.next_batch_token,
+    })
 }
 
 /// Redact (delete) a message.

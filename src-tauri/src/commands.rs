@@ -223,6 +223,17 @@ pub async fn get_timeline(
 }
 
 #[tauri::command]
+pub async fn get_event_context(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    event_id: String,
+    context_size: Option<usize>,
+) -> Result<crate::matrix::timeline::EventContextPage, String> {
+    let client = get_client(&state)?;
+    crate::matrix::timeline::get_event_context(&client, &room_id, &event_id, context_size.unwrap_or(25)).await
+}
+
+#[tauri::command]
 pub async fn send_message(
     state: State<'_, MatrixState>,
     room_id: String,

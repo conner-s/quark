@@ -1001,6 +1001,29 @@ body {
   flex-shrink: 0;
 }
 
+.timeline__jump-to-latest {
+  position: sticky;
+  bottom: 12px;
+  align-self: flex-end;
+  background: var(--bg-secondary, var(--bg));
+  color: var(--accent);
+  border: var(--border-width) solid var(--accent);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: calc(var(--font-size) - 1px);
+  font-family: var(--font-family, monospace);
+  cursor: pointer;
+  z-index: 10;
+  opacity: 0.9;
+  /* slight offset from right edge to avoid scrollbar */
+  margin-right: 4px;
+}
+.timeline__jump-to-latest:hover {
+  opacity: 1;
+  background: var(--accent);
+  color: var(--bg);
+}
+
 /* ── Message group (consecutive messages from the same sender) ──────────── */
 /* CSS-bordered box with a fieldset-legend–style inline sender label.       */
 

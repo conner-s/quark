@@ -42,6 +42,7 @@ export { getRooms, joinRoom, leaveRoom, createRoom, getRoomMembers, markRoomRead
 // ─── Timeline ─────────────────────────────────────────────────────────────────
 export {
   getTimeline,
+  getEventContext,
   sendMessage,
   editMessage,
   redactMessage,

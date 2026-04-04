@@ -68,6 +68,16 @@ export interface TimelinePage {
   prev_batch: string | null;
 }
 
+/** Events surrounding a specific event — matches matrix::timeline::EventContextPage */
+export interface EventContextPage {
+  events: TimelineEvent[];
+  target_event_id: string;
+  /** Token for paginating to older messages from this context window. */
+  prev_batch: string | null;
+  /** Token for paginating to newer messages. Null when at the live end. */
+  next_batch: string | null;
+}
+
 /** Serializable timeline event — matches matrix::timeline::TimelineEvent */
 export interface TimelineEvent {
   event_id: string;

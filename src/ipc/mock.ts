@@ -138,6 +138,18 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return MOCK_ROOMS;
     case "get_timeline":
       return { events: MOCK_TIMELINE, prev_batch: null };
+    case "get_event_context": {
+      const targetId = args?.eventId as string ?? "";
+      const idx = MOCK_TIMELINE.findIndex((e) => e.event_id === targetId);
+      const start = Math.max(0, idx - 10);
+      const end = Math.min(MOCK_TIMELINE.length, idx + 11);
+      return {
+        events: MOCK_TIMELINE.slice(start, end),
+        target_event_id: targetId,
+        prev_batch: start > 0 ? "mock-prev" : null,
+        next_batch: end < MOCK_TIMELINE.length ? "mock-next" : null,
+      };
+    }
     case "get_room_members":
       return MOCK_MEMBERS;
     case "send_message": {

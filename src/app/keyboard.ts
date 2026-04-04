@@ -27,6 +27,7 @@ import {
   setupStatusBar,
   editStatus,
   jumpToMessage,
+  jumpToLatest,
 } from "./actions.js";
 import { AppState } from "./state.js";
 import { loadQuarkrc } from "../ipc/config.js";
@@ -116,7 +117,11 @@ function dispatchAction(action: string, components: AppComponents): void {
       break;
 
     case "jump-bottom":
-      AppState.jumpBottom();
+      if (AppState.get("activePanel") === "timeline") {
+        void jumpToLatest();
+      } else {
+        AppState.jumpBottom();
+      }
       break;
 
     // ── Message actions — operate on the selected message ───────────────
@@ -379,6 +384,9 @@ export function setupKeyboard(components: AppComponents): void {
 
   // Reply preview jumps to the original when message is not loaded
   timeline.onJumpToMessage((eventId) => void jumpToMessage(eventId));
+
+  // "Jump to latest" button
+  timeline.onJumpToLatest(() => void jumpToLatest());
 
   // Image lightbox — wire timeline image clicks
   timeline.onImageClick((src, alt) => {

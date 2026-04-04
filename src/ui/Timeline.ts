@@ -543,6 +543,12 @@ export class Timeline {
   private _onImageClickCallback: ((src: string, alt: string) => void) | null = null;
   /** Fired when a jump-to-message is requested but the message is not in the current view. */
   private _onJumpToMessageCallback: ((eventId: string) => void) | null = null;
+  /** Fired when the "jump to latest" button is clicked. */
+  private _onJumpToLatestCallback: (() => void) | null = null;
+  /** The "jump to latest" button element. */
+  private _jumpToLatestBtn!: HTMLButtonElement;
+  /** True when the timeline is showing a context window, not the live end. */
+  private _inContextView = false;
   private _scrollTopFired = false;
   /** Handle for the cleanup timeout of the scroll animation, so we can cancel it */
   private _scrollAnimCleanupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -562,11 +568,21 @@ export class Timeline {
     this._listEl.setAttribute("aria-label", "Message timeline");
     this._el.appendChild(this._listEl);
 
+    // "Jump to latest" button — shown when scrolled up or in context view
+    this._jumpToLatestBtn = document.createElement("button");
+    this._jumpToLatestBtn.type = "button";
+    this._jumpToLatestBtn.className = "timeline__jump-to-latest";
+    this._jumpToLatestBtn.textContent = "↓ jump to latest";
+    this._jumpToLatestBtn.style.display = "none";
+    this._jumpToLatestBtn.addEventListener("click", () => this._onJumpToLatestCallback?.());
+    this._el.appendChild(this._jumpToLatestBtn);
+
     // Track whether the user has scrolled away from the bottom,
     // and fire the scroll-to-top callback when near the top.
     this._el.addEventListener("scroll", () => {
       const { scrollTop, scrollHeight, clientHeight } = this._el;
       this._scrolledUp = scrollHeight - scrollTop - clientHeight > 40;
+      this._updateJumpToLatestVisibility();
 
       if (scrollTop < 80 && !this._scrollTopFired) {
         this._scrollTopFired = true;
@@ -643,6 +659,20 @@ export class Timeline {
   /** Register a callback fired when a jump-to-message is requested but the message isn't loaded. */
   onJumpToMessage(cb: (eventId: string) => void): void {
     this._onJumpToMessageCallback = cb;
+  }
+
+  /** Register a callback fired when the "jump to latest" button is clicked. */
+  onJumpToLatest(cb: () => void): void {
+    this._onJumpToLatestCallback = cb;
+  }
+
+  /**
+   * Set whether the timeline is in "context view" (showing a window around a
+   * jumped-to message rather than the live end). Shows or hides the jump-to-latest button.
+   */
+  setContextView(inContext: boolean): void {
+    this._inContextView = inContext;
+    this._updateJumpToLatestVisibility();
   }
 
   /** Show a "Loading…" indicator above the message list. */
@@ -751,6 +781,7 @@ export class Timeline {
         setTimeout(() => this._scrollToBottom(), 150);
       });
     }
+    this._updateJumpToLatestVisibility();
   }
 
   /** Append a single message, scrolling to bottom if not scrolled up */
@@ -1467,6 +1498,11 @@ export class Timeline {
   }
 
   // ── Private ──────────────────────────────────────────────────────────────
+
+  private _updateJumpToLatestVisibility(): void {
+    const visible = this._inContextView || this._scrolledUp;
+    this._jumpToLatestBtn.style.display = visible ? "block" : "none";
+  }
 
   private _setSelected(index: number): void {
     // Remove previous highlight
