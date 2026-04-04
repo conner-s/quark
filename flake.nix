@@ -39,7 +39,33 @@
           xorg.libxcb
           libnotify
           dbus
+          fuse
         ];
+
+        # Minimal appimagetool replacement using nixpkgs mksquashfs.
+        # The bundled appimagetool inside linuxdeploy-plugin-appimage.AppImage uses
+        # a hardcoded ELF interpreter path that doesn't exist on NixOS, so we provide
+        # our own. linuxdeploy-plugin-appimage respects the APPIMAGETOOL env var.
+        fakeAppimagetool = pkgs.writeShellScript "appimagetool" ''
+          set -e
+          RUNTIME="$HOME/.cache/tauri/AppRun-x86_64"
+          APPDIR="" OUTPUT="" COMP="gzip"
+          while [[ $# -gt 0 ]]; do
+            case "$1" in
+              -n|--no-appstream) shift ;;
+              --comp) COMP="$2"; shift 2 ;;
+              -*) shift ;;
+              *) [[ -z "$APPDIR" ]] && APPDIR="$1" || OUTPUT="$1"; shift ;;
+            esac
+          done
+          [[ -z "$OUTPUT" ]] && OUTPUT="$(basename "$APPDIR" .AppDir)-x86_64.AppImage"
+          TMP="$(mktemp).squashfs"
+          mksquashfs "$APPDIR" "$TMP" -root-owned -noappend -comp "$COMP" -no-xattrs -noI -noX 2>/dev/null \
+            || mksquashfs "$APPDIR" "$TMP" -root-owned -noappend -comp "$COMP"
+          cat "$RUNTIME" "$TMP" > "$OUTPUT"
+          chmod +x "$OUTPUT"
+          rm -f "$TMP"
+        '';
 
         nativeBuildInputs = with pkgs; [
           rustToolchain
@@ -47,6 +73,11 @@
           nodePackages.pnpm
           cargo-tauri
           pkg-config
+          squashfsTools  # provides mksquashfs for fakeAppimagetool
+
+          # Flatpak packaging
+          flatpak-builder
+          appstream  # provides appstreamcli for metainfo validation
         ];
 
         buildInputs = tauriDeps;
@@ -61,6 +92,11 @@
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH"
             export GIO_MODULE_DIR="${pkgs.glib-networking}/lib/gio/modules"
             export WEBKIT_DISABLE_COMPOSITING_MODE=1
+            # Override the bundled appimagetool (NixOS-incompatible ELF interpreter)
+            # with our mksquashfs-based wrapper. Also tell linuxdeploy itself to
+            # extract-and-run rather than mount via FUSE.
+            export APPIMAGETOOL="${fakeAppimagetool}"
+            export APPIMAGE_EXTRACT_AND_RUN=1
           '';
         };
       }
