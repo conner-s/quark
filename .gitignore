@@ -19,3 +19,13 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# Flatpak
+flatpak-build/
+flatpak-repo/
+.flatpak-builder/
+*.flatpak
+repo/
+
+# direnv
+.direnv/
