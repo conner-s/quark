@@ -671,6 +671,7 @@ body {
 .member-list {
   grid-column: 4;
   position: relative;
+  border-left: var(--border-width) solid var(--border-color);
 }
 
 .quark-layout--thread-open .member-list {
