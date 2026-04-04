@@ -555,6 +555,15 @@ export class Timeline {
       }
     });
 
+    // Scroll to bottom when images finish loading so the initial room load doesn't
+    // strand the user in the middle of history. Use capture phase because `load`
+    // doesn't bubble.
+    this._el.addEventListener("load", (e) => {
+      if (e.target instanceof HTMLImageElement && !this._scrolledUp) {
+        this._scrollToBottom();
+      }
+    }, true);
+
     // Reply preview "jump to original" — fired by reply-preview clicks
     this._listEl.addEventListener("quark:jump-to-message", (e: Event) => {
       const { eventId } = (e as CustomEvent<{ eventId: string }>).detail;

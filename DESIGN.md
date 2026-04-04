@@ -739,10 +739,10 @@ quark/
 - [x] Redacted messages don't disappear until reloading the chat — redactMessage now calls timeline.removeMessage() after successful IPC; removes from DOM and _messages array, collapses single-message groups
 - [x] Selecting a room in some spaces returns the room list to the home view — selectRoom was calling roomList.setRooms() with all cached rooms when clearing unread badge; now uses updateRoomBadge() to update only the specific room item in place
 - [x] Newly sent messages don't have a profile picture — optimistic message in sendMessage was missing senderAvatarUrl; now resolved from _memberAvatarMxc/_avatarDataUrl cache using ownUserId
-- [ ] Room list still jumps from selected space to home with all rooms listed sometimes
-- [ ] Timeline jumps when loading images, placing user in the middle of message history upon newly loading a room
-- [ ] Image paste does not work on Linux
-- [ ] Emojis in emoji picker are sometimes too large, end up scrolling sideways.
-- [ ] Emoji categories in react emoji picker not implemented properly
+- [x] Room list still jumps from selected space to home with all rooms listed sometimes — sync message handler was calling setRooms() with all cached rooms; now uses updateRoomBadge() to update only the affected room badge in place
+- [x] Timeline jumps when loading images, placing user in the middle of message history upon newly loading a room — added capture-phase `load` listener on the scroll container that scrolls to bottom when any image loads while not scrolled up
+- [x] Image paste does not work on Linux — added fallback to clipboardData.files (used by some Linux clipboard managers) and async navigator.clipboard.read() for Wayland/WebKit2GTK where clipboardData is not populated for text inputs
+- [x] Emojis in emoji picker are sometimes too large, end up scrolling sideways — added overflow-x: hidden to grid and overflow: hidden + min-width: 0 to cells
+- [x] Emoji categories in react emoji picker not implemented properly — _focusGrid and all navigation keys (h/l/j/k/Tab) now skip hidden buttons so keyboard focus lands on a visible emoji when a category filter is active
 
 

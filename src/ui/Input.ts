@@ -60,20 +60,50 @@ export class Input {
     // Clicking the field while not in insert mode should switch to insert mode
     this._fieldEl.addEventListener("click", () => this._onFocusEnterInsert?.());
 
-    // Image paste handler
+    // Image paste handler. clipboardData.items is standard; .files is an
+    // alternative that some Linux clipboard managers populate instead.
+    // On Linux/Wayland, WebKit2GTK text inputs may not expose image data
+    // in clipboardData at all, so we also fall back to navigator.clipboard.read().
     this._fieldEl.addEventListener("paste", (e) => {
       if (!this._onImagePaste) return;
+      // Standard path: items
       const items = e.clipboardData?.items;
-      if (!items) return;
-      for (const item of Array.from(items)) {
-        if (item.type.startsWith("image/")) {
-          const blob = item.getAsFile();
-          if (blob) {
+      if (items) {
+        for (const item of Array.from(items)) {
+          if (item.type.startsWith("image/")) {
+            const blob = item.getAsFile();
+            if (blob) {
+              e.preventDefault();
+              this._onImagePaste(blob);
+              return;
+            }
+          }
+        }
+      }
+      // Fallback: files list (used by some Linux clipboard managers)
+      const files = e.clipboardData?.files;
+      if (files && files.length > 0) {
+        for (const file of Array.from(files)) {
+          if (file.type.startsWith("image/")) {
             e.preventDefault();
-            this._onImagePaste(blob);
+            this._onImagePaste(file);
             return;
           }
         }
+      }
+      // Async fallback: Clipboard API (Linux/Wayland may not populate clipboardData
+      // for images pasted into a text input)
+      if (typeof navigator !== "undefined" && navigator.clipboard?.read) {
+        void navigator.clipboard.read().then((clipItems) => {
+          for (const ci of clipItems) {
+            for (const type of ci.types) {
+              if (type.startsWith("image/")) {
+                void ci.getType(type).then((blob) => this._onImagePaste?.(blob));
+                return;
+              }
+            }
+          }
+        }).catch(() => { /* Clipboard API unavailable or permission denied */ });
       }
     });
 

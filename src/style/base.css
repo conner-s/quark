@@ -1780,6 +1780,7 @@ span.reaction__emoji {
   gap: 2px;
   padding: 6px;
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
   min-height: 0;
 }
@@ -1795,7 +1796,9 @@ span.reaction__emoji {
   justify-content: center;
   font-size: 18px;
   outline: none;
+  overflow: hidden;
   padding: 0;
+  min-width: 0;
 }
 
 .emoji-picker__cell:hover,

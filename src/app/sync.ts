@@ -155,15 +155,11 @@ export async function startSync(components: AppComponents): Promise<() => void> 
           return r;
         });
         AppState.set("roomListCache", updated);
-        roomList.setRooms(
-          updated.map((r) => ({
-            id: r.room_id,
-            name: r.name ?? r.room_id,
-            unreadCount: r.unread_count,
-            mentionCount: r.notification_count,
-            muted: false,
-          }))
-        );
+        // Use updateRoomBadge instead of setRooms to preserve the current space filter.
+        const updatedRoom = updated.find((r) => r.room_id === payload.room_id);
+        if (updatedRoom) {
+          roomList.updateRoomBadge(payload.room_id, updatedRoom.unread_count, updatedRoom.notification_count);
+        }
       }
 
       // Trigger in-app toast when window is focused (OS notification is handled

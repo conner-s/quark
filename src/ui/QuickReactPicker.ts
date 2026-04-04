@@ -358,10 +358,22 @@ export class QuickReactPicker {
     });
   }
 
+  /** Return the index of the next visible button at or after `from` in direction `dir`. */
+  private _nextVisible(from: number, dir: 1 | -1 = 1): number {
+    let i = from;
+    while (i >= 0 && i < this._buttons.length) {
+      if (this._buttons[i].style.display !== "none") return i;
+      i += dir;
+    }
+    return -1;
+  }
+
   private _focusGrid(index: number): void {
-    this._focusedBtnIndex = index;
+    const visible = this._nextVisible(index);
+    if (visible < 0) return;
+    this._focusedBtnIndex = visible;
     this._updateBtnFocus();
-    this._buttons[index]?.focus();
+    this._buttons[visible]?.focus();
   }
 
   private _returnToInput(): void {
@@ -388,8 +400,9 @@ export class QuickReactPicker {
     }
     if (e.key === "Tab") {
       e.preventDefault();
-      // Tab (or Shift-Tab — same result, grid is right there) shows quick emoji
-      this._focusGrid(0);
+      // Tab moves to the first visible button in the grid
+      const first = this._nextVisible(0, 1);
+      if (first >= 0) this._focusGrid(first);
       return;
     }
   }
@@ -408,9 +421,9 @@ export class QuickReactPicker {
     }
     if (e.key === "Tab") {
       e.preventDefault();
-      // Wrap through grid; at end, return to input
-      const next = this._focusedBtnIndex + 1;
-      if (next >= this._buttons.length) {
+      // Wrap through visible buttons; at end, return to input
+      const next = this._nextVisible(this._focusedBtnIndex + 1, 1);
+      if (next < 0) {
         this._returnToInput();
       } else {
         this._focusGrid(next);
@@ -419,29 +432,27 @@ export class QuickReactPicker {
     }
     if (e.key === "h" || e.key === "ArrowLeft") {
       e.preventDefault();
-      if (this._focusedBtnIndex > 0) {
-        this._focusGrid(this._focusedBtnIndex - 1);
-      }
+      const prev = this._nextVisible(this._focusedBtnIndex - 1, -1);
+      if (prev >= 0) this._focusGrid(prev);
       return;
     }
     if (e.key === "l" || e.key === "ArrowRight") {
       e.preventDefault();
-      if (this._focusedBtnIndex < this._buttons.length - 1) {
-        this._focusGrid(this._focusedBtnIndex + 1);
-      }
+      const next = this._nextVisible(this._focusedBtnIndex + 1, 1);
+      if (next >= 0) this._focusGrid(next);
       return;
     }
     if (e.key === "j" || e.key === "ArrowDown") {
       e.preventDefault();
-      const next = Math.min(this._buttons.length - 1, this._focusedBtnIndex + 6);
-      this._focusGrid(next);
+      const next = this._nextVisible(this._focusedBtnIndex + 6, 1);
+      if (next >= 0) this._focusGrid(next);
       return;
     }
     if (e.key === "k" || e.key === "ArrowUp") {
       e.preventDefault();
-      const prev = Math.max(0, this._focusedBtnIndex - 6);
-      if (prev === this._focusedBtnIndex) {
-        // Already on top row — go back to input
+      const prev = this._nextVisible(this._focusedBtnIndex - 6, -1);
+      if (prev < 0 || prev === this._focusedBtnIndex) {
+        // Already on top row (or no previous visible) — go back to input
         this._returnToInput();
       } else {
         this._focusGrid(prev);
