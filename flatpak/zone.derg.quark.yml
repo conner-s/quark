@@ -43,8 +43,8 @@ modules:
       # Install JS dependencies and build the frontend (outputs to dist/)
       - pnpm install --frozen-lockfile
       - pnpm build
-      # Build the Tauri binary; --bundles none skips .deb/.rpm packaging
-      - cargo tauri build --bundles none
+      # Build the Tauri binary directly; frontend is already in dist/ from pnpm build
+      - cargo build --release --manifest-path src-tauri/Cargo.toml
       # Install binary
       - install -Dm755 src-tauri/target/release/quark /app/bin/quark
       # Install icons
