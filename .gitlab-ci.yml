@@ -152,6 +152,67 @@ build:linux:
       when: manual
       allow_failure: true
 
+# ─── build: Flatpak ─────────────────────────────────────────────────────────
+#
+# Produces: quark.flatpak  (single-file bundle installable via flatpak install)
+#
+# Runner requirements:
+#   - Docker executor with privileged = true  (bubblewrap needs user namespaces)
+#   - Internet access to download Flatpak runtimes on first run
+#
+# Runtimes are cached in /var/lib/flatpak so subsequent runs skip the ~1 GB
+# download. Invalidate by changing the cache key prefix below.
+
+build:flatpak:
+  stage: build
+  image: ubuntu:24.04
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+  cache:
+    key:
+      prefix: flatpak-runtimes-gnome47
+      files:
+        - flatpak/zone.derg.quark.yml
+    paths:
+      - .flatpak-runtime-cache/
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends
+        flatpak flatpak-builder
+        ca-certificates curl
+        nodejs npm
+    - corepack enable
+    - corepack prepare pnpm@latest --activate
+    # Restore cached runtimes into the system Flatpak store
+    - |
+      if [ -d .flatpak-runtime-cache ]; then
+        cp -a .flatpak-runtime-cache/. /var/lib/flatpak/ 2>/dev/null || true
+      fi
+    - flatpak remote-add --system --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    - flatpak install --system -y flathub
+        org.gnome.Platform//47
+        org.gnome.Sdk//47
+        org.freedesktop.Sdk.Extension.rust-stable//24.08
+        org.freedesktop.Sdk.Extension.node22//24.08
+    # Persist runtimes for next run
+    - cp -a /var/lib/flatpak/. .flatpak-runtime-cache/
+    - pnpm install --frozen-lockfile
+  script:
+    # --disable-sandbox: bubblewrap inside Docker requires this even with privileged runner
+    - flatpak-builder --force-clean --disable-sandbox --repo=flatpak-repo flatpak-build flatpak/zone.derg.quark.yml
+    - flatpak build-bundle flatpak-repo quark.flatpak zone.derg.quark
+  artifacts:
+    name: "quark-flatpak-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - quark.flatpak
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+
 # ─── build: Windows ─────────────────────────────────────────────────────────
 #
 # Requires a Windows shell-executor runner tagged "windows".
@@ -239,6 +300,8 @@ release:
       artifacts: true
     - job: build:macos
       artifacts: true
+    - job: build:flatpak
+      artifacts: true
   script:
     - echo "Creating release for $CI_COMMIT_TAG"
   release:
@@ -257,5 +320,7 @@ release:
           url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/src-tauri/target/release/bundle/nsis/?job=build:windows"
         - name: "macOS (.dmg)"
           url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/src-tauri/target/release/bundle/dmg/?job=build:macos"
+        - name: "Linux (Flatpak)"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/quark.flatpak?job=build:flatpak"
   rules:
     - if: $CI_COMMIT_TAG
