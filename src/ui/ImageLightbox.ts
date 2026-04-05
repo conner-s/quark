@@ -86,7 +86,11 @@ export class ImageLightbox {
         this._imgEl.style.transition = "";
         _wheelDebounce = null;
       }, 200);
-      const delta = e.deltaY < 0 ? 0.15 : -0.15;
+      // Proportional to deltaY so trackpad gestures feel natural. A sensitivity
+      // of 0.005 gives ~0.5 per mouse-wheel notch (deltaY ≈ 100) and a gentle
+      // ~0.05 per light trackpad tick (deltaY ≈ 10). Cap at 0.3 per event so a
+      // fast flick doesn't jump the scale in one shot.
+      const delta = -Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY) * 0.005, 0.3);
       this._setScale(Math.min(5, Math.max(0.25, this._scale + delta)));
     }, { passive: false });
 
