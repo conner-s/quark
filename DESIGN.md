@@ -681,6 +681,7 @@ quark/
 - [x] Show reconfigured binds in help window — `HelpDialog` queries `keymapManager.getEntries()` and highlights any user-remapped keys in accent color with default shown in tooltip
 - [x] Remove outline from image, keep it left aligned — removed border from `.message__image`; images were already `display: block` (left-aligned)
 - [x] Image lightbox with ability to zoom and download — `ImageLightbox` overlay with zoom +/-, 1:1 reset, and download button; opens on click of any `.message__image`
+- [ ] Panning in image lightbox
 - [x] Add quick navigation palette, similar to discord's ctrl+k — `QuickNavPalette` overlay opened with Ctrl+K; filters `roomListCache` in real-time; ↑/↓ or j/k to navigate, Enter to jump, Esc to close
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
