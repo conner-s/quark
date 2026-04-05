@@ -49,6 +49,10 @@ export class ImageLightbox {
       this._panStartX = this._panX;
       this._panStartY = this._panY;
       imgWrap.style.cursor = "grabbing";
+      // Suppress the CSS transition while dragging so the image tracks the
+      // cursor exactly. Transitions restart on every transform change, which
+      // at mousemove frequency (~60fps) causes a visible stutter/vibration.
+      this._imgEl.style.transition = "none";
 
       const onMove = (me: MouseEvent) => {
         const dx = me.clientX - this._dragStartX;
@@ -59,6 +63,7 @@ export class ImageLightbox {
         this._applyTransform();
       };
       const onUp = () => {
+        this._imgEl.style.transition = "";
         imgWrap.style.cursor = this._scale > 1 ? "grab" : "";
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
