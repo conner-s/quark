@@ -757,5 +757,8 @@ quark/
 - [x] Links sometimes open inside the app, navigating away from the chat UI — HTML body anchor tags now have href removed and a click handler added that opens via plugin:shell|open instead of letting the WebView follow the link
 - [ ] Multiple/global sticker packs don't load in the sticker picker
 - [ ] User statuses don't always load
+- [ ] toml file seems to be ignored
+- [ ] Custom emotes in reacts just send text.
+- [ ] Sometimes can't load additional messages in timeline
 
 
