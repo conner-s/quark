@@ -183,9 +183,14 @@ pub async fn mark_room_read(client: &Client, room_id: &str) -> Result<(), String
 
     if let Some(event) = messages.chunk.first() {
         let event_id = event.kind.event_id().ok_or("Latest event has no ID")?;
+        // Send public read receipt (visible to other users)
         room.send_single_receipt(ReceiptType::Read, ReceiptThread::Unthreaded, event_id.to_owned())
             .await
             .map_err(|e| format!("Failed to send read receipt: {e}"))?;
+        // Also send private read receipt (not shared with other users, for privacy)
+        room.send_single_receipt(ReceiptType::ReadPrivate, ReceiptThread::Unthreaded, event_id.to_owned())
+            .await
+            .map_err(|e| format!("Failed to send private read receipt: {e}"))?;
     }
 
     Ok(())
