@@ -764,4 +764,5 @@ quark/
 - [ ] Custom emotes don't render from shortcode or in reacts
 - [ ] No settings button
 - [ ] Icon roundedness globally configurable
+- [ ] Select bar doesn't follow theme
 
