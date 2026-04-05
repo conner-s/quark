@@ -3376,6 +3376,27 @@ a:hover {
   opacity: 0.8;
 }
 
+/* ── Unread separator ────────────────────────────────────────────────────── */
+
+.unread-separator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 16px;
+  color: var(--accent-primary, #00ff41);
+  font-size: calc(var(--font-size, 14px) - 2px);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.unread-separator::before,
+.unread-separator::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--accent-primary, #00ff41);
+  opacity: 0.5;
+}
+
 /* ── Time separators ─────────────────────────────────────────────────────── */
 
 .time-separator {

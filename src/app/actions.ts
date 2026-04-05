@@ -378,6 +378,10 @@ export async function selectRoom(roomId: string): Promise<void> {
     const threadRootCounts = _buildThreadRootCounts(events);
     const mainEvents = events.filter((e) => !e.thread_root);
     const messages = mainEvents.map((e) => timelineEventToMessage(e, events, threadRootCounts));
+    // Pass unread count so the timeline can insert a "── new messages ──" separator
+    if (roomInfo && roomInfo.unread_count > 0) {
+      timeline.setUnreadCount(roomInfo.unread_count);
+    }
     timeline.setMessages(messages);
 
     // Register scroll-to-top for pagination (re-registers on each room change)

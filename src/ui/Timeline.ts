@@ -552,6 +552,8 @@ export class Timeline {
   private _scrollTopFired = false;
   /** Handle for the cleanup timeout of the scroll animation, so we can cancel it */
   private _scrollAnimCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Number of unread messages at the tail of the current message list. */
+  private _unreadCount = 0;
 
   constructor() {
     this._el = document.createElement("div");
@@ -675,6 +677,24 @@ export class Timeline {
     this._updateJumpToLatestVisibility();
   }
 
+  /**
+   * Set the number of unread messages at the tail of the next `setMessages()` call.
+   * A `── NEW ──` separator will be inserted before those messages, and the
+   * timeline will scroll to the separator instead of the bottom.
+   * Reset to 0 after the separator is consumed.
+   */
+  setUnreadCount(count: number): void {
+    this._unreadCount = count;
+  }
+
+  /** Scroll the timeline to the unread separator if one exists. */
+  scrollToUnreadSeparator(): void {
+    const sep = this._listEl.querySelector<HTMLElement>(".unread-separator");
+    if (sep) {
+      sep.scrollIntoView({ block: "center" });
+    }
+  }
+
   /** Show a "Loading…" indicator above the message list. */
   showLoadingMore(): void {
     this._loadingEl.style.display = "block";
@@ -770,6 +790,19 @@ export class Timeline {
       this._el.scrollTop = savedScrollTop + heightDelta;
       // Keep _scrolledUp true so incoming messages don't auto-scroll the user
       this._scrolledUp = true;
+    } else if (this._unreadCount > 0 && !preserveScroll) {
+      // Insert unread separator and scroll to it so the user sees new messages
+      this._insertUnreadSeparator();
+      this._unreadCount = 0;
+      this._scrolledUp = false;
+      this._scrollTopFired = false;
+      // Scroll to bottom first so layout is stable, then scroll to the separator
+      this._scrollToBottom();
+      requestAnimationFrame(() => {
+        this.scrollToUnreadSeparator();
+        this._scrolledUp = true;
+        this._updateJumpToLatestVisibility();
+      });
     } else {
       this._scrolledUp = false;
       this._scrollTopFired = false;
@@ -1561,6 +1594,39 @@ export class Timeline {
     if (index < 0 || index >= this._messages.length) return null;
     const id = this._messages[index].id;
     return this._listEl.querySelector<HTMLElement>(`[data-message-id="${id}"]`);
+  }
+
+  /**
+   * Insert a `── NEW ──` separator in the DOM before the first unread message.
+   * Relies on `_unreadCount` and the rendered `[data-message-id]` elements.
+   */
+  private _insertUnreadSeparator(): void {
+    if (this._unreadCount <= 0 || this._messages.length === 0) return;
+    // Remove any stale separator from a previous load
+    this._listEl.querySelector(".unread-separator")?.remove();
+
+    const firstUnreadIndex = Math.max(0, this._messages.length - this._unreadCount);
+    const firstUnreadMsg = this._messages[firstUnreadIndex];
+    if (!firstUnreadMsg) return;
+
+    const msgEl = this._listEl.querySelector<HTMLElement>(
+      `[data-message-id="${firstUnreadMsg.id}"]`
+    );
+    if (!msgEl) return;
+
+    // The message element lives inside a .message-group or .message--ungrouped.
+    // Insert the separator before whichever top-level node contains the message.
+    let insertBefore: HTMLElement = msgEl;
+    while (insertBefore.parentElement && insertBefore.parentElement !== this._listEl) {
+      insertBefore = insertBefore.parentElement;
+    }
+
+    const sep = document.createElement("div");
+    sep.className = "unread-separator";
+    sep.setAttribute("role", "separator");
+    sep.setAttribute("aria-label", "New messages");
+    sep.textContent = "── new messages ──";
+    this._listEl.insertBefore(sep, insertBefore);
   }
 
   private _renderAll(): void {
