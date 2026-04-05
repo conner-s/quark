@@ -6,7 +6,7 @@ pub mod matrix;
 pub mod media_cache;
 pub mod notifications;
 
-use matrix::client::MatrixState;
+use matrix::client::{MatrixState, SyncState};
 use media_cache::MediaCache;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
@@ -40,6 +40,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .manage(MatrixState(Mutex::new(None)))
+        .manage(SyncState(Mutex::new(None)))
         .manage(CacheState(Arc::new(cache)))
         .manage(Mutex::new(app_config))
         .manage(Mutex::new(notification_config))

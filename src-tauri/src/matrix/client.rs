@@ -11,10 +11,14 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::Emitter;
-use tracing::{error, info};
+use tokio::task::JoinHandle;
+use tracing::{error, info, warn};
 
 /// Tauri state holding the Matrix client.
 pub struct MatrixState(pub Mutex<Option<Client>>);
+
+/// Tauri state holding the sync loop handle so we can prevent duplicate loops.
+pub struct SyncState(pub Mutex<Option<JoinHandle<()>>>);
 
 /// Serializable session info for persistence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,17 +138,37 @@ pub async fn get_own_profile(client: &Client) -> Result<OwnProfile, String> {
     })
 }
 
+/// Maximum backoff duration on sync errors (2 minutes).
+const MAX_BACKOFF_SECS: u64 = 120;
+
 /// Start a background sync task. Returns immediately; sync runs in background.
+///
+/// If a sync loop is already running (tracked via `SyncState`), it is aborted
+/// before spawning a new one — this prevents duplicate loops that would flood
+/// the homeserver with concurrent E2EE key uploads.
 ///
 /// If an `app_handle` is provided, sync event handlers are registered before
 /// the sync loop starts so the frontend receives push notifications for new
 /// messages, typing indicators, and other sync events.
-pub async fn start_sync(client: Client, app_handle: Option<tauri::AppHandle>) {
+pub async fn start_sync(
+    client: Client,
+    app_handle: Option<tauri::AppHandle>,
+    sync_state: &SyncState,
+) {
+    // Abort any existing sync loop before starting a new one.
+    {
+        let mut guard = sync_state.0.lock().expect("SyncState lock poisoned");
+        if let Some(prev) = guard.take() {
+            warn!("Aborting previous sync loop before starting a new one");
+            prev.abort();
+        }
+    }
+
     if let Some(ref handle) = app_handle {
         crate::events::setup_sync_event_handlers(&client, handle);
     }
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         // Limit timeline events per room to avoid large initial-sync payloads.
         // Incremental syncs only send new events regardless, so this only
         // affects the first sync after login or a cache miss.
@@ -163,10 +187,14 @@ pub async fn start_sync(client: Client, app_handle: Option<tauri::AppHandle>) {
             .filter(filter.into())
             .set_presence(PresenceState::Unavailable);
         let mut was_connected = false;
+        let mut backoff_secs: u64 = 1;
 
         loop {
             match client.sync(sync_settings.clone()).await {
                 Ok(_) => {
+                    // Reset backoff on successful sync.
+                    backoff_secs = 1;
+
                     info!("Sync completed");
                     if !was_connected {
                         was_connected = true;
@@ -183,9 +211,21 @@ pub async fn start_sync(client: Client, app_handle: Option<tauri::AppHandle>) {
                             let _ = handle.emit(crate::events::EVENT_CONNECTED, false);
                         }
                     }
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+                    // Exponential backoff with jitter to avoid thundering-herd
+                    // retries that can overwhelm the homeserver (e.g. causing
+                    // Synapse's OTK upload worker lock backoff to overflow).
+                    let jitter = rand::random::<u64>() % (backoff_secs.max(1));
+                    let delay = backoff_secs + jitter;
+                    info!("Retrying sync in {delay}s (backoff {backoff_secs}s + jitter {jitter}s)");
+                    tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+                    backoff_secs = (backoff_secs * 2).min(MAX_BACKOFF_SECS);
                 }
             }
         }
     });
+
+    // Store the handle so future calls can abort this loop.
+    let mut guard = sync_state.0.lock().expect("SyncState lock poisoned");
+    *guard = Some(handle);
 }

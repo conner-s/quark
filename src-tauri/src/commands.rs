@@ -6,7 +6,7 @@ use crate::{
     },
     gif::GifResult,
     matrix::{
-        client::{MatrixState, OwnProfile, SessionInfo},
+        client::{MatrixState, OwnProfile, SessionInfo, SyncState},
         crypto::{CrossSigningInfo, SasInfo, VerificationStatus},
         emoji::EmojiPack,
         media::MediaDownload,
@@ -50,6 +50,7 @@ fn clear_store(data_dir: &Path) {
 #[tauri::command]
 pub async fn login(
     state: State<'_, MatrixState>,
+    sync_state: State<'_, SyncState>,
     app_handle: AppHandle,
     homeserver_url: String,
     username: String,
@@ -70,13 +71,14 @@ pub async fn login(
         *guard = Some(client.clone());
     }
 
-    crate::matrix::client::start_sync(client, Some(app_handle)).await;
+    crate::matrix::client::start_sync(client, Some(app_handle), &sync_state).await;
     Ok(session)
 }
 
 #[tauri::command]
 pub async fn restore_session(
     state: State<'_, MatrixState>,
+    sync_state: State<'_, SyncState>,
     app_handle: AppHandle,
     homeserver_url: String,
     session: SessionInfo,
@@ -91,7 +93,7 @@ pub async fn restore_session(
         *guard = Some(client.clone());
     }
 
-    crate::matrix::client::start_sync(client, Some(app_handle)).await;
+    crate::matrix::client::start_sync(client, Some(app_handle), &sync_state).await;
     Ok(())
 }
 
@@ -99,23 +101,35 @@ pub async fn restore_session(
 ///
 /// The frontend should call this command after a successful login or session
 /// restore if it needs to restart sync (e.g., after the app was suspended).
-/// It is safe to call even if sync is already running — the existing sync
-/// task will eventually reconnect on its own; calling this spawns a new one.
+/// If a sync loop is already running it is aborted first — only one loop is
+/// ever active at a time to avoid flooding the homeserver with duplicate
+/// requests (which can trigger exponential backoff overflow in Synapse's
+/// E2EE key upload worker).
 #[tauri::command]
 pub async fn start_sync(
     state: State<'_, MatrixState>,
+    sync_state: State<'_, SyncState>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
     let client = get_client(&state)?;
-    crate::matrix::client::start_sync(client, Some(app_handle)).await;
+    crate::matrix::client::start_sync(client, Some(app_handle), &sync_state).await;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn logout(
     state: State<'_, MatrixState>,
+    sync_state: State<'_, SyncState>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
+    // Abort the sync loop before logging out to stop all background requests.
+    {
+        let mut guard = sync_state.0.lock().map_err(|_| "SyncState lock poisoned")?;
+        if let Some(handle) = guard.take() {
+            handle.abort();
+        }
+    }
+
     let client = {
         let mut guard = state.0.lock().map_err(|_| "State lock poisoned")?;
         guard.take()
