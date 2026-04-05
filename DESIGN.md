@@ -623,7 +623,7 @@ quark/
 - [ ] Support video
 
 #### Messaging
-- [ ] Private read receipts (`m.read.private`) — only public receipts emitted
+- [x] Private read receipts (`m.read.private`) — both public and private receipts now sent on `mark_room_read`
 - [ ] Room summary previews (MSC3266) — no preview fetch before joining
 
 #### Room Discovery
@@ -651,7 +651,7 @@ quark/
 - [x] Enable shortcode for custom emoji
 - [x] Show all emojis in react picker — `QuickReactPicker` now loads all `BUILTIN_EMOJI` (pinned common reactions first) in a scrollable grid; filtering uses shortcode text
 - [x] Add sticker picker dialogue
-- [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach shows "not yet implemented" toast
+- [x] Add buttons on right side of compose box — emoji picker (🙂) and attach (📎) buttons added to right of compose box; emoji button opens picker; attach opens native file picker (images → m.image, other files → m.file)
 - [x] Support pasting images into the compose box — clipboard image paste detected in `Input`, converted to base64, uploaded via new `send_pasted_image` IPC (Rust: decode base64 → upload → send as `m.image`)
 - [x] Polish pass over top bar displaying room info. Take cues from the message UI.
 - [x] Polish pass over verification UI; currently unstyled at the bottom
@@ -681,8 +681,10 @@ quark/
 - [x] Show reconfigured binds in help window — `HelpDialog` queries `keymapManager.getEntries()` and highlights any user-remapped keys in accent color with default shown in tooltip
 - [x] Remove outline from image, keep it left aligned — removed border from `.message__image`; images were already `display: block` (left-aligned)
 - [x] Image lightbox with ability to zoom and download — `ImageLightbox` overlay with zoom +/-, 1:1 reset, and download button; opens on click of any `.message__image`
-- [ ] Panning in image lightbox
+- [x] Panning in image lightbox — drag-to-pan, scroll-wheel zoom, arrow-key pan; resets on zoom-out
 - [x] Add quick navigation palette, similar to discord's ctrl+k — `QuickNavPalette` overlay opened with Ctrl+K; filters `roomListCache` in real-time; ↑/↓ or j/k to navigate, Enter to jump, Esc to close
+- [x] @mention autocomplete — typing `@` in insert mode opens a member picker; prefix+fuzzy filtered; inserts display name on select
+- [x] Unread message separator — `── new messages ──` line inserted before first unread message on room enter; timeline scrolls to separator
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
