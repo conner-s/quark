@@ -5,7 +5,7 @@ sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
   - org.freedesktop.Sdk.Extension.node22
-command: quark
+command: quark-launch.sh
 
 finish-args:
   # Display
@@ -16,8 +16,11 @@ finish-args:
   # Network (Matrix)
   - --share=network
   # Config and data persistence
+  # xdg-config/quark maps to the real ~/.config/quark (not the sandbox redirect).
+  # Without this, ProjectDirs resolves XDG_CONFIG_HOME to
+  # ~/.var/app/zone.derg.quark/config, so existing configs are invisible.
+  - --filesystem=xdg-config/quark:create
   - --filesystem=~/.local/share/quark:create
-  - --filesystem=~/.config/quark:create
   # Notifications
   - --talk-name=org.freedesktop.Notifications
   # Tray icon (optional, KDE/SNI)
@@ -45,8 +48,9 @@ modules:
       - pnpm build
       # Build the Tauri binary directly; frontend is already in dist/ from pnpm build
       - cargo build --release --manifest-path src-tauri/Cargo.toml
-      # Install binary
+      # Install binary and launcher wrapper
       - install -Dm755 src-tauri/target/release/quark /app/bin/quark
+      - install -Dm755 flatpak/quark-launch.sh /app/bin/quark-launch.sh
       # Install icons
       - install -Dm644 src-tauri/icons/128x128.png
           /app/share/icons/hicolor/128x128/apps/zone.derg.quark.png
