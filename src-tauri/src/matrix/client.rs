@@ -176,8 +176,11 @@ pub async fn start_sync(
     if let Some(ref handle) = app_handle {
         let mut registered = sync_state.handlers_registered.lock().expect("SyncState lock poisoned");
         if !*registered {
+            info!("Registering sync event handlers");
             crate::events::setup_sync_event_handlers(&client, handle);
             *registered = true;
+        } else {
+            warn!("Skipping event handler registration — already registered on this client");
         }
     }
 
