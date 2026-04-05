@@ -38,8 +38,10 @@ import type { KeyContext } from "../vim/keybindings.js";
 import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
 import { showToast } from "../ui/NotificationToast.js";
 import { filterShortcodes, type ShortcodeEntry } from "../ui/ShortcodePreview.js";
+import { filterMembers, type MentionEntry } from "../ui/MentionPreview.js";
 import { getEmojiPacks } from "../ipc/emoji.js";
 import { getThumbnail } from "../ipc/media.js";
+import { getRoomMembers } from "../ipc/rooms.js";
 
 // ── Default keybindings ───────────────────────────────────────────────────────
 
@@ -290,12 +292,55 @@ function extractShortcodeQuery(value: string): string | null {
   return query;
 }
 
+// ── Mention autocomplete ──────────────────────────────────────────────────────
+
+/** Cached member list for the current room. */
+let _roomMembers: MentionEntry[] = [];
+let _roomMembersRoomId: string | null = null;
+
+async function refreshRoomMembers(): Promise<void> {
+  const roomId = AppState.get("currentRoomId");
+  if (!roomId || roomId === _roomMembersRoomId) return;
+  _roomMembersRoomId = roomId;
+  try {
+    const members = await getRoomMembers(roomId);
+    _roomMembers = members.map((m) => ({
+      userId: m.user_id,
+      displayName: m.display_name ?? m.user_id,
+      avatarUrl: undefined, // resolved lazily below if needed
+    }));
+  } catch {
+    _roomMembers = [];
+  }
+}
+
+/**
+ * Extract the active @mention query from the input value.
+ * Returns the query text (without @) or null.
+ */
+function extractMentionQuery(value: string): string | null {
+  const lastAt = value.lastIndexOf("@");
+  if (lastAt < 0) return null;
+  // The character before @ must be a space or start of string
+  if (lastAt > 0 && !/\s/.test(value[lastAt - 1])) return null;
+  const query = value.slice(lastAt + 1);
+  // Must have no spaces (a space ends the mention query)
+  if (/\s/.test(query)) return null;
+  return query;
+}
+
 // ── Insert mode keyboard handlers ─────────────────────────────────────────────
 
 function handleInsertKeydown(e: KeyboardEvent, components: AppComponents): void {
-  const { input, shortcodePreview } = components;
+  const { input, shortcodePreview, mentionPreview } = components;
 
-  // Shortcode autocomplete intercepts first
+  // Mention autocomplete intercepts first
+  if (mentionPreview.isVisible()) {
+    const consumed = mentionPreview.handleKeydown(e);
+    if (consumed) return;
+  }
+
+  // Shortcode autocomplete intercepts next
   if (shortcodePreview.isVisible()) {
     const consumed = shortcodePreview.handleKeydown(e);
     if (consumed) return;
@@ -370,7 +415,7 @@ function applyRcDirectives(rc: ParsedRc): void {
 // ── Global keydown handler ────────────────────────────────────────────────────
 
 export function setupKeyboard(components: AppComponents): void {
-  const { input, commandBar, shortcodePreview, timeline,
+  const { input, commandBar, shortcodePreview, mentionPreview, timeline,
           emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker,
           settingsDialog, roomInfoDialog, pinnedMessagesDialog, roomDirectoryDialog,
           roomHeader, imageLightbox, quickNavPalette } = components;
@@ -453,6 +498,7 @@ export function setupKeyboard(components: AppComponents): void {
       // Blur the input so normal-mode keys don't type into the textbox
       input.blur();
       shortcodePreview.hide();
+      mentionPreview.hide();
     }
   });
 
@@ -494,9 +540,36 @@ export function setupKeyboard(components: AppComponents): void {
     input.focus();
   });
 
+  // ── Mention preview wiring ───────────────────────────────────────────────
+  mentionPreview.onSelect((entry) => {
+    const value = input.getValue();
+    const lastAt = value.lastIndexOf("@");
+    if (lastAt >= 0) {
+      const before = value.slice(0, lastAt);
+      // Insert display name as the visible text, user ID as the Matrix mention pill
+      input.setValue(`${before}@${entry.displayName} `);
+    }
+    input.focus();
+  });
+
   input.onInput((value) => {
     if (modeManager.current !== Mode.Insert) return;
 
+    // Mention autocomplete (@name) — takes precedence over shortcodes if active
+    const mentionQuery = extractMentionQuery(value);
+    if (mentionQuery !== null) {
+      shortcodePreview.hide();
+      const matches = filterMembers(_roomMembers, mentionQuery);
+      if (matches.length > 0) {
+        mentionPreview.show(matches);
+      } else {
+        mentionPreview.hide();
+      }
+      return;
+    }
+    mentionPreview.hide();
+
+    // Shortcode autocomplete
     const query = extractShortcodeQuery(value);
     if (query) {
       const all = allShortcodes();
@@ -512,9 +585,10 @@ export function setupKeyboard(components: AppComponents): void {
     }
   });
 
-  // Refresh custom emoji when room changes
+  // Refresh custom emoji and room members when room changes
   AppState.on("currentRoomId", () => {
     void refreshCustomEmoji();
+    void refreshRoomMembers();
   });
 
   // ── Global keydown ──────────────────────────────────────────────────────
@@ -525,6 +599,7 @@ export function setupKeyboard(components: AppComponents): void {
     // their own keys with stopPropagation. The check here is a belt-and-
     // suspenders guard for the case where focus escapes the overlay element.
     if (quickReactPicker.isVisible()) return;
+    if (mentionPreview.isVisible()) return;
     if (emojiPicker.isVisible()) {
       if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
         e.preventDefault();

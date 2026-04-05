@@ -25,6 +25,7 @@ import { PinnedMessagesDialog } from "./PinnedMessagesDialog.js";
 import { RoomDirectoryDialog } from "./RoomDirectoryDialog.js";
 import { ImageLightbox } from "./ImageLightbox.js";
 import { QuickNavPalette } from "./QuickNavPalette.js";
+import { MentionPreview } from "./MentionPreview.js";
 
 // ── AppComponents ─────────────────────────────────────────────────────────────
 
@@ -62,6 +63,7 @@ export interface AppComponents {
   roomDirectoryDialog: RoomDirectoryDialog;
   imageLightbox: ImageLightbox;
   quickNavPalette: QuickNavPalette;
+  mentionPreview: MentionPreview;
 
   // Status
   statusBar: StatusBar;
@@ -107,6 +109,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   const roomDirectoryDialog = new RoomDirectoryDialog();
   const imageLightbox = new ImageLightbox();
   const quickNavPalette = new QuickNavPalette();
+  const mentionPreview = new MentionPreview();
 
   // ── Login screen ─────────────────────────────────────────────────────────
   container.appendChild(loginScreen.getElement());
@@ -130,8 +133,9 @@ export function mountApp(container: HTMLElement): AppComponents {
   contentArea.appendChild(timeline.getElement());
   contentArea.appendChild(replyPreview.getElement());
 
-  // Shortcode preview sits above input bar
+  // Shortcode / mention previews sit above input bar
   contentArea.appendChild(shortcodePreview.getElement());
+  contentArea.appendChild(mentionPreview.getElement());
   contentArea.appendChild(commandBar.getElement());
   contentArea.appendChild(input.getElement());
 
@@ -215,6 +219,7 @@ export function mountApp(container: HTMLElement): AppComponents {
     roomDirectoryDialog,
     imageLightbox,
     quickNavPalette,
+    mentionPreview,
     typingIndicator,
     mainLayout,
   };
