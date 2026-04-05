@@ -74,9 +74,18 @@ export class ImageLightbox {
       window.addEventListener("mouseup", onUp);
     });
 
-    // Zoom with scroll wheel
+    // Zoom with scroll wheel — suppress transition while scrolling (same
+    // reason as drag: the 150ms ease restarts on every wheel event, causing
+    // jitter on trackpads). Restore once scrolling pauses for 200ms.
+    let _wheelDebounce: ReturnType<typeof setTimeout> | null = null;
     imgWrap.addEventListener("wheel", (e) => {
       e.preventDefault();
+      this._imgEl.style.transition = "none";
+      if (_wheelDebounce !== null) clearTimeout(_wheelDebounce);
+      _wheelDebounce = setTimeout(() => {
+        this._imgEl.style.transition = "";
+        _wheelDebounce = null;
+      }, 200);
       const delta = e.deltaY < 0 ? 0.15 : -0.15;
       this._setScale(Math.min(5, Math.max(0.25, this._scale + delta)));
     }, { passive: false });
