@@ -687,6 +687,7 @@ quark/
 - [x] @mention autocomplete — typing `@` in insert mode opens a member picker; prefix+fuzzy filtered; inserts display name on select
 - [x] Unread message separator — `── new messages ──` line inserted before first unread message on room enter; timeline scrolls to separator
 - [ ] Skeleton page while messages are loading
+- [ ] Ability to disable vim mode
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
