@@ -381,6 +381,40 @@ pub async fn send_pasted_image(
     .await
 }
 
+/// Upload file data (base64-encoded) and send it as an m.file event.
+/// Used for the file picker attach flow.
+#[tauri::command]
+pub async fn send_file(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    data_base64: String,
+    mime_type: String,
+    filename: String,
+    file_size: Option<u64>,
+) -> Result<String, String> {
+    let client = get_client(&state)?;
+
+    let data = crate::matrix::media::decode_base64(&data_base64)?;
+
+    let mxc_url = crate::matrix::media::upload_media(
+        &client,
+        data,
+        &mime_type,
+        Some(&filename),
+    )
+    .await?;
+
+    crate::matrix::timeline::send_file(
+        &client,
+        &room_id,
+        &filename,
+        &mxc_url,
+        &mime_type,
+        file_size,
+    )
+    .await
+}
+
 #[tauri::command]
 pub async fn send_sticker(
     state: State<'_, MatrixState>,

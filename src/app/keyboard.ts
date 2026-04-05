@@ -24,6 +24,7 @@ import {
   setupReactionChipHandler,
   setupMessageActionHandlers,
   handleImagePaste,
+  handleFilePick,
   setupStatusBar,
   editStatus,
   jumpToMessage,
@@ -476,7 +477,11 @@ export function setupKeyboard(components: AppComponents): void {
   });
 
   input.onAttachClick(() => {
-    showToast("Upload: not yet implemented", "info");
+    input.openFilePicker();
+  });
+
+  input.onFilePick((file) => {
+    void handleFilePick(file);
   });
 
   // Wire image paste in compose field

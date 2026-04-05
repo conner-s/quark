@@ -40,6 +40,7 @@ import {
   getThumbnail,
   downloadMedia,
   sendPastedImage,
+  sendFile,
   getEmojiPacks,
   getStickerPacks,
   sendSticker as ipcSendSticker,
@@ -1689,6 +1690,33 @@ export async function handleImagePaste(blob: Blob): Promise<void> {
     await sendPastedImage(roomId, dataBase64, blob.type, filename);
   } catch (err) {
     showError(`Failed to send image: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Handle a file selected from the file picker.
+ * Images are sent as m.image; everything else as m.file.
+ */
+export async function handleFilePick(file: File): Promise<void> {
+  const roomId = AppState.get("currentRoomId");
+  if (!roomId) return;
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const dataBase64 = btoa(binary);
+
+    if (file.type.startsWith("image/")) {
+      showToast("Uploading image…", "info");
+      await sendPastedImage(roomId, dataBase64, file.type, file.name);
+    } else {
+      showToast(`Uploading ${file.name}…`, "info");
+      await sendFile(roomId, dataBase64, file.type || "application/octet-stream", file.name, file.size);
+    }
+  } catch (err) {
+    showError(`Failed to send file: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

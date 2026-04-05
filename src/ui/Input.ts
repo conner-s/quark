@@ -29,7 +29,9 @@ export class Input {
   private _onEmojiClick: (() => void) | null = null;
   private _onAttachClick: (() => void) | null = null;
   private _onImagePaste: ((blob: Blob) => void) | null = null;
+  private _onFilePick: ((file: File) => void) | null = null;
   private _onFocusEnterInsert: (() => void) | null = null;
+  private _fileInputEl: HTMLInputElement | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -149,6 +151,21 @@ export class Input {
       }
     });
 
+    // Hidden file input — triggered by the attach button
+    this._fileInputEl = document.createElement("input");
+    this._fileInputEl.type = "file";
+    this._fileInputEl.style.display = "none";
+    this._fileInputEl.setAttribute("aria-hidden", "true");
+    this._fileInputEl.addEventListener("change", () => {
+      const file = this._fileInputEl!.files?.[0];
+      if (file) {
+        this._onFilePick?.(file);
+        // Reset so the same file can be picked again
+        this._fileInputEl!.value = "";
+      }
+    });
+    this._el.appendChild(this._fileInputEl);
+
     // Action buttons on the right side of the compose box
     const actionsEl = document.createElement("div");
     actionsEl.className = "input-bar__actions";
@@ -192,6 +209,16 @@ export class Input {
   /** Register a callback for the attach file button. */
   onAttachClick(handler: () => void): void {
     this._onAttachClick = handler;
+  }
+
+  /** Register a callback invoked when the user picks a file via the attach button. */
+  onFilePick(handler: (file: File) => void): void {
+    this._onFilePick = handler;
+  }
+
+  /** Open the native file picker dialog. */
+  openFilePicker(): void {
+    this._fileInputEl?.click();
   }
 
   /** Register a callback invoked when an image is pasted into the compose field. */

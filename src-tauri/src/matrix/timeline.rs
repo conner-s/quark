@@ -469,6 +469,50 @@ pub async fn send_image(
     Ok(event_id)
 }
 
+/// Send a generic file (m.file) event to a room.
+pub async fn send_file(
+    client: &Client,
+    room_id: &str,
+    body: &str,
+    mxc_url: &str,
+    mime_type: &str,
+    file_size: Option<u64>,
+) -> Result<String, String> {
+    use matrix_sdk::ruma::{
+        events::room::{
+            message::{FileMessageEventContent, FileInfo},
+            MediaSource,
+        },
+        MxcUri,
+    };
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {} not found", room_id))?;
+
+    let mxc_uri = <&MxcUri>::try_from(mxc_url).map_err(|e| format!("Invalid mxc URI: {e}"))?;
+    let source = MediaSource::Plain(mxc_uri.to_owned());
+
+    let mut file_info = FileInfo::default();
+    file_info.mimetype = Some(mime_type.to_string());
+    file_info.size = file_size.and_then(|s| UInt::try_from(s).ok());
+
+    let mut file_content = FileMessageEventContent::new(body.to_string(), source);
+    file_content.info = Some(Box::new(file_info));
+
+    let msg_content = RoomMessageEventContent::new(MessageType::File(file_content));
+
+    let response = room
+        .send(msg_content)
+        .await
+        .map_err(|e| format!("Failed to send file: {e}"))?;
+
+    let event_id = response.event_id.to_string();
+    info!(event_id = %event_id, "File sent");
+    Ok(event_id)
+}
+
 /// Fetch events surrounding a specific event using the Matrix /context endpoint.
 /// Returns a window of messages centered on the target event, ordered oldest-first.
 pub async fn get_event_context(

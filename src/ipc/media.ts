@@ -73,6 +73,20 @@ export async function uploadMedia(filePath: string): Promise<string> {
 }
 
 /**
+ * Upload base64-encoded file bytes and send as an m.file event.
+ * Used for the file picker attach flow.
+ */
+export async function sendFile(
+  roomId: string,
+  dataBase64: string,
+  mimeType: string,
+  filename: string,
+  fileSize?: number,
+): Promise<string> {
+  return invoke<string>("send_file", { roomId, dataBase64, mimeType, filename, fileSize: fileSize ?? null });
+}
+
+/**
  * Upload base64-encoded image bytes and send as an m.image event.
  * Used for clipboard paste.
  */

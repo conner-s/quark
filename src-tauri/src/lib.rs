@@ -76,6 +76,7 @@ pub fn run() {
             commands::download_media,
             commands::upload_media,
             commands::send_pasted_image,
+            commands::send_file,
             commands::get_cache_stats,
             commands::clear_media_cache,
             commands::set_cache_size_limit,
