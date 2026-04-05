@@ -17,8 +17,14 @@ use tracing::{error, info, warn};
 /// Tauri state holding the Matrix client.
 pub struct MatrixState(pub Mutex<Option<Client>>);
 
-/// Tauri state holding the sync loop handle so we can prevent duplicate loops.
-pub struct SyncState(pub Mutex<Option<JoinHandle<()>>>);
+/// Tauri state holding the sync loop handle so we can prevent duplicate loops,
+/// and a flag to track whether event handlers have been registered on the client
+/// (since `client.add_event_handler()` accumulates — calling it again would
+/// produce duplicate callbacks for every sync event).
+pub struct SyncState {
+    pub handle: Mutex<Option<JoinHandle<()>>>,
+    pub handlers_registered: Mutex<bool>,
+}
 
 /// Serializable session info for persistence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,15 +163,22 @@ pub async fn start_sync(
 ) {
     // Abort any existing sync loop before starting a new one.
     {
-        let mut guard = sync_state.0.lock().expect("SyncState lock poisoned");
+        let mut guard = sync_state.handle.lock().expect("SyncState lock poisoned");
         if let Some(prev) = guard.take() {
             warn!("Aborting previous sync loop before starting a new one");
             prev.abort();
         }
     }
 
+    // Only register event handlers once per client lifetime — add_event_handler
+    // accumulates, so calling it again would produce duplicate callbacks for
+    // every sync event (duplicate messages, notifications, etc.).
     if let Some(ref handle) = app_handle {
-        crate::events::setup_sync_event_handlers(&client, handle);
+        let mut registered = sync_state.handlers_registered.lock().expect("SyncState lock poisoned");
+        if !*registered {
+            crate::events::setup_sync_event_handlers(&client, handle);
+            *registered = true;
+        }
     }
 
     let handle = tokio::spawn(async move {
@@ -226,6 +239,6 @@ pub async fn start_sync(
     });
 
     // Store the handle so future calls can abort this loop.
-    let mut guard = sync_state.0.lock().expect("SyncState lock poisoned");
+    let mut guard = sync_state.handle.lock().expect("SyncState lock poisoned");
     *guard = Some(handle);
 }

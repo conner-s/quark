@@ -40,7 +40,10 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .manage(MatrixState(Mutex::new(None)))
-        .manage(SyncState(Mutex::new(None)))
+        .manage(SyncState {
+            handle: Mutex::new(None),
+            handlers_registered: Mutex::new(false),
+        })
         .manage(CacheState(Arc::new(cache)))
         .manage(Mutex::new(app_config))
         .manage(Mutex::new(notification_config))

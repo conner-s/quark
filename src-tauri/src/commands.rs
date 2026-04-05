@@ -124,10 +124,16 @@ pub async fn logout(
 ) -> Result<(), String> {
     // Abort the sync loop before logging out to stop all background requests.
     {
-        let mut guard = sync_state.0.lock().map_err(|_| "SyncState lock poisoned")?;
+        let mut guard = sync_state.handle.lock().map_err(|_| "SyncState lock poisoned")?;
         if let Some(handle) = guard.take() {
             handle.abort();
         }
+    }
+    // Reset handler registration flag so a fresh login re-registers handlers
+    // on the new client instance.
+    {
+        let mut registered = sync_state.handlers_registered.lock().map_err(|_| "SyncState lock poisoned")?;
+        *registered = false;
     }
 
     let client = {
