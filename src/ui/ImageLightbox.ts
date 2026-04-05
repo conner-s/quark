@@ -1,10 +1,17 @@
-// Image lightbox — full-screen viewer with zoom and download
+// Image lightbox — full-screen viewer with zoom, pan, and download
 
 export class ImageLightbox {
   private _el: HTMLElement;
   private _imgEl: HTMLImageElement;
   private _zoomLabel: HTMLElement;
   private _scale = 1;
+  private _panX = 0;
+  private _panY = 0;
+  private _dragging = false;
+  private _dragStartX = 0;
+  private _dragStartY = 0;
+  private _panStartX = 0;
+  private _panStartY = 0;
   private _currentSrc = "";
   private _currentAlt = "";
 
@@ -15,8 +22,9 @@ export class ImageLightbox {
     this._el.setAttribute("aria-label", "Image viewer");
     this._el.setAttribute("aria-modal", "true");
 
-    // Close on backdrop click
+    // Close on backdrop click (but not after a drag)
     this._el.addEventListener("click", (e) => {
+      if (this._dragging) return;
       if (e.target === this._el || e.target === this._imgWrap) this.hide();
     });
 
@@ -30,6 +38,43 @@ export class ImageLightbox {
     this._imgEl.alt = "";
     imgWrap.appendChild(this._imgEl);
     this._el.appendChild(imgWrap);
+
+    // Pan via mouse drag
+    imgWrap.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      this._dragging = false;
+      this._dragStartX = e.clientX;
+      this._dragStartY = e.clientY;
+      this._panStartX = this._panX;
+      this._panStartY = this._panY;
+      imgWrap.style.cursor = "grabbing";
+
+      const onMove = (me: MouseEvent) => {
+        const dx = me.clientX - this._dragStartX;
+        const dy = me.clientY - this._dragStartY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) this._dragging = true;
+        this._panX = this._panStartX + dx;
+        this._panY = this._panStartY + dy;
+        this._applyTransform();
+      };
+      const onUp = () => {
+        imgWrap.style.cursor = this._scale > 1 ? "grab" : "";
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        // Defer _dragging reset so the backdrop click handler sees it
+        requestAnimationFrame(() => { this._dragging = false; });
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    });
+
+    // Zoom with scroll wheel
+    imgWrap.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.15 : -0.15;
+      this._setScale(Math.min(5, Math.max(0.25, this._scale + delta)));
+    }, { passive: false });
 
     // Toolbar
     const toolbar = document.createElement("div");
@@ -74,6 +119,8 @@ export class ImageLightbox {
     this._currentAlt = alt ?? "";
     this._imgEl.src = src;
     this._imgEl.alt = alt ?? "";
+    this._panX = 0;
+    this._panY = 0;
     this._setScale(1);
     this._el.classList.add("image-lightbox--open");
     this._el.setAttribute("tabindex", "-1");
@@ -103,8 +150,18 @@ export class ImageLightbox {
 
   private _setScale(scale: number): void {
     this._scale = scale;
-    this._imgEl.style.transform = `scale(${scale})`;
+    if (scale <= 1) {
+      this._panX = 0;
+      this._panY = 0;
+    }
+    this._applyTransform();
     this._zoomLabel.textContent = `${Math.round(scale * 100)}%`;
+    this._imgWrap.style.cursor = scale > 1 ? "grab" : "";
+  }
+
+  private _applyTransform(): void {
+    this._imgEl.style.transform =
+      `translate(${this._panX}px, ${this._panY}px) scale(${this._scale})`;
   }
 
   private _download(): void {
@@ -133,7 +190,29 @@ export class ImageLightbox {
         break;
       case "0":
         e.preventDefault();
+        this._panX = 0;
+        this._panY = 0;
         this._setScale(1);
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        this._panX += 40;
+        this._applyTransform();
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        this._panX -= 40;
+        this._applyTransform();
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        this._panY += 40;
+        this._applyTransform();
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        this._panY -= 40;
+        this._applyTransform();
         break;
     }
   }
