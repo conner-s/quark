@@ -760,5 +760,8 @@ quark/
 - [ ] toml file seems to be ignored
 - [ ] Custom emotes in reacts just send text.
 - [ ] Sometimes can't load additional messages in timeline
-
+- [ ] Custom emotes/stickers don't show always
+- [ ] Custom emotes don't render from shortcode or in reacts
+- [ ] No settings button
+- [ ] Icon roundedness globally configurable
 
