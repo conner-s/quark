@@ -606,11 +606,11 @@ quark/
 - [ ] **Sliding Sync (MSC4186)** — backend uses matrix-sdk default sync; Sliding Sync not explicitly configured
 - [ ] **Presence display** — `quark:presence` events are handled in `sync.ts` but no dedicated presence UI in the room list or member list
 - [x] **GIF upload-to-homeserver** — `send_gif` command downloads GIF from external URL, uploads to homeserver, sends as `m.image`
-- [ ] **Custom emoji in reply previews** — `ReplyPreview.ts` exists; verify `:shortcode:` resolves to images inline
+- [x] **Custom emoji in reply previews** — `ReplyPreview.ts` exists; verify `:shortcode:` resolves to images inline
 
 ### Not Yet Implemented
 
-#### Authentication
+#### Authentication -- low priority
 - [ ] OIDC login via MAS (only password auth is implemented)
 - [ ] SSO login flow
 
@@ -631,6 +631,7 @@ quark/
 
 #### Emoji / Sticker Packs
 - [ ] Pack management UI — create, edit, and import emoji/sticker packs (per-room and account data)
+- [ ] Emoji list is still relatively limited. Should support all currently available emojis
 
 #### Configuration
 - [ ] Theme hot-reloading — filesystem watcher (`notify` crate) not hooked up; requires app restart to change theme
