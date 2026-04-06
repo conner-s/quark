@@ -133,6 +133,26 @@ export class MemberList {
   }
 
   /**
+   * Update the presence indicator for a specific member in-place.
+   * Called when a presence event arrives via sync.
+   */
+  updateMemberPresence(userId: string, presence: PresenceStatus): void {
+    // Update the cached entry so re-renders use the new presence
+    const entry = this._members.find((m) => m.userId === userId);
+    if (entry) entry.presence = presence;
+
+    // Update the DOM element if currently rendered
+    const item = this._scrollEl.querySelector<HTMLElement>(`[data-member-id="${CSS.escape(userId)}"]`);
+    if (!item) return;
+    const presenceEl = item.querySelector<HTMLElement>(".member-list__presence");
+    if (!presenceEl) return;
+    // Remove old modifier classes and apply new one
+    presenceEl.className = `member-list__presence member-list__presence--${presence}`;
+    presenceEl.textContent = PRESENCE_SYMBOL[presence];
+    presenceEl.setAttribute("aria-label", presence);
+  }
+
+  /**
    * Update the avatar for a specific member in-place (called after async download).
    * Swaps the fallback span for an img without re-rendering the whole list.
    */

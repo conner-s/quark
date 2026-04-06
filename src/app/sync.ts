@@ -220,6 +220,12 @@ export async function startSync(components: AppComponents): Promise<() => void> 
       } else {
         // Cache other users' status messages for profile views
         AppState.cacheUserStatus(payload.user_id, payload.status_msg ?? null);
+        // Cache presence state and update the member list indicator live
+        AppState.cacheUserPresence(payload.user_id, payload.presence);
+        const validPresence = (payload.presence === "online" || payload.presence === "unavailable")
+          ? payload.presence
+          : "offline" as const;
+        components.memberList.updateMemberPresence(payload.user_id, validPresence);
       }
     }
   );

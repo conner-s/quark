@@ -74,6 +74,8 @@ class AppStateManager {
   private _panelNavCallbacks: Map<ActivePanel, PanelNavCallbacks> = new Map();
   /** Cached presence status messages keyed by user ID. */
   private _userStatusCache: Map<string, string | null> = new Map();
+  /** Cached presence state keyed by user ID ("online" | "unavailable" | "offline"). */
+  private _userPresenceCache: Map<string, string> = new Map();
 
   // ── Read ──────────────────────────────────────────────────────────────────
 
@@ -156,6 +158,14 @@ class AppStateManager {
 
   getUserStatus(userId: string): string | null {
     return this._userStatusCache.get(userId) ?? null;
+  }
+
+  cacheUserPresence(userId: string, presence: string): void {
+    this._userPresenceCache.set(userId, presence);
+  }
+
+  getUserPresence(userId: string): string | null {
+    return this._userPresenceCache.get(userId) ?? null;
   }
 
   /** Programmatically move focus to a specific panel, calling its focusActive callback. */
