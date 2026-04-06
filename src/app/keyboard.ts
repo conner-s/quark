@@ -235,10 +235,13 @@ async function refreshCustomEmoji(): Promise<void> {
     for (const pack of packs) {
       for (const entry of pack.emojis) {
         if (!entry.usage.includes("emoticon")) continue;
+        // Don't set imageUrl to a bare mxc:// URL — browsers can't load those
+        // and the shortcode preview would show a broken image. Leave it unset
+        // until the thumbnail is resolved, then replace in-place.
         const customEntry: ShortcodeEntry = {
           key: `:${entry.shortcode}:`,
           shortcode: entry.shortcode,
-          imageUrl: entry.url, // may be mxc://, replaced below if so
+          imageUrl: entry.url.startsWith("mxc://") ? undefined : entry.url,
         };
         _customEmoji.push(customEntry);
         if (entry.url.startsWith("mxc://")) {

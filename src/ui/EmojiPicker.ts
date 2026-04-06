@@ -472,8 +472,9 @@ export class EmojiPicker {
   // ── Sticker section private ────────────────────────────────────────────
 
   private _updateStickerPackLabel(): void {
-    const first = this._stickerFilteredEntries[0];
-    this._stickerPackLabelEl.textContent = first?.packName ?? "";
+    // Pack labels are now rendered as inline section headers in the grid.
+    // Clear the legacy label element so it doesn't show a stale single-pack name.
+    this._stickerPackLabelEl.textContent = "";
   }
 
   private _applyStickerFilter(query: string): void {
@@ -493,8 +494,23 @@ export class EmojiPicker {
   private _renderStickerGrid(): void {
     this._stickerGridEl.innerHTML = "";
 
+    let lastPackName: string | undefined = undefined;
+
     for (let i = 0; i < this._stickerFilteredEntries.length; i++) {
       const sticker = this._stickerFilteredEntries[i];
+
+      // Insert a pack header row whenever the pack name changes
+      const packName = sticker.packName ?? "";
+      if (packName !== lastPackName) {
+        lastPackName = packName;
+        if (packName) {
+          const header = document.createElement("div");
+          header.className = "sticker-picker__pack-header";
+          header.textContent = packName;
+          this._stickerGridEl.appendChild(header);
+        }
+      }
+
       const cell = document.createElement("button");
       cell.className = "sticker-picker__cell";
       cell.type = "button";

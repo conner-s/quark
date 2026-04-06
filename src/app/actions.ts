@@ -49,6 +49,8 @@ import {
 
 import { applyTheme } from "../theme/loader.js";
 import { BUILTIN_THEME_MAP } from "../theme/builtins.js";
+import { getAppConfig } from "../ipc/app_config.js";
+import { setCurrentThemeName } from "../ui/SettingsDialog.js";
 
 import type { AppComponents } from "../ui/App.js";
 import type { RoomInfo, TimelineEvent, RoomMember } from "../ipc/types.js";
@@ -244,6 +246,7 @@ export async function login(homeserver: string, username: string, password: stri
     loginScreen.hide();
 
     void _loadOwnProfile();
+    await loadThemeFromConfig();
     await refreshRooms();
 
     showSuccess("Connected successfully");
@@ -269,6 +272,7 @@ export async function attemptSessionRestore(components: import("../ui/App.js").A
     AppState.set("loggedIn", true);
     showMainLayout(components);
     void _loadOwnProfile();
+    await loadThemeFromConfig();
     await refreshRooms();
     return true;
   } catch (err) {
@@ -459,6 +463,12 @@ export async function selectRoom(roomId: string): Promise<void> {
 /**
  * Load the next page of older messages for the current room and prepend them.
  * Called automatically when the user scrolls to the top of the timeline.
+ *
+ * If a fetched page contains no displayable messages (e.g. all reactions/state
+ * events were filtered out) but history remains, we keep fetching until we
+ * either find displayable messages or exhaust the history. This prevents the
+ * loading spinner from disappearing with no result while `_scrollTopFired`
+ * blocks re-triggering.
  */
 async function loadMoreMessages(): Promise<void> {
   if (_paginationLoading || !_prevBatch) return;
@@ -470,22 +480,36 @@ async function loadMoreMessages(): Promise<void> {
   timeline.showLoadingMore();
 
   try {
-    const page = await getTimeline(roomId, { limit: 50, before: _prevBatch });
-    _prevBatch = page.prev_batch;
+    // Loop to skip over pages whose events are all non-displayable (reactions,
+    // state events, etc. that get filtered by the Rust backend). Cap iterations
+    // to avoid a runaway loop on pathological room histories.
+    const MAX_EMPTY_PAGES = 10;
+    let emptyPages = 0;
 
-    if (page.events.length === 0) return;
+    while (_prevBatch && roomId === AppState.get("currentRoomId")) {
+      const page = await getTimeline(roomId, { limit: 50, before: _prevBatch });
+      _prevBatch = page.prev_batch;
 
-    const existingEvents = AppState.get("currentTimeline");
-    AppState.set("currentTimeline", [...page.events, ...existingEvents]);
+      if (page.events.length === 0) {
+        emptyPages++;
+        if (!_prevBatch || emptyPages >= MAX_EMPTY_PAGES) break;
+        // History remains but page was all filtered events — keep going
+        continue;
+      }
 
-    const threadRootCounts = _buildThreadRootCounts(page.events);
-    const mainEvents = page.events.filter((e) => !e.thread_root);
-    const messages = mainEvents.map((e) => timelineEventToMessage(e, page.events, threadRootCounts));
-    timeline.prependMessages(messages);
+      const existingEvents = AppState.get("currentTimeline");
+      AppState.set("currentTimeline", [...page.events, ...existingEvents]);
 
-    _downloadMessageImages(page.events, timeline);
-    _downloadInlineEmoji(timeline);
-    void _downloadReactionEmoji(page.events, timeline);
+      const threadRootCounts = _buildThreadRootCounts(page.events);
+      const mainEvents = page.events.filter((e) => !e.thread_root);
+      const messages = mainEvents.map((e) => timelineEventToMessage(e, page.events, threadRootCounts));
+      timeline.prependMessages(messages);
+
+      _downloadMessageImages(page.events, timeline);
+      _downloadInlineEmoji(timeline);
+      void _downloadReactionEmoji(page.events, timeline);
+      break;
+    }
   } catch (err) {
     showError(`Failed to load more messages: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
@@ -917,8 +941,12 @@ export async function sendMessage(body: string): Promise<void> {
     }
   }
 
+  // Build a formatted body if the message contains any :shortcode: that
+  // resolves to a known custom emoji mxc:// URL (data-mx-emoticon, MSC2545).
+  const formattedBody = _buildFormattedBodyWithEmoji(body);
+
   try {
-    const eventId = await ipcSendMessage(roomId, body, undefined, replyToEventId ?? undefined);
+    const eventId = await ipcSendMessage(roomId, body, formattedBody, replyToEventId ?? undefined);
     // Promote the optimistic message to its real server-assigned event ID and
     // register it so the sync echo is ignored (preventing a duplicate).
     const { timeline } = getComponents();
@@ -1231,8 +1259,10 @@ async function sendThreadReply(body: string, threadRootId: string, roomId: strin
 
   input.animateSent();
 
+  const threadFormattedBody = _buildFormattedBodyWithEmoji(body);
+
   try {
-    const eventId = await sendThreadReplyIpc(roomId, threadRootId, body);
+    const eventId = await sendThreadReplyIpc(roomId, threadRootId, body, threadFormattedBody);
     _ownSentEventIds.add(eventId);
   } catch (err) {
     showError(`Failed to send thread reply: ${err instanceof Error ? err.message : String(err)}`);
@@ -1246,6 +1276,58 @@ let _emojiPickerWired = false;
 
 /** Cache of custom emoji categories per room ID (or "" for account-level). */
 const _customEmojiCategoryCache = new Map<string, EmojiPickerCategory[]>();
+
+/**
+ * Map of shortcode → mxc:// URL for all loaded custom emoji.
+ * Used to build formatted bodies with data-mx-emoticon when sending messages.
+ * Populated when emoji packs are loaded; never replaced with data: URLs.
+ */
+const _shortcodeToMxc = new Map<string, string>();
+
+/**
+ * Scan `body` for `:shortcode:` patterns and, for any that match a known
+ * custom emoji, return an HTML `formatted_body` string with each custom emoji
+ * replaced by an `<img data-mx-emoticon>` tag (MSC2545 / Matrix custom emoji).
+ *
+ * Returns `undefined` if the body contains no resolvable custom emoji
+ * shortcodes so the message is sent as plain text.
+ */
+function _buildFormattedBodyWithEmoji(body: string): string | undefined {
+  const SHORTCODE_RE = /:([a-zA-Z0-9_-]+):/g;
+  let hasCustom = false;
+
+  // First pass: check if there are any resolvable shortcodes.
+  let m: RegExpExecArray | null;
+  while ((m = SHORTCODE_RE.exec(body)) !== null) {
+    if (_shortcodeToMxc.has(m[1])) {
+      hasCustom = true;
+      break;
+    }
+  }
+  if (!hasCustom) return undefined;
+
+  // Second pass: build the HTML body.
+  // Escape plain-text segments so they're safe in HTML.
+  const escape = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  let html = "";
+  let last = 0;
+  SHORTCODE_RE.lastIndex = 0;
+  while ((m = SHORTCODE_RE.exec(body)) !== null) {
+    const [fullMatch, shortcode] = m;
+    const mxc = _shortcodeToMxc.get(shortcode);
+    html += escape(body.slice(last, m.index));
+    if (mxc) {
+      html += `<img data-mx-emoticon src="${mxc}" alt=":${shortcode}:" title=":${shortcode}:">`;
+    } else {
+      html += escape(fullMatch);
+    }
+    last = m.index + fullMatch.length;
+  }
+  html += escape(body.slice(last));
+  return html;
+}
 
 /**
  * Show the emoji/sticker picker. Loads BUILTIN_EMOJI immediately and custom
@@ -1322,6 +1404,14 @@ export function openEmojiPicker(initialTab: "emoji" | "sticker" = "emoji"): void
           .filter((e) => e.usage.includes("emoticon"))
           .map((e) => ({ key: `:${e.shortcode}:`, shortcode: e.shortcode, imageUrl: e.url }));
         if (entries.length === 0) continue;
+
+        // Record the mxc:// URL for each shortcode BEFORE resolving thumbnails,
+        // so sendMessage() can look up the original mxc for data-mx-emoticon.
+        for (const e of pack.emojis) {
+          if (e.usage.includes("emoticon") && e.url.startsWith("mxc://")) {
+            _shortcodeToMxc.set(e.shortcode, e.url);
+          }
+        }
 
         // Resolve mxc:// URLs to data: URLs
         await Promise.all(
@@ -1860,16 +1950,41 @@ export async function loadTheme(nameOrPath: string): Promise<void> {
     const builtin = BUILTIN_THEME_MAP[nameOrPath];
     if (builtin) {
       applyTheme(builtin);
+      setCurrentThemeName(nameOrPath);
       showSuccess(`Theme "${nameOrPath}" applied`);
       return;
     }
     // Fall back to IPC for custom file paths
     const theme = await ipcLoadTheme(nameOrPath);
     applyTheme(theme);
+    setCurrentThemeName(nameOrPath);
     const displayName = theme.meta?.name ?? nameOrPath;
     showSuccess(`Theme "${displayName}" applied`);
   } catch (err) {
     showError(`Failed to load theme: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Load the theme specified in config.toml and apply it on startup.
+ * Silently falls back to the default if config is absent or theme is invalid.
+ */
+export async function loadThemeFromConfig(): Promise<void> {
+  try {
+    const config = await getAppConfig();
+    const themeName = config.general.theme;
+    if (themeName && themeName !== "phosphor") {
+      await loadTheme(themeName);
+    } else {
+      setCurrentThemeName("phosphor");
+    }
+    // Apply app-level CSS variables from config
+    const iconRadius = config.general.icon_radius;
+    if (iconRadius) {
+      document.documentElement.style.setProperty("--icon-radius", iconRadius);
+    }
+  } catch (err) {
+    console.warn("Failed to load theme from config:", err);
   }
 }
 
@@ -2191,12 +2306,16 @@ function roomMemberToEntry(m: RoomMember): MemberEntry {
   // Use the already-resolved blob URL if available; mxc:// URLs can't be
   // loaded by the browser directly, so fall back to undefined (shows initial).
   const resolvedAvatar = m.avatar_url ? _avatarDataUrl.get(m.avatar_url) : undefined;
+  // Prefer the live-cached presence state from sync events over the initial
+  // member fetch (which always returns null from the backend).
+  const cachedPresence = AppState.getUserPresence(m.user_id);
+  const presence = (m.presence ?? cachedPresence ?? "offline") as "online" | "unavailable" | "offline";
   return {
     id: m.user_id,
     name: m.display_name ?? m.user_id,
     userId: m.user_id,
     powerLevel: m.power_level,
-    presence: m.presence ?? "offline",
+    presence,
     avatarUrl: resolvedAvatar,
   };
 }
@@ -2362,7 +2481,8 @@ export function openQuickReactPicker(eventId: string): void {
   const anchor = timeline.getMessageElementById(eventId);
   quickReactPicker.show(eventId, anchor);
 
-  // Load custom emoji for current room and inject into the picker
+  // Load custom emoji for current room and inject into the picker.
+  // For custom emoji reactions, the reaction key must be the mxc:// URL (MSC2545).
   const roomId = AppState.get("currentRoomId");
   getEmojiPacks(roomId ?? undefined)
     .then((packs) => {
@@ -2371,9 +2491,14 @@ export function openQuickReactPicker(eventId: string): void {
         for (const entry of pack.emojis) {
           if (!entry.usage.includes("emoticon")) continue;
           const mxc = entry.url;
+          // Populate shortcode→mxc map so sendMessage() can build data-mx-emoticon.
+          if (mxc.startsWith("mxc://")) {
+            _shortcodeToMxc.set(entry.shortcode, mxc);
+          }
+          // Use the mxc:// URL as the reaction key (MSC2545 custom emoji reactions).
           const cached = _emojiImageCache.get(mxc);
           if (cached) {
-            custom.push({ key: `:${entry.shortcode}:`, shortcode: entry.shortcode, imageUrl: cached });
+            custom.push({ key: mxc, shortcode: entry.shortcode, imageUrl: cached });
           } else if (mxc.startsWith("mxc://")) {
             // Resolve then update picker once available
             getThumbnail(mxc, 32, 32).then((dl) => {
@@ -2382,13 +2507,13 @@ export function openQuickReactPicker(eventId: string): void {
               // Re-build if picker is still open
               if (quickReactPicker.isVisible()) {
                 quickReactPicker.setCustomEmoji(
-                  custom.map((c) => c.key === `:${entry.shortcode}:` ? { ...c, imageUrl: dataUrl } : c)
+                  custom.map((c) => c.key === mxc ? { ...c, imageUrl: dataUrl } : c)
                 );
               }
             }).catch(() => { /* non-critical */ });
-            custom.push({ key: `:${entry.shortcode}:`, shortcode: entry.shortcode, imageUrl: "" });
+            custom.push({ key: mxc, shortcode: entry.shortcode, imageUrl: "" });
           } else {
-            custom.push({ key: `:${entry.shortcode}:`, shortcode: entry.shortcode, imageUrl: mxc });
+            custom.push({ key: mxc, shortcode: entry.shortcode, imageUrl: mxc });
           }
         }
       }

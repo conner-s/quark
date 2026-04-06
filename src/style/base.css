@@ -148,10 +148,10 @@ body {
 }
 
 .space-strip__icon {
-	width: 36px;
-	height: 36px;
-	object-fit: contain;
-	border-radius: 100%;
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: var(--icon-radius);
 }
 
 .space-strip__divider {
@@ -160,6 +160,37 @@ body {
   background-color: var(--border-color);
   margin: 2px 0;
   flex-shrink: 0;
+}
+
+.space-strip__spacer {
+  flex: 1;
+}
+
+.space-strip__settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--roomlist-muted);
+  user-select: none;
+  flex-shrink: 0;
+  outline: none;
+  transition: color var(--transition-speed), background-color var(--transition-speed);
+  margin-bottom: 4px;
+}
+
+.space-strip__settings-btn:hover {
+  color: var(--accent-primary);
+  background-color: var(--roomlist-active-bg);
+}
+
+.space-strip__settings-btn:focus {
+  box-shadow: 0 0 0 var(--focus-width) var(--focus-color);
+  outline: none;
 }
 
 /* ── Room list panel ─────────────────────────────────────────────────────── */
@@ -1906,6 +1937,16 @@ span.reaction__emoji {
   padding: 4px 10px;
   border-bottom: var(--border-width) solid var(--border-color);
   flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+/* Section header shown above each pack's stickers in the grid */
+.sticker-picker__pack-header {
+  grid-column: 1 / -1;
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  letter-spacing: 0.06em;
+  padding: 6px 4px 2px;
   text-transform: uppercase;
 }
 
