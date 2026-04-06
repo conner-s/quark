@@ -800,7 +800,7 @@ body {
 .member-list__avatar {
   width: 24px;
   height: 24px;
-  border-radius: 50%;
+  border-radius: var(--icon-radius);
   flex-shrink: 0;
   object-fit: cover;
   display: block;
@@ -897,7 +897,7 @@ body {
 .room-header__avatar-fallback {
   width: 32px;
   height: 32px;
-  border-radius: 3px;
+  border-radius: var(--icon-radius);
   flex-shrink: 0;
 }
 
@@ -1132,7 +1132,7 @@ body {
 .message-group__avatar-fallback {
   width: 32px;
   height: 32px;
-  border-radius: 3px;
+  border-radius: var(--icon-radius);
   /* Stick to the viewport top while still inside the group's column.
      top: how far down before sticking kicks in.
      margin-bottom: releases the sticky that many px before the column bottom. */
@@ -3141,7 +3141,7 @@ a:hover {
   width: 64px;
   height: 64px;
   margin: 16px auto 8px;
-  border-radius: 4px;
+  border-radius: var(--icon-radius);
   overflow: hidden;
   display: flex;
   align-items: center;
