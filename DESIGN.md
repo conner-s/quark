@@ -765,4 +765,8 @@ quark/
 - [x] No settings button — gear button added to SpaceStrip bottom, opens SettingsDialog
 - [x] Icon roundedness globally configurable — --icon-radius CSS variable + icon_radius config field; Circle/Rounded/Square picker in General settings tab
 - [x] Select bar doesn't follow theme — fixed as side effect of TOML config now loading correctly on startup
+- [x] Sent messages don't initially render custom emote shortcode until room reloaded — optimistic message now has htmlBody set before appendMessageHidden; _downloadInlineEmoji called immediately after
+- [x] Reacts not updating / raw mxc:// text in react picker — setCustomEmoji inside async thumbnail callbacks now filters to only fully-resolved entries
+- [x] Raw text for some emotes on first react picker open — same fix as above; unresolved entries excluded until imageUrl is ready
+- [x] Room-scope stickers still not showing in sticker picker — emoji.rs pack_usage fallback changed from ["emoticon"] to ["emoticon","sticker"] so packs without explicit usage field are included
 
