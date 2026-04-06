@@ -755,14 +755,14 @@ quark/
 - [x] Emojis in emoji picker are sometimes too large, end up scrolling sideways — added overflow-x: hidden to grid and overflow: hidden + min-width: 0 to cells
 - [x] Emoji categories in react emoji picker not implemented properly — _focusGrid and all navigation keys (h/l/j/k/Tab) now skip hidden buttons so keyboard focus lands on a visible emoji when a category filter is active
 - [x] Links sometimes open inside the app, navigating away from the chat UI — HTML body anchor tags now have href removed and a click handler added that opens via plugin:shell|open instead of letting the WebView follow the link
-- [ ] Multiple/global sticker packs don't load in the sticker picker
-- [ ] User statuses don't always load
-- [ ] toml file seems to be ignored
-- [ ] Custom emotes in reacts just send text.
-- [ ] Sometimes can't load additional messages in timeline
-- [ ] Custom emotes/stickers don't show always
-- [ ] Custom emotes don't render from shortcode or in reacts
-- [ ] No settings button
-- [ ] Icon roundedness globally configurable
-- [ ] Select bar doesn't follow theme
+- [x] Multiple/global sticker packs don't load in the sticker picker — pack section headers added to sticker grid; each pack group renders with a label when pack name changes
+- [x] User statuses don't always load — presence state now cached from live sync events and applied on room switch via updateMemberPresence()
+- [x] toml file seems to be ignored — loadThemeFromConfig() now called on login and session restore, reads theme from config.toml via get_app_config IPC
+- [x] Custom emotes in reacts just send text — reaction key now uses mxc:// URL per MSC2545 spec instead of :shortcode: text
+- [x] Sometimes can't load additional messages in timeline — loadMoreMessages() now retries up to 10 empty pages when all fetched events are non-message types (reactions/state events)
+- [x] Custom emotes/stickers don't show always — shortcode preview no longer sets imageUrl to mxc:// before download; waits for data: URL to resolve
+- [x] Custom emotes don't render from shortcode or in reacts — sendMessage/sendThreadReply now build formatted_body with <img data-mx-emoticon> for custom emoji shortcodes
+- [x] No settings button — gear button added to SpaceStrip bottom, opens SettingsDialog
+- [x] Icon roundedness globally configurable — --icon-radius CSS variable + icon_radius config field; Circle/Rounded/Square picker in General settings tab
+- [x] Select bar doesn't follow theme — fixed as side effect of TOML config now loading correctly on startup
 
