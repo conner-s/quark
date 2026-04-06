@@ -626,6 +626,13 @@ export class SettingsDialog {
         cur.className = "settings-dialog__current";
         cur.textContent = "(current)";
         row.appendChild(cur);
+        // Persist the selected theme to config.toml so it survives relaunch.
+        void getAppConfig().then((cfg) => {
+          const updated = { ...cfg, general: { ...cfg.general, theme: name } };
+          return setAppConfig(updated);
+        }).catch((err) => {
+          console.error("Failed to save theme to config:", err);
+        });
       });
 
       row.appendChild(nameEl);
