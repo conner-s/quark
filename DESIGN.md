@@ -769,4 +769,6 @@ quark/
 - [x] Reacts not updating / raw mxc:// text in react picker — setCustomEmoji inside async thumbnail callbacks now filters to only fully-resolved entries
 - [x] Raw text for some emotes on first react picker open — same fix as above; unresolved entries excluded until imageUrl is ready
 - [x] Room-scope stickers still not showing in sticker picker — emoji.rs pack_usage fallback changed from ["emoticon"] to ["emoticon","sticker"] so packs without explicit usage field are included
+- [x] Theme selection from settings UI resets on relaunch — theme button handler now calls getAppConfig/setAppConfig to persist the selection to config.toml
+- [x] Icon roundness doesn't apply to profile/message avatars — replaced hardcoded border-radius on member-list, room-header, message-group, and profile-dialog avatars with var(--icon-radius)
 
