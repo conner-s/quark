@@ -2509,14 +2509,19 @@ export function openQuickReactPicker(eventId: string): void {
           if (cached) {
             custom.push({ key: mxc, shortcode: entry.shortcode, imageUrl: cached });
           } else if (mxc.startsWith("mxc://")) {
-            // Resolve then update picker once available
+            // Resolve then update picker once available.
+            // Push a placeholder with imageUrl "" so the entry exists in `custom`
+            // (for correct mapping in the .then), but filter it out when calling
+            // setCustomEmoji so the picker never shows raw mxc:// text.
             getThumbnail(mxc, 32, 32).then((dl) => {
               const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
               _emojiImageCache.set(mxc, dataUrl);
-              // Re-build if picker is still open
+              // Re-build if picker is still open, filtering out still-unresolved entries
               if (quickReactPicker.isVisible()) {
                 quickReactPicker.setCustomEmoji(
-                  custom.map((c) => c.key === mxc ? { ...c, imageUrl: dataUrl } : c)
+                  custom
+                    .map((c) => c.key === mxc ? { ...c, imageUrl: dataUrl } : c)
+                    .filter((c) => c.imageUrl)
                 );
               }
             }).catch(() => { /* non-critical */ });
