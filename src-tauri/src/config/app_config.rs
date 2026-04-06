@@ -18,6 +18,9 @@ pub struct GeneralConfig {
     /// Ask for confirmation before redacting a message.
     #[serde(default = "bool_true")]
     pub confirm_redact: bool,
+    /// CSS border-radius for space/room icons (e.g. "50%" for circles, "8px" for rounded squares, "0" for square).
+    #[serde(default = "default_icon_radius")]
+    pub icon_radius: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -110,6 +113,7 @@ pub struct AppConfig {
 // ─── Default impls ────────────────────────────────────────────────────────────
 
 fn default_theme_name() -> String { "phosphor".to_string() }
+fn default_icon_radius() -> String { "50%".to_string() }
 fn bool_true() -> bool { true }
 fn default_timeline_limit() -> u32 { 50 }
 fn default_max_image_width() -> u32 { 600 }
@@ -122,7 +126,7 @@ fn default_autocomplete_min_chars() -> u32 { 2 }
 
 impl Default for GeneralConfig {
     fn default() -> Self {
-        Self { theme: default_theme_name(), notifications: true, confirm_redact: true }
+        Self { theme: default_theme_name(), notifications: true, confirm_redact: true, icon_radius: default_icon_radius() }
     }
 }
 

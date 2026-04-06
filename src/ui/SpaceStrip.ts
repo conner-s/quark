@@ -13,6 +13,7 @@ export class SpaceStrip {
   private _items: SpaceItem[] = [];
   private _activeId: string | null = null;
   private _onSelect: ((id: string) => void) | null = null;
+  private _onSettings: (() => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -28,6 +29,10 @@ export class SpaceStrip {
 
   onSelect(handler: (id: string) => void): void {
     this._onSelect = handler;
+  }
+
+  onSettingsClick(handler: () => void): void {
+    this._onSettings = handler;
   }
 
   setSpaces(items: SpaceItem[]): void {
@@ -123,6 +128,30 @@ export class SpaceStrip {
     }
 
     this._el.appendChild(this._createItem({ id: "__dms__", name: "Direct Messages" }, "✉"));
+
+    // Spacer pushes settings button to the bottom
+    const spacer = document.createElement("div");
+    spacer.className = "space-strip__spacer";
+    spacer.setAttribute("aria-hidden", "true");
+    this._el.appendChild(spacer);
+
+    // Settings button always at the bottom
+    const settingsBtn = document.createElement("div");
+    settingsBtn.className = "space-strip__settings-btn";
+    settingsBtn.setAttribute("role", "button");
+    settingsBtn.setAttribute("tabindex", "0");
+    settingsBtn.setAttribute("aria-label", "Settings");
+    settingsBtn.title = "Settings (?)";
+    settingsBtn.textContent = "⚙";
+    settingsBtn.addEventListener("click", () => this._onSettings?.());
+    settingsBtn.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        this._onSettings?.();
+      }
+    });
+    this._el.appendChild(settingsBtn);
+
     this._updateActive();
   }
 

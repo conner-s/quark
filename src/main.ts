@@ -3,7 +3,7 @@
 
 import { mountApp } from "./ui/App.js";
 import { AppState } from "./app/state.js";
-import { setComponents, login, logout, attemptSessionRestore, selectRoom, selectSpace, refreshRooms } from "./app/actions.js";
+import { setComponents, login, logout, attemptSessionRestore, selectRoom, selectSpace, refreshRooms, openSettings } from "./app/actions.js";
 import { setupKeyboard } from "./app/keyboard.js";
 import { setupPanelNav } from "./app/panels.js";
 import { startSync } from "./app/sync.js";
@@ -83,6 +83,10 @@ components.roomList.onSelect((roomId) => {
 
 components.spaceStrip.onSelect((spaceId) => {
   void selectSpace(spaceId);
+});
+
+components.spaceStrip.onSettingsClick(() => {
+  openSettings();
 });
 
 // ── GIF pause/resume on window focus ─────────────────────────────────────────

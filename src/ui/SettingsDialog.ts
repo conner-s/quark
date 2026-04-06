@@ -292,6 +292,22 @@ export class SettingsDialog {
       (v) => { draft = { ...draft, general: { ...draft.general, confirm_redact: v } }; },
     ));
 
+    section.appendChild(this._makeSectionTitle("Appearance"));
+
+    section.appendChild(this._makeSelectRow(
+      "Icon shape",
+      draft.general.icon_radius ?? "50%",
+      [
+        ["50%", "Circle"],
+        ["8px", "Rounded square"],
+        ["0", "Square"],
+      ],
+      (v) => {
+        draft = { ...draft, general: { ...draft.general, icon_radius: v } };
+        document.documentElement.style.setProperty("--icon-radius", v);
+      },
+    ));
+
     section.appendChild(this._makeSectionTitle("Sync"));
 
     section.appendChild(this._makeCheckbox(
