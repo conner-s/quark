@@ -53,6 +53,9 @@ fn parse_ponies_pack(
         .and_then(|m| m.get("avatar_url"))
         .and_then(|v| v.as_str())
         .map(String::from);
+    // If the pack has no explicit `usage` field, default to both emoticon and
+    // sticker so that packs that omit usage (common in real-world deployments)
+    // are not incorrectly excluded from either picker.
     let pack_usage: Vec<String> = pack_meta
         .and_then(|m| m.get("usage"))
         .and_then(|v| v.as_array())
@@ -61,7 +64,7 @@ fn parse_ponies_pack(
                 .filter_map(|u| u.as_str().map(String::from))
                 .collect()
         })
-        .unwrap_or_else(|| vec!["emoticon".to_string()]);
+        .unwrap_or_else(|| vec!["emoticon".to_string(), "sticker".to_string()]);
 
     let images = value.get("images")?.as_object()?;
 
