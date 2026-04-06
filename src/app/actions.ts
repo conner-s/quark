@@ -732,6 +732,11 @@ export async function sendMessage(body: string): Promise<void> {
   const ownAvatarMxc = ownUserId ? _memberAvatarMxc.get(ownUserId) : undefined;
   const ownAvatarUrl = (ownAvatarMxc && _avatarDataUrl.get(ownAvatarMxc)) ?? undefined;
 
+  // Build the formatted body before constructing the optimistic message so the
+  // inline custom emoji (<img data-mx-emoticon>) are rendered immediately in the
+  // timeline rather than appearing as plain `:shortcode:` text until the sync echo.
+  const formattedBody = _buildFormattedBodyWithEmoji(body);
+
   const optimisticMsg: MessageData = {
     id: `optimistic-${Date.now()}`,
     senderId: ownUserId ?? undefined,
@@ -740,6 +745,7 @@ export async function sendMessage(body: string): Promise<void> {
     isOwn: true,
     timestamp: new Date().toISOString(),
     body,
+    htmlBody: formattedBody,
     type: "text",
     replyTo,
   };
@@ -941,9 +947,12 @@ export async function sendMessage(body: string): Promise<void> {
     }
   }
 
-  // Build a formatted body if the message contains any :shortcode: that
-  // resolves to a known custom emoji mxc:// URL (data-mx-emoticon, MSC2545).
-  const formattedBody = _buildFormattedBodyWithEmoji(body);
+  // Resolve inline emoji in the optimistic message now that it's in the DOM.
+  // This converts the data-mxc attributes set by Timeline into actual image srcs.
+  {
+    const { timeline: tl } = getComponents();
+    _downloadInlineEmoji(tl);
+  }
 
   try {
     const eventId = await ipcSendMessage(roomId, body, formattedBody, replyToEventId ?? undefined);
