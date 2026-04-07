@@ -10,7 +10,7 @@ export interface ThreadMessageData {
   timestamp: string;
   body: string;
   htmlBody?: string;
-  type?: "text" | "image" | "sticker";
+  type?: "text" | "image" | "video" | "sticker";
   mediaUrl?: string;
   mediaAlt?: string;
   reactions?: ReactionGroup[];
@@ -247,6 +247,13 @@ export class ThreadView {
       img.alt = msg.mediaAlt ?? type;
       img.loading = "lazy";
       row.appendChild(img);
+    } else if (type === "video") {
+      const video = document.createElement("video");
+      video.className = "thread-view__message-video";
+      video.controls = true;
+      video.preload = "metadata";
+      if (msg.mediaUrl) video.src = msg.mediaUrl;
+      row.appendChild(video);
     } else {
       const body = document.createElement("div");
       body.className = "thread-view__message-body";

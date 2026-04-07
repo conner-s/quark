@@ -1468,6 +1468,41 @@ body {
   cursor: zoom-in;
 }
 
+/* ── Video messages ──────────────────────────────────────────────────────── */
+
+.message--video {
+  padding-left: 8px;
+}
+
+.message__video {
+  display: block;
+  max-width: 600px;
+  max-height: 400px;
+  width: auto;
+  height: auto;
+  margin-top: 4px;
+  background: #000;
+  border-radius: 2px;
+}
+
+.message__video-caption {
+  font-size: 0.85em;
+  color: var(--color-muted, #888);
+  margin-top: 2px;
+}
+
+.thread-inline__message-video,
+.thread-view__message-video {
+  display: block;
+  max-width: 320px;
+  max-height: 220px;
+  width: auto;
+  height: auto;
+  margin-top: 4px;
+  background: #000;
+  border-radius: 2px;
+}
+
 /* ── Sticker messages ────────────────────────────────────────────────────── */
 
 .message__sticker {

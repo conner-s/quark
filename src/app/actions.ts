@@ -158,6 +158,7 @@ function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[], t
   const msgType = (() => {
     if (e.msg_type === "m.image") return "image" as const;
     if (e.msg_type === "m.sticker") return "sticker" as const;
+    if (e.msg_type === "m.video") return "video" as const;
     return "text" as const;
   })();
 
@@ -1174,7 +1175,7 @@ export async function openThread(eventId: string): Promise<void> {
       timestamp: new Date(e.timestamp).toISOString(),
       body: e.body,
       htmlBody: e.formatted_body ?? undefined,
-      type: (e.msg_type === "m.image" ? "image" : e.msg_type === "m.sticker" ? "sticker" : "text") as "text" | "image" | "sticker",
+      type: (e.msg_type === "m.image" ? "image" : e.msg_type === "m.sticker" ? "sticker" : e.msg_type === "m.video" ? "video" : "text") as "text" | "image" | "sticker" | "video",
       mediaUrl: e.media_url ?? undefined,
       mediaAlt: e.body,
     }));

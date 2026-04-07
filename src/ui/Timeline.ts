@@ -104,8 +104,8 @@ export interface MessageData {
   body: string;
   /** Optional HTML body (rendered into innerHTML safely via a template) */
   htmlBody?: string;
-  /** Message type: "text" | "image" | "sticker" | "system" */
-  type?: "text" | "image" | "sticker" | "system";
+  /** Message type: "text" | "image" | "video" | "sticker" | "system" */
+  type?: "text" | "image" | "video" | "sticker" | "system";
   /** URL for image / sticker messages */
   mediaUrl?: string;
   /** Alt text for image / sticker messages */
@@ -269,6 +269,22 @@ function buildMessageElement(msg: MessageData): HTMLElement {
       img.dataset.gif = "1";
     }
     row.appendChild(img);
+  } else if (type === "video") {
+    row.classList.add("message--video");
+    const video = document.createElement("video");
+    video.className = "message__video";
+    video.controls = true;
+    video.preload = "metadata";
+    if (msg.mediaUrl) video.src = msg.mediaUrl;
+    if (msg.mediaAlt) {
+      const caption = document.createElement("div");
+      caption.className = "message__video-caption";
+      caption.textContent = msg.mediaAlt;
+      row.appendChild(video);
+      row.appendChild(caption);
+    } else {
+      row.appendChild(video);
+    }
   } else if (type === "sticker") {
     const img = document.createElement("img");
     img.className = "message__sticker";
@@ -1126,7 +1142,9 @@ export class Timeline {
     if (!this._inlineThreadEl) return;
     const el = this._inlineThreadEl.querySelector<HTMLElement>(`[data-message-id="${eventId}"]`);
     const img = el?.querySelector<HTMLImageElement>(".thread-inline__message-image, .thread-inline__message-sticker");
-    if (img) img.src = dataUrl;
+    if (img) { img.src = dataUrl; return; }
+    const video = el?.querySelector<HTMLVideoElement>(".thread-inline__message-video");
+    if (video) video.src = dataUrl;
   }
 
   private _setThreadSelected(index: number): void {
@@ -1254,6 +1272,13 @@ export class Timeline {
       img.alt = msg.mediaAlt ?? type;
       img.loading = "lazy";
       row.appendChild(img);
+    } else if (type === "video") {
+      const video = document.createElement("video");
+      video.className = "thread-inline__message-video";
+      video.controls = true;
+      video.preload = "metadata";
+      if (msg.mediaUrl) video.src = msg.mediaUrl;
+      row.appendChild(video);
     } else {
       const body = document.createElement("div");
       body.className = "thread-inline__message-body";
@@ -1487,7 +1512,9 @@ export class Timeline {
     const el = this.getMessageElementById(eventId);
     if (!el) return;
     const img = el.querySelector<HTMLImageElement>(".message__image, .message__sticker");
-    if (img) img.src = dataUrl;
+    if (img) { img.src = dataUrl; return; }
+    const video = el.querySelector<HTMLVideoElement>(".message__video");
+    if (video) video.src = dataUrl;
   }
 
   /**

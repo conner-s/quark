@@ -620,7 +620,7 @@ quark/
 
 #### Media
 - [x] Authenticated media (MSC3916) — matrix-sdk 0.9 routes to `/_matrix/client/v1/media/download/` automatically for Matrix 1.11+ servers; E2EE media now decrypted by passing `EncryptedFile` key material through the `download_media` IPC command
-- [ ] Support video
+- [x] Support video — `m.video` events rendered as `<video controls>` with native playback; media downloaded via the same mxc:// pipeline as images
 
 #### Messaging
 - [x] Private read receipts (`m.read.private`) — both public and private receipts now sent on `mark_room_read`
