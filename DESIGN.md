@@ -771,4 +771,6 @@ quark/
 - [x] Room-scope stickers still not showing in sticker picker — emoji.rs pack_usage fallback changed from ["emoticon"] to ["emoticon","sticker"] so packs without explicit usage field are included
 - [x] Theme selection from settings UI resets on relaunch — theme button handler now calls getAppConfig/setAppConfig to persist the selection to config.toml
 - [x] Icon roundness doesn't apply to profile/message avatars — replaced hardcoded border-radius on member-list, room-header, message-group, and profile-dialog avatars with var(--icon-radius)
+- [x] Video messages show no thumbnail — `media_thumbnail_url` / `media_thumbnail_encryption_info` extracted from `VideoInfo.thumbnail_source` and passed through IPC; `buildVideoAffordance` loads thumbnail async and renders 160×90 preview with ▶ overlay
+- [x] No URL preview cards for messages containing links — `get_url_preview` Tauri command calls homeserver `/_matrix/media/v3/preview_url`; frontend extracts first URL from text messages and appends a styled preview card (title, description, image, site name) async with module-level cache
 
