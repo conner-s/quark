@@ -106,10 +106,14 @@ export interface MessageData {
   htmlBody?: string;
   /** Message type: "text" | "image" | "video" | "sticker" | "system" */
   type?: "text" | "image" | "video" | "sticker" | "system";
-  /** URL for image / sticker messages */
+  /** URL for image / sticker messages (mxc:// for video) */
   mediaUrl?: string;
-  /** Alt text for image / sticker messages */
+  /** Alt text for image / sticker messages; filename for video */
   mediaAlt?: string;
+  /** MIME type for media messages (used for video canPlayType check) */
+  mediaMimeType?: string;
+  /** JSON-serialized EncryptedFile for E2EE video/audio; absent for plain media */
+  mediaEncryptionInfo?: string;
   /** Reply preview */
   replyTo?: ReplyPreviewData;
   /** Reactions */
@@ -169,6 +173,48 @@ function buildTimeSeparator(isoString: string): HTMLElement {
   el.setAttribute("role", "separator");
   const label = formatSeparatorLabel(isoString);
   el.textContent = label;
+  return el;
+}
+
+/**
+ * Build a click-to-play affordance for video messages.
+ * Dispatches `quark:open-video` when activated so actions.ts can decide
+ * whether to play inline (GStreamer available) or open externally.
+ */
+function buildVideoAffordance(
+  mxcUrl?: string,
+  filename?: string,
+  mimeType?: string,
+  encryptionInfo?: string,
+): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "message__video-affordance";
+  el.setAttribute("role", "button");
+  el.setAttribute("tabindex", "0");
+  el.title = "Click to play video";
+
+  const icon = document.createElement("span");
+  icon.className = "message__video-affordance-icon";
+  icon.textContent = "▶";
+  icon.setAttribute("aria-hidden", "true");
+  el.appendChild(icon);
+
+  const label = document.createElement("span");
+  label.className = "message__video-affordance-label";
+  label.textContent = filename || "video";
+  el.appendChild(label);
+
+  const activate = () => {
+    el.dispatchEvent(new CustomEvent("quark:open-video", {
+      bubbles: true,
+      detail: { mxcUrl, filename, mimeType, encryptionInfo },
+    }));
+  };
+  el.addEventListener("click", activate);
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
+  });
+
   return el;
 }
 
@@ -271,20 +317,8 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     row.appendChild(img);
   } else if (type === "video") {
     row.classList.add("message--video");
-    const video = document.createElement("video");
-    video.className = "message__video";
-    video.controls = true;
-    video.preload = "metadata";
-    if (msg.mediaUrl) video.src = msg.mediaUrl;
-    if (msg.mediaAlt) {
-      const caption = document.createElement("div");
-      caption.className = "message__video-caption";
-      caption.textContent = msg.mediaAlt;
-      row.appendChild(video);
-      row.appendChild(caption);
-    } else {
-      row.appendChild(video);
-    }
+    const aff = buildVideoAffordance(msg.mediaUrl, msg.mediaAlt, msg.mediaMimeType, msg.mediaEncryptionInfo);
+    row.appendChild(aff);
   } else if (type === "sticker") {
     const img = document.createElement("img");
     img.className = "message__sticker";
@@ -1142,9 +1176,7 @@ export class Timeline {
     if (!this._inlineThreadEl) return;
     const el = this._inlineThreadEl.querySelector<HTMLElement>(`[data-message-id="${eventId}"]`);
     const img = el?.querySelector<HTMLImageElement>(".thread-inline__message-image, .thread-inline__message-sticker");
-    if (img) { img.src = dataUrl; return; }
-    const video = el?.querySelector<HTMLVideoElement>(".thread-inline__message-video");
-    if (video) video.src = dataUrl;
+    if (img) img.src = dataUrl;
   }
 
   private _setThreadSelected(index: number): void {
@@ -1273,12 +1305,8 @@ export class Timeline {
       img.loading = "lazy";
       row.appendChild(img);
     } else if (type === "video") {
-      const video = document.createElement("video");
-      video.className = "thread-inline__message-video";
-      video.controls = true;
-      video.preload = "metadata";
-      if (msg.mediaUrl) video.src = msg.mediaUrl;
-      row.appendChild(video);
+      const aff = buildVideoAffordance(msg.mediaUrl, msg.mediaAlt, msg.mediaMimeType, msg.mediaEncryptionInfo);
+      row.appendChild(aff);
     } else {
       const body = document.createElement("div");
       body.className = "thread-inline__message-body";
@@ -1512,9 +1540,30 @@ export class Timeline {
     const el = this.getMessageElementById(eventId);
     if (!el) return;
     const img = el.querySelector<HTMLImageElement>(".message__image, .message__sticker");
-    if (img) { img.src = dataUrl; return; }
-    const video = el.querySelector<HTMLVideoElement>(".message__video");
-    if (video) video.src = dataUrl;
+    if (img) img.src = dataUrl;
+  }
+
+  /**
+   * Replace the video affordance for `eventId` with an inline `<video>` player.
+   * Called by actions.ts after confirming GStreamer support and downloading the media.
+   */
+  showInlineVideo(eventId: string, dataUrl: string, mimeType: string): void {
+    const msgEl = this.getMessageElementById(eventId);
+    if (!msgEl) return;
+    const aff = msgEl.querySelector<HTMLElement>(".message__video-affordance");
+    if (!aff) return;
+
+    const video = document.createElement("video");
+    video.className = "message__video";
+    video.controls = true;
+    video.autoplay = true;
+    video.src = dataUrl;
+    if (mimeType) {
+      const src = document.createElement("source");
+      src.type = mimeType;
+      video.appendChild(src);
+    }
+    aff.replaceWith(video);
   }
 
   /**

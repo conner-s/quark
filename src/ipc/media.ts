@@ -87,6 +87,23 @@ export async function sendFile(
 }
 
 /**
+ * Download media to a temp file on disk and return the absolute path.
+ * Use this for video/audio so it can be opened in the system player via
+ * `plugin:shell|open` rather than decoded inline in the WebView.
+ */
+export async function saveMediaToTemp(
+  mxcUrl: string,
+  encryptionInfo?: string | null,
+  filename?: string | null,
+): Promise<string> {
+  return invoke<string>("save_media_to_temp", {
+    mxcUrl,
+    encryptionInfo: encryptionInfo ?? null,
+    filename: filename ?? null,
+  });
+}
+
+/**
  * Upload base64-encoded image bytes and send as an m.image event.
  * Used for clipboard paste.
  */

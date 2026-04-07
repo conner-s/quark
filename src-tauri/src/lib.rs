@@ -78,6 +78,7 @@ pub fn run() {
             commands::send_sticker,
             // Media
             commands::download_media,
+            commands::save_media_to_temp,
             commands::upload_media,
             commands::send_pasted_image,
             commands::send_file,

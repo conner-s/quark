@@ -1,5 +1,6 @@
 // Action dispatcher — connects IPC calls to UI state updates
 
+import { invoke } from "../ipc/invoke.js";
 import { AppState } from "./state.js";
 
 import { saveSession, clearSession } from "./session.js";
@@ -39,6 +40,7 @@ import {
   sendGif as ipcSendGif,
   getThumbnail,
   downloadMedia,
+  saveMediaToTemp,
   sendPastedImage,
   sendFile,
   getEmojiPacks,
@@ -193,6 +195,8 @@ function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[], t
     htmlBody: e.formatted_body ?? undefined,
     type: msgType,
     mediaUrl: e.media_url ?? undefined,
+    mediaMimeType: e.media_mimetype ?? undefined,
+    mediaEncryptionInfo: e.media_encryption_info ?? undefined,
     reactions: e.reactions?.map((r) => ({
       key: r.key,
       count: r.count,
@@ -1178,6 +1182,8 @@ export async function openThread(eventId: string): Promise<void> {
       type: (e.msg_type === "m.image" ? "image" : e.msg_type === "m.sticker" ? "sticker" : e.msg_type === "m.video" ? "video" : "text") as "text" | "image" | "sticker" | "video",
       mediaUrl: e.media_url ?? undefined,
       mediaAlt: e.body,
+      mediaMimeType: e.media_mimetype ?? undefined,
+      mediaEncryptionInfo: e.media_encryption_info ?? undefined,
     }));
     timeline.openInlineThread(eventId, replyData);
     _downloadMessageImages(replies, {
@@ -2378,10 +2384,15 @@ async function _downloadReactionEmoji(
   }
 }
 
-/** Download mxc:// image message content and swap in data URLs once ready. */
+/** Download mxc:// image/sticker content and swap in data URLs once ready.
+ * Video and audio are intentionally excluded — they are loaded on demand
+ * via the `quark:open-video` event to avoid crashing WebKit on systems
+ * without GStreamer. */
 function _downloadMessageImages(events: TimelineEvent[], timeline: { updateMessageMedia(id: string, dataUrl: string): void }): void {
   for (const e of events) {
     if (!e.media_url || !e.media_url.startsWith("mxc://")) continue;
+    // Skip video/audio — handled lazily on click
+    if (e.msg_type === "m.video" || e.msg_type === "m.audio") continue;
     const eventId = e.event_id;
     const mxc = e.media_url;
     downloadMedia(mxc, e.media_encryption_info).then((dl) => {
@@ -2590,6 +2601,48 @@ export function setupMessageActionHandlers(): void {
     if (!userId) return;
     void openProfileForUser(userId);
   });
+
+  document.addEventListener("quark:open-video" as keyof DocumentEventMap, (e: Event) => {
+    const { mxcUrl, filename, mimeType, encryptionInfo } =
+      (e as CustomEvent<{ mxcUrl?: string; filename?: string; mimeType?: string; encryptionInfo?: string }>).detail;
+    if (!mxcUrl) return;
+
+    // Determine the message element so we can call showInlineVideo later.
+    const target = e.target as HTMLElement | null;
+    const msgEl = target?.closest<HTMLElement>("[data-message-id]");
+    const eventId = msgEl?.dataset.messageId;
+
+    // canPlayType on a detached video element is safe — it only queries codec
+    // support, never initialises the GStreamer pipeline.
+    const testVideo = document.createElement("video");
+    const canPlay = mimeType
+      ? testVideo.canPlayType(mimeType) !== ""
+      : testVideo.canPlayType("video/mp4") !== "" || testVideo.canPlayType("video/webm") !== "";
+
+    if (canPlay && eventId) {
+      // Download and play inline
+      const { timeline } = getComponents();
+      void downloadMedia(mxcUrl, encryptionInfo).then((dl) => {
+        const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+        timeline.showInlineVideo(eventId, dataUrl, dl.mime_type);
+      }).catch((err) => {
+        console.error("[video] inline playback download failed:", err);
+        // Fall through to external player
+        void _openVideoExternally(mxcUrl, encryptionInfo, filename);
+      });
+    } else {
+      void _openVideoExternally(mxcUrl, encryptionInfo, filename);
+    }
+  });
+}
+
+async function _openVideoExternally(mxcUrl: string, encryptionInfo?: string, filename?: string): Promise<void> {
+  try {
+    const path = await saveMediaToTemp(mxcUrl, encryptionInfo, filename);
+    await invoke("plugin:shell|open", { path });
+  } catch (err) {
+    showError(`Failed to open video: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /**

@@ -367,6 +367,84 @@ pub async fn upload_media(
     crate::matrix::media::upload_file(&client, &file_path).await
 }
 
+/// Download a video/audio file from the homeserver and write it to a temporary
+/// file on disk, returning the absolute path. The caller (frontend) can then
+/// pass the path to `plugin:shell|open` to open it in the system player.
+///
+/// A stable name derived from the mxc URL hash is used so repeated clicks
+/// on the same message don't create duplicate temp files.
+#[tauri::command]
+pub async fn save_media_to_temp(
+    state: State<'_, MatrixState>,
+    cache_state: State<'_, CacheState>,
+    mxc_url: String,
+    encryption_info: Option<String>,
+    filename: Option<String>,
+) -> Result<String, String> {
+    let client = get_client(&state)?;
+
+    let dl = crate::matrix::media::download_media_with_cache(
+        &client,
+        &mxc_url,
+        false,
+        None,
+        None,
+        Some(&cache_state.0),
+        encryption_info.as_deref(),
+    )
+    .await?;
+
+    // Determine a suitable file extension from the MIME type.
+    let ext = match dl.mime_type.as_str() {
+        "video/mp4" | "video/x-m4v" => "mp4",
+        "video/webm" => "webm",
+        "video/ogg" => "ogv",
+        "video/quicktime" => "mov",
+        "video/x-matroska" => "mkv",
+        "video/x-msvideo" => "avi",
+        "audio/mpeg" => "mp3",
+        "audio/ogg" => "ogg",
+        "audio/wav" => "wav",
+        "audio/flac" => "flac",
+        _ => "bin",
+    };
+
+    // Build a stable temp path: $TMPDIR/quark-<hash>.<ext>
+    // (or use the original filename if provided, sanitised)
+    let tmp_dir = std::env::temp_dir();
+    let basename = filename
+        .as_deref()
+        .filter(|f| !f.is_empty())
+        .map(|f| {
+            // Strip directory components and non-safe chars.
+            let safe: String = std::path::Path::new(f)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("video")
+                .chars()
+                .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
+                .collect();
+            safe
+        })
+        .unwrap_or_else(|| {
+            use sha2::{Digest, Sha256};
+            let mut h = Sha256::new();
+            h.update(mxc_url.as_bytes());
+            format!("quark-media-{:x}.{}", h.finalize(), ext)
+        });
+
+    let dest = tmp_dir.join(&basename);
+
+    // Decode base64 and write to the temp file (overwrite if already present).
+    let bytes = crate::matrix::media::decode_base64(&dl.data_base64)?;
+    std::fs::write(&dest, &bytes)
+        .map_err(|e| format!("Failed to write temp file: {e}"))?;
+
+    dest.to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Temp path is not valid UTF-8".to_string())
+}
+
 /// Upload image data (base64-encoded) and send it as an m.image event.
 /// Used for clipboard paste of images from the frontend.
 #[tauri::command]

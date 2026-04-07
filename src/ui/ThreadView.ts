@@ -13,6 +13,8 @@ export interface ThreadMessageData {
   type?: "text" | "image" | "video" | "sticker";
   mediaUrl?: string;
   mediaAlt?: string;
+  mediaMimeType?: string;
+  mediaEncryptionInfo?: string;
   reactions?: ReactionGroup[];
 }
 
@@ -248,12 +250,31 @@ export class ThreadView {
       img.loading = "lazy";
       row.appendChild(img);
     } else if (type === "video") {
-      const video = document.createElement("video");
-      video.className = "thread-view__message-video";
-      video.controls = true;
-      video.preload = "metadata";
-      if (msg.mediaUrl) video.src = msg.mediaUrl;
-      row.appendChild(video);
+      const aff = document.createElement("div");
+      aff.className = "message__video-affordance";
+      aff.setAttribute("role", "button");
+      aff.setAttribute("tabindex", "0");
+      aff.title = "Click to play video";
+      const icon = document.createElement("span");
+      icon.className = "message__video-affordance-icon";
+      icon.textContent = "▶";
+      icon.setAttribute("aria-hidden", "true");
+      aff.appendChild(icon);
+      const label = document.createElement("span");
+      label.className = "message__video-affordance-label";
+      label.textContent = msg.mediaAlt || "video";
+      aff.appendChild(label);
+      const activate = () => {
+        aff.dispatchEvent(new CustomEvent("quark:open-video", {
+          bubbles: true,
+          detail: { mxcUrl: msg.mediaUrl, filename: msg.mediaAlt, mimeType: msg.mediaMimeType, encryptionInfo: msg.mediaEncryptionInfo },
+        }));
+      };
+      aff.addEventListener("click", activate);
+      aff.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
+      });
+      row.appendChild(aff);
     } else {
       const body = document.createElement("div");
       body.className = "thread-view__message-body";

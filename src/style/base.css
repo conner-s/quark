@@ -1474,28 +1474,48 @@ body {
   padding-left: 8px;
 }
 
+/* Click-to-play affordance (shown before the user opens the video) */
+.message__video-affordance {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border, #333);
+  border-radius: 2px;
+  cursor: pointer;
+  user-select: none;
+  max-width: 400px;
+  color: var(--color-fg, #ccc);
+  background: var(--color-bg-alt, rgba(255,255,255,0.03));
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.message__video-affordance:hover,
+.message__video-affordance:focus-visible {
+  border-color: var(--color-accent, #00ff41);
+  color: var(--color-accent, #00ff41);
+  outline: none;
+}
+
+.message__video-affordance-icon {
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.message__video-affordance-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}
+
+/* Inline <video> element shown after GStreamer-capable playback begins */
 .message__video {
   display: block;
   max-width: 600px;
   max-height: 400px;
-  width: auto;
-  height: auto;
-  margin-top: 4px;
-  background: #000;
-  border-radius: 2px;
-}
-
-.message__video-caption {
-  font-size: 0.85em;
-  color: var(--color-muted, #888);
-  margin-top: 2px;
-}
-
-.thread-inline__message-video,
-.thread-view__message-video {
-  display: block;
-  max-width: 320px;
-  max-height: 220px;
   width: auto;
   height: auto;
   margin-top: 4px;
