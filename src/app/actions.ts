@@ -1,6 +1,5 @@
 // Action dispatcher — connects IPC calls to UI state updates
 
-import { invoke } from "../ipc/invoke.js";
 import { AppState } from "./state.js";
 
 import { saveSession, clearSession } from "./session.js";
@@ -41,6 +40,7 @@ import {
   getThumbnail,
   downloadMedia,
   saveMediaToTemp,
+  openMediaExternally,
   sendPastedImage,
   sendFile,
   getEmojiPacks,
@@ -2638,8 +2638,7 @@ export function setupMessageActionHandlers(): void {
 
 async function _openVideoExternally(mxcUrl: string, encryptionInfo?: string, filename?: string): Promise<void> {
   try {
-    const path = await saveMediaToTemp(mxcUrl, encryptionInfo, filename);
-    await invoke("plugin:shell|open", { path });
+    await openMediaExternally(mxcUrl, encryptionInfo, filename);
   } catch (err) {
     showError(`Failed to open video: ${err instanceof Error ? err.message : String(err)}`);
   }

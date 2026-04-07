@@ -445,6 +445,97 @@ pub async fn save_media_to_temp(
         .ok_or_else(|| "Temp path is not valid UTF-8".to_string())
 }
 
+/// Download a video/audio file to a temp path and open it in the system's
+/// default media player. Uses xdg-open (Linux), open (macOS), or start
+/// (Windows) directly, bypassing the shell-plugin URL scope restrictions.
+#[tauri::command]
+pub async fn open_media_externally(
+    state: State<'_, MatrixState>,
+    cache_state: State<'_, CacheState>,
+    mxc_url: String,
+    encryption_info: Option<String>,
+    filename: Option<String>,
+) -> Result<(), String> {
+    // Re-use the download+write logic from save_media_to_temp.
+    // We inline the call rather than calling the command directly because
+    // Tauri commands can't invoke other commands; both share the same State.
+    let path = {
+        let client = get_client(&state)?;
+        let dl = crate::matrix::media::download_media_with_cache(
+            &client,
+            &mxc_url,
+            false,
+            None,
+            None,
+            Some(&cache_state.0),
+            encryption_info.as_deref(),
+        )
+        .await?;
+
+        let ext = match dl.mime_type.as_str() {
+            "video/mp4" | "video/x-m4v" => "mp4",
+            "video/webm" => "webm",
+            "video/ogg" => "ogv",
+            "video/quicktime" => "mov",
+            "video/x-matroska" => "mkv",
+            "video/x-msvideo" => "avi",
+            "audio/mpeg" => "mp3",
+            "audio/ogg" => "ogg",
+            "audio/wav" => "wav",
+            "audio/flac" => "flac",
+            _ => "bin",
+        };
+
+        let tmp_dir = std::env::temp_dir();
+        let basename = filename
+            .as_deref()
+            .filter(|f| !f.is_empty())
+            .map(|f| {
+                let safe: String = std::path::Path::new(f)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("video")
+                    .chars()
+                    .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
+                    .collect();
+                safe
+            })
+            .unwrap_or_else(|| {
+                use sha2::{Digest, Sha256};
+                let mut h = Sha256::new();
+                h.update(mxc_url.as_bytes());
+                format!("quark-media-{:x}.{}", h.finalize(), ext)
+            });
+
+        let dest = tmp_dir.join(&basename);
+        let bytes = crate::matrix::media::decode_base64(&dl.data_base64)?;
+        std::fs::write(&dest, &bytes)
+            .map_err(|e| format!("Failed to write temp file: {e}"))?;
+        dest
+    };
+
+    // Open with the platform default handler.
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open")
+        .arg(&path)
+        .spawn()
+        .map_err(|e| format!("xdg-open failed: {e}"))?;
+
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg(&path)
+        .spawn()
+        .map_err(|e| format!("open failed: {e}"))?;
+
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("explorer")
+        .arg(&path)
+        .spawn()
+        .map_err(|e| format!("explorer failed: {e}"))?;
+
+    Ok(())
+}
+
 /// Upload image data (base64-encoded) and send it as an m.image event.
 /// Used for clipboard paste of images from the frontend.
 #[tauri::command]

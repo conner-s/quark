@@ -88,8 +88,6 @@ export async function sendFile(
 
 /**
  * Download media to a temp file on disk and return the absolute path.
- * Use this for video/audio so it can be opened in the system player via
- * `plugin:shell|open` rather than decoded inline in the WebView.
  */
 export async function saveMediaToTemp(
   mxcUrl: string,
@@ -97,6 +95,23 @@ export async function saveMediaToTemp(
   filename?: string | null,
 ): Promise<string> {
   return invoke<string>("save_media_to_temp", {
+    mxcUrl,
+    encryptionInfo: encryptionInfo ?? null,
+    filename: filename ?? null,
+  });
+}
+
+/**
+ * Download a video/audio file and open it in the system's default media player
+ * (xdg-open on Linux, open on macOS). Uses a direct process spawn rather than
+ * plugin:shell|open, which only handles http/https URLs in Tauri's scope.
+ */
+export async function openMediaExternally(
+  mxcUrl: string,
+  encryptionInfo?: string | null,
+  filename?: string | null,
+): Promise<void> {
+  return invoke<void>("open_media_externally", {
     mxcUrl,
     encryptionInfo: encryptionInfo ?? null,
     filename: filename ?? null,

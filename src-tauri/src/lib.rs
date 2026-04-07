@@ -79,6 +79,7 @@ pub fn run() {
             // Media
             commands::download_media,
             commands::save_media_to_temp,
+            commands::open_media_externally,
             commands::upload_media,
             commands::send_pasted_image,
             commands::send_file,

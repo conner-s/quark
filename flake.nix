@@ -40,6 +40,15 @@
           libnotify
           dbus
           fuse
+
+          # GStreamer — required by WebKitGTK for inline video/audio playback
+          gst_all_1.gstreamer
+          gst_all_1.gst-plugins-base   # appsink, audioconvert, videoscale
+          gst_all_1.gst-plugins-good   # autoaudiosink, VP8/VP9
+          gst_all_1.gst-libav          # H.264/H.265/AAC via FFmpeg
+
+          # xdg-utils — lets the app open files in the system default player
+          xdg-utils
         ];
 
         # Minimal appimagetool replacement using nixpkgs mksquashfs.
@@ -92,6 +101,10 @@
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH"
             export GIO_MODULE_DIR="${pkgs.glib-networking}/lib/gio/modules"
             export WEBKIT_DISABLE_COMPOSITING_MODE=1
+            # GStreamer plugin paths — WebKitGTK won't find them on NixOS without this
+            export GST_PLUGIN_SYSTEM_PATH="${pkgs.lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" (with pkgs.gst_all_1; [
+              gstreamer gst-plugins-base gst-plugins-good gst-libav
+            ])}"
             # Override the bundled appimagetool (NixOS-incompatible ELF interpreter)
             # with our mksquashfs-based wrapper. Also tell linuxdeploy itself to
             # extract-and-run rather than mount via FUSE.

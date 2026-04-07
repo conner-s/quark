@@ -380,8 +380,10 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     case "unmute_room":
       return null;
     case "save_media_to_temp":
-      // In mock mode there is no real file system; return a fake path.
       return `/tmp/quark-mock-video.mp4`;
+    case "open_media_externally":
+      console.log("[mock] open_media_externally", args);
+      return null;
 
     case "download_media": {
       // Return a placeholder SVG so emoji/sticker previews render in mock mode.
