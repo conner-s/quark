@@ -181,6 +181,7 @@ build:flatpak:
         flatpak flatpak-builder
         ca-certificates curl
         nodejs npm
+        elfutils
     - npm install -g pnpm
     # Restore cached runtimes into the system Flatpak store
     - |
