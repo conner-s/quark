@@ -197,8 +197,7 @@ build:flatpak:
     - cp -a /var/lib/flatpak/. .flatpak-runtime-cache/
     - pnpm install --frozen-lockfile
   script:
-    # --disable-sandbox: bubblewrap inside Docker requires this even with privileged runner
-    - flatpak-builder --force-clean --disable-sandbox --repo=flatpak-repo flatpak-build flatpak/zone.derg.quark.yml
+    - flatpak-builder --force-clean --repo=flatpak-repo flatpak-build flatpak/zone.derg.quark.yml
     - flatpak build-bundle flatpak-repo quark.flatpak zone.derg.quark
   artifacts:
     name: "quark-flatpak-$CI_COMMIT_SHORT_SHA"
