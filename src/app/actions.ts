@@ -2633,19 +2633,26 @@ export function setupMessageActionHandlers(): void {
       ? testVideo.canPlayType(mimeType) !== ""
       : testVideo.canPlayType("video/mp4") !== "" || testVideo.canPlayType("video/webm") !== "";
 
+    // Mark the affordance as loading so CSS can show a progress animation.
+    const affordanceEl = (e.target as HTMLElement | null)?.closest<HTMLElement>(".message__video-affordance");
+    affordanceEl?.classList.add("message__video-affordance--loading");
+    const stopLoading = () => affordanceEl?.classList.remove("message__video-affordance--loading");
+
     if (canPlay && eventId) {
       // Download and play inline
       const { timeline } = getComponents();
       void downloadMedia(mxcUrl, encryptionInfo).then((dl) => {
+        stopLoading();
         const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
         timeline.showInlineVideo(eventId, dataUrl, dl.mime_type);
       }).catch((err) => {
+        stopLoading();
         console.error("[video] inline playback download failed:", err);
         // Fall through to external player
         void _openVideoExternally(mxcUrl, encryptionInfo, filename);
       });
     } else {
-      void _openVideoExternally(mxcUrl, encryptionInfo, filename);
+      void _openVideoExternally(mxcUrl, encryptionInfo, filename).finally(stopLoading);
     }
   });
 }

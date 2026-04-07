@@ -638,7 +638,8 @@ pub struct UrlPreview {
 }
 
 /// Fetch URL preview metadata from the homeserver (MSC or /_matrix/media/v3/preview_url).
-/// Returns None if the homeserver returns no data or the URL has no preview.
+/// Falls back to a direct HTTP GET + OG-tag extraction if the homeserver API fails.
+/// Returns None if neither source yields usable metadata.
 #[tauri::command]
 pub async fn get_url_preview(
     state: State<'_, MatrixState>,
@@ -646,35 +647,118 @@ pub async fn get_url_preview(
 ) -> Result<Option<UrlPreview>, String> {
     let client = get_client(&state)?;
 
+    // ── 1. Try the Matrix homeserver URL-preview API ──────────────────────
     #[allow(deprecated)]
-    use matrix_sdk::ruma::api::client::media::get_media_preview::v3::Request as PreviewRequest;
-
-    #[allow(deprecated)]
-    let request = PreviewRequest::new(url);
-
-    #[allow(deprecated)]
-    let response = client
-        .send(request, None)
-        .await
-        .map_err(|e| format!("URL preview request failed: {e}"))?;
-
-    let Some(data) = response.data else {
-        return Ok(None);
+    let hs_result = {
+        use matrix_sdk::ruma::api::client::media::get_media_preview::v3::Request as PreviewRequest;
+        #[allow(deprecated)]
+        let request = PreviewRequest::new(url.clone());
+        #[allow(deprecated)]
+        client.send(request, None).await
     };
 
-    let value: serde_json::Value = serde_json::from_str(data.get())
-        .map_err(|e| format!("Failed to parse preview JSON: {e}"))?;
+    if let Ok(response) = hs_result {
+        if let Some(data) = response.data {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(data.get()) {
+                let title = value.get("og:title").and_then(|v| v.as_str()).map(str::to_string);
+                let description = value.get("og:description").and_then(|v| v.as_str()).map(str::to_string);
+                let image_url = value.get("og:image").and_then(|v| v.as_str()).map(str::to_string);
+                let site_name = value.get("og:site_name").and_then(|v| v.as_str()).map(str::to_string);
 
-    let title = value.get("og:title").and_then(|v| v.as_str()).map(str::to_string);
-    let description = value.get("og:description").and_then(|v| v.as_str()).map(str::to_string);
-    let image_url = value.get("og:image").and_then(|v| v.as_str()).map(str::to_string);
-    let site_name = value.get("og:site_name").and_then(|v| v.as_str()).map(str::to_string);
+                if title.is_some() || description.is_some() || image_url.is_some() {
+                    return Ok(Some(UrlPreview { title, description, image_url, site_name }));
+                }
+            }
+        }
+    }
+
+    // ── 2. Direct HTTP fallback: fetch the page and extract OG tags ───────
+    let http = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (compatible; Quark Matrix Client)")
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let resp = http.get(&url).send().await
+        .map_err(|e| format!("URL fetch failed: {e}"))?;
+
+    // Only parse HTML responses
+    let content_type = resp.headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    if !content_type.contains("text/html") {
+        return Ok(None);
+    }
+
+    // Read up to 64 KB — OG tags are always in <head>
+    let bytes = resp.bytes().await
+        .map_err(|e| format!("URL read failed: {e}"))?;
+    let html = String::from_utf8_lossy(&bytes[..bytes.len().min(65536)]).into_owned();
+
+    let title = extract_og_tag(&html, "og:title")
+        .or_else(|| extract_html_title(&html));
+    let description = extract_og_tag(&html, "og:description");
+    let image_url = extract_og_tag(&html, "og:image");
+    let site_name = extract_og_tag(&html, "og:site_name");
 
     if title.is_none() && description.is_none() && image_url.is_none() {
         return Ok(None);
     }
 
     Ok(Some(UrlPreview { title, description, image_url, site_name }))
+}
+
+/// Extract a `<meta property="prop" content="...">` value from HTML.
+/// Handles both attribute orderings.
+fn extract_og_tag(html: &str, property: &str) -> Option<String> {
+    let html_lower = html.to_ascii_lowercase();
+    let needle = format!("property=\"{}\"", property.to_ascii_lowercase());
+    let mut search_from = 0;
+
+    loop {
+        let prop_pos = html_lower[search_from..].find(&needle)? + search_from;
+
+        // Walk back to find the opening <meta
+        let tag_start = html_lower[..prop_pos].rfind("<meta")?;
+        // Walk forward to find the closing >
+        let tag_end = html_lower[prop_pos..].find('>').map(|i| i + prop_pos + 1)
+            .unwrap_or(html.len());
+
+        let tag = &html[tag_start..tag_end];
+        let tag_lower = &html_lower[tag_start..tag_end];
+
+        if let Some(c) = tag_lower.find("content=\"") {
+            let val_start = tag_start + c + 9;
+            if let Some(val_len) = html[val_start..].find('"') {
+                return Some(decode_html_entities(&html[val_start..val_start + val_len]));
+            }
+        }
+
+        search_from = prop_pos + 1;
+    }
+}
+
+/// Extract the `<title>` text as a last-resort title.
+fn extract_html_title(html: &str) -> Option<String> {
+    let lower = html.to_ascii_lowercase();
+    let start = lower.find("<title>")? + 7;
+    let end = lower[start..].find("</title>").map(|i| i + start)?;
+    let raw = html[start..end].trim();
+    if raw.is_empty() { None } else { Some(decode_html_entities(raw)) }
+}
+
+/// Decode the most common HTML entities in attribute values.
+fn decode_html_entities(s: &str) -> String {
+    s.replace("&amp;", "&")
+     .replace("&lt;", "<")
+     .replace("&gt;", ">")
+     .replace("&quot;", "\"")
+     .replace("&#39;", "'")
+     .replace("&apos;", "'")
+     .replace("&nbsp;", " ")
 }
 
 // ─── Crypto Commands ──────────────────────────────────────────────────────────

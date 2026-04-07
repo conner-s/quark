@@ -136,7 +136,10 @@ function attachUrlPreview(url: string, container: HTMLElement): void {
       _urlPreviewCache.set(url, data);
       container.appendChild(buildUrlPreviewCard(data));
     })
-    .catch(() => { _urlPreviewCache.set(url, null); });
+    .catch((err) => {
+      console.warn("[url-preview] failed for", url, err);
+      _urlPreviewCache.set(url, null);
+    });
 }
 
 // ── Avatar generation ─────────────────────────────────────────────────────────

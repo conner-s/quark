@@ -1501,6 +1501,35 @@ body {
   outline: none;
 }
 
+/* Loading state: animated progress sweep across the background */
+.message__video-affordance--loading {
+  position: relative;
+  overflow: hidden;
+  pointer-events: none;
+  border-color: var(--color-accent, #00ff41);
+  color: var(--color-accent, #00ff41);
+}
+
+.message__video-affordance--loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-accent, #00ff41) 50%,
+    transparent 100%
+  );
+  opacity: 0.15;
+  animation: video-load-sweep 1.2s linear infinite;
+  transform: translateX(-100%);
+}
+
+@keyframes video-load-sweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(200%); }
+}
+
 .message__video-affordance-icon {
   font-size: 0.9em;
   opacity: 0.8;
