@@ -283,6 +283,7 @@ export class Input {
   setVimMode(enabled: boolean): void {
     this._vimMode = enabled;
     this._modeEl.style.display = enabled ? "" : "none";
+    this._inputBarEl.classList.toggle("input-bar--no-vim", !enabled);
   }
 
   setMode(mode: Mode): void {

@@ -2306,6 +2306,13 @@ span.reaction__emoji {
   transition: border-color var(--transition-speed), box-shadow var(--transition-speed), border-radius var(--transition-speed);
 }
 
+/* When vim mode is off the mode indicator is hidden — round the left side and
+   add padding so the compose box keeps the same visual weight and animations. */
+.input-bar--no-vim .input-bar__compose-box {
+  border-radius: 8px;
+  margin-left: 4px;
+}
+
 .input-bar__compose-box:focus-within {
   border-color: color-mix(in srgb, var(--accent-primary) 55%, var(--border-color));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 12%, transparent);

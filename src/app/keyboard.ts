@@ -443,6 +443,8 @@ export function setupKeyboard(components: AppComponents): void {
   // Load vim mode preference from persisted config
   void getAppConfig().then((cfg) => {
     AppState.set("vimMode", cfg.general.vim_mode);
+    // Apply immediately — the state listener won't fire if the value matches the default
+    input.setVimMode(cfg.general.vim_mode);
     if (!cfg.general.vim_mode) {
       modeManager.transition(Mode.Insert);
       input.focus();
