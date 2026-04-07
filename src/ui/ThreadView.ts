@@ -10,7 +10,7 @@ export interface ThreadMessageData {
   timestamp: string;
   body: string;
   htmlBody?: string;
-  type?: "text" | "image" | "video" | "sticker";
+  type?: "text" | "image" | "video" | "sticker" | "file";
   mediaUrl?: string;
   mediaAlt?: string;
   mediaMimeType?: string;

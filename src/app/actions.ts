@@ -161,6 +161,7 @@ function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[], t
     if (e.msg_type === "m.image") return "image" as const;
     if (e.msg_type === "m.sticker") return "sticker" as const;
     if (e.msg_type === "m.video") return "video" as const;
+    if (e.msg_type === "m.file") return "file" as const;
     return "text" as const;
   })();
 
@@ -1179,7 +1180,7 @@ export async function openThread(eventId: string): Promise<void> {
       timestamp: new Date(e.timestamp).toISOString(),
       body: e.body,
       htmlBody: e.formatted_body ?? undefined,
-      type: (e.msg_type === "m.image" ? "image" : e.msg_type === "m.sticker" ? "sticker" : e.msg_type === "m.video" ? "video" : "text") as "text" | "image" | "sticker" | "video",
+      type: (e.msg_type === "m.image" ? "image" : e.msg_type === "m.sticker" ? "sticker" : e.msg_type === "m.video" ? "video" : e.msg_type === "m.file" ? "file" : "text") as "text" | "image" | "sticker" | "video" | "file",
       mediaUrl: e.media_url ?? undefined,
       mediaAlt: e.body,
       mediaMimeType: e.media_mimetype ?? undefined,
@@ -2600,6 +2601,15 @@ export function setupMessageActionHandlers(): void {
     const { userId } = (e as CustomEvent<{ userId: string }>).detail;
     if (!userId) return;
     void openProfileForUser(userId);
+  });
+
+  document.addEventListener("quark:open-file" as keyof DocumentEventMap, (e: Event) => {
+    const { mxcUrl, filename, encryptionInfo } =
+      (e as CustomEvent<{ mxcUrl?: string; filename?: string; encryptionInfo?: string }>).detail;
+    if (!mxcUrl) return;
+    void openMediaExternally(mxcUrl, encryptionInfo, filename).catch((err) => {
+      console.error("[file] open failed:", err);
+    });
   });
 
   document.addEventListener("quark:open-video" as keyof DocumentEventMap, (e: Event) => {

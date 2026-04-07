@@ -7,6 +7,7 @@ use matrix_sdk::{
                 MessageType, OriginalSyncRoomMessageEvent, Relation,
                 RoomMessageEventContent, TextMessageEventContent,
             },
+            sticker::StickerEventContent,
             AnySyncMessageLikeEvent, AnySyncTimelineEvent, SyncMessageLikeEvent,
         },
         EventId, OwnedEventId, RoomId, TransactionId, UInt,
@@ -108,6 +109,11 @@ pub async fn get_timeline(
                     events.push(convert_sync_room_message(ev));
                 }
                 AnySyncTimelineEvent::MessageLike(
+                    AnySyncMessageLikeEvent::Sticker(SyncMessageLikeEvent::Original(ev)),
+                ) => {
+                    events.push(convert_sync_sticker(ev));
+                }
+                AnySyncTimelineEvent::MessageLike(
                     AnySyncMessageLikeEvent::Reaction(SyncMessageLikeEvent::Original(ev)),
                 ) => {
                     let target = ev.content.relates_to.event_id.to_string();
@@ -165,7 +171,43 @@ fn convert_sync_message_event(event: AnySyncMessageLikeEvent) -> Option<Timeline
         AnySyncMessageLikeEvent::RoomMessage(SyncMessageLikeEvent::Original(ev)) => {
             Some(convert_sync_room_message(ev))
         }
+        AnySyncMessageLikeEvent::Sticker(SyncMessageLikeEvent::Original(ev)) => {
+            Some(convert_sync_sticker(ev))
+        }
         _ => None,
+    }
+}
+
+fn convert_sync_sticker(ev: matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent<StickerEventContent>) -> TimelineEvent {
+    use matrix_sdk::ruma::events::sticker::StickerMediaSource;
+    let timestamp: u64 = ev.origin_server_ts.get().into();
+    let sender = ev.sender.to_string();
+    let event_id = ev.event_id.to_string();
+    let (url, enc) = match &ev.content.source {
+        StickerMediaSource::Plain(uri) => (Some(uri.to_string()), None),
+        StickerMediaSource::Encrypted(file) => (Some(file.url.to_string()), serde_json::to_string(file.as_ref()).ok()),
+        _ => (None, None),
+    };
+    let mime = ev.content.info.mimetype.clone();
+    let w: Option<u64> = ev.content.info.width.map(|v| v.into());
+    let h: Option<u64> = ev.content.info.height.map(|v| v.into());
+    TimelineEvent {
+        event_id,
+        sender,
+        body: ev.content.body.clone(),
+        formatted_body: None,
+        timestamp,
+        msg_type: "m.sticker".to_string(),
+        is_edit: false,
+        relates_to_event_id: None,
+        in_reply_to: None,
+        thread_root: None,
+        media_url: url,
+        media_mimetype: mime,
+        media_width: w,
+        media_height: h,
+        media_encryption_info: enc,
+        reactions: vec![],
     }
 }
 

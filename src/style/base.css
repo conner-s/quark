@@ -103,6 +103,7 @@ body {
   overflow-x: hidden;
   background-color: var(--bg);
   border-right: var(--border-width) solid var(--border-color);
+  isolation: isolate;
 }
 
 .space-strip__item {
@@ -203,6 +204,7 @@ body {
   background-color: var(--bg);
   border-right: var(--border-width) solid var(--border-color);
   position: relative;
+  isolation: isolate;
 }
 
 .room-list__header {
@@ -1509,6 +1511,50 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 300px;
+}
+
+/* ── File attachment affordance ─────────────────────────────────────────── */
+
+.message__file-affordance {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border, #333);
+  border-radius: 2px;
+  cursor: pointer;
+  user-select: none;
+  max-width: 400px;
+  color: var(--color-fg, #ccc);
+  background: var(--color-bg-alt, rgba(255,255,255,0.03));
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.message__file-affordance:hover,
+.message__file-affordance:focus-visible {
+  border-color: var(--color-accent, #00ff41);
+  color: var(--color-accent, #00ff41);
+  outline: none;
+}
+
+.message__file-affordance-icon {
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.message__file-affordance-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+.message__file-affordance-type {
+  font-size: calc(var(--font-size) - 3px);
+  opacity: 0.6;
+  flex-shrink: 0;
 }
 
 /* Inline <video> element shown after GStreamer-capable playback begins */
@@ -3715,6 +3761,13 @@ a:hover {
 
 .settings-dialog__select {
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 22px;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3e%3cpath fill='%23888888' d='M0 0l5 6 5-6z'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 8px 5px;
 }
 
 .settings-dialog__select option {

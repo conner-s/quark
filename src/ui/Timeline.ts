@@ -104,8 +104,8 @@ export interface MessageData {
   body: string;
   /** Optional HTML body (rendered into innerHTML safely via a template) */
   htmlBody?: string;
-  /** Message type: "text" | "image" | "video" | "sticker" | "system" */
-  type?: "text" | "image" | "video" | "sticker" | "system";
+  /** Message type: "text" | "image" | "video" | "sticker" | "file" | "system" */
+  type?: "text" | "image" | "video" | "sticker" | "file" | "system";
   /** URL for image / sticker messages (mxc:// for video) */
   mediaUrl?: string;
   /** Alt text for image / sticker messages; filename for video */
@@ -218,6 +218,50 @@ function buildVideoAffordance(
   return el;
 }
 
+function buildFileAffordance(
+  mxcUrl?: string,
+  filename?: string,
+  mimeType?: string,
+  encryptionInfo?: string,
+): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "message__file-affordance";
+  el.setAttribute("role", "button");
+  el.setAttribute("tabindex", "0");
+  el.title = "Click to open file";
+
+  const icon = document.createElement("span");
+  icon.className = "message__file-affordance-icon";
+  icon.textContent = "📎";
+  icon.setAttribute("aria-hidden", "true");
+  el.appendChild(icon);
+
+  const label = document.createElement("span");
+  label.className = "message__file-affordance-label";
+  label.textContent = filename || "file";
+  el.appendChild(label);
+
+  if (mimeType) {
+    const type = document.createElement("span");
+    type.className = "message__file-affordance-type";
+    type.textContent = mimeType.split("/")[1]?.toUpperCase() ?? mimeType;
+    el.appendChild(type);
+  }
+
+  const activate = () => {
+    el.dispatchEvent(new CustomEvent("quark:open-file", {
+      bubbles: true,
+      detail: { mxcUrl, filename, mimeType, encryptionInfo },
+    }));
+  };
+  el.addEventListener("click", activate);
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
+  });
+
+  return el;
+}
+
 /**
  * Build the inner content of a single message (body, media, reactions) —
  * does NOT include the sender/timestamp header (that lives on the group).
@@ -311,7 +355,7 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     img.src = msg.mediaUrl ?? "";
     img.alt = msg.mediaAlt ?? "image";
     // Mark GIFs so the focus/blur handler can pause/resume animation
-    if ((msg.mediaUrl ?? "").match(/\.gif($|\?)/i)) {
+    if ((msg.mediaUrl ?? "").match(/\.gif($|\?)/i) || msg.mediaMimeType === "image/gif") {
       img.dataset.gif = "1";
     }
     row.appendChild(img);
@@ -325,6 +369,9 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     img.src = msg.mediaUrl ?? "";
     img.alt = msg.mediaAlt ?? "sticker";
     row.appendChild(img);
+  } else if (type === "file") {
+    const aff = buildFileAffordance(msg.mediaUrl, msg.body, msg.mediaMimeType, msg.mediaEncryptionInfo);
+    row.appendChild(aff);
   } else {
     // Text / system
     const body = document.createElement("div");

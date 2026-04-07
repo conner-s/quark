@@ -383,6 +383,19 @@ function handleInsertKeydown(e: KeyboardEvent, components: AppComponents): void 
   }
 
   // Escape already handled globally
+
+  // If focus escaped the compose box (e.g. user clicked elsewhere), redirect
+  // printable characters back to it so typing always works in Insert mode.
+  const field = input.getFieldElement();
+  if (document.activeElement !== field && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    e.preventDefault();
+    input.focus();
+    const start = field.selectionStart ?? field.value.length;
+    const end = field.selectionEnd ?? field.value.length;
+    field.value = field.value.slice(0, start) + e.key + field.value.slice(end);
+    field.selectionStart = field.selectionEnd = start + 1;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  }
 }
 
 // ── User rc application ───────────────────────────────────────────────────────

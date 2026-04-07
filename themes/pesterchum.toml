@@ -1,0 +1,65 @@
+[meta]
+name = "Pesterchum"
+author = "quark"
+version = "1.0"
+
+[colors]
+background = "#1a1a1a"
+foreground = "#c0c0c0"
+cursor = "#4f9fcf"
+selection_bg = "#1a2a3a"
+selection_fg = "#4f9fcf"
+border = "#3a3a3a"
+
+[colors.accent]
+primary = "#4f9fcf"
+secondary = "#c84b5a"
+error = "#c84b5a"
+warning = "#e8a838"
+success = "#2b9d19"
+link = "#4f9fcf"
+
+[colors.messages]
+own = "#4f9fcf"
+other = "#c0c0c0"
+system = "#666666"
+timestamp = "#555555"
+mention_bg = "#1a1a2a"
+mention_fg = "#e8a838"
+reply_border = "#555555"
+thread_indicator = "#4f9fcf"
+
+[colors.roomlist]
+active_bg = "#242424"
+active_fg = "#4f9fcf"
+unread = "#ffffff"
+mention_badge = "#c84b5a"
+muted = "#555555"
+
+[colors.reactions]
+background = "#242424"
+border = "#3a3a3a"
+own_bg = "#1a2a3a"
+count = "#888888"
+
+[typography]
+font_family = "Courier New, Courier, monospace"
+font_size = 13
+line_height = 1.4
+message_spacing = 3
+
+[borders]
+style = "square"
+room_list_width = "22%"
+
+[emoji]
+size = 32
+sticker_max_size = 256
+reaction_size = 20
+
+[prompt]
+symbol = "??"
+normal_indicator = "NOR"
+insert_indicator = "INS"
+command_indicator = "CMD"
+visual_indicator = "VIS"

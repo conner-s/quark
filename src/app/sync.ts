@@ -75,6 +75,8 @@ function timelineEventToMessage(e: TimelineEvent) {
   const msgType = (() => {
     if (e.msg_type === "m.image") return "image" as const;
     if (e.msg_type === "m.sticker") return "sticker" as const;
+    if (e.msg_type === "m.video") return "video" as const;
+    if (e.msg_type === "m.file") return "file" as const;
     return "text" as const;
   })();
 
@@ -88,6 +90,9 @@ function timelineEventToMessage(e: TimelineEvent) {
     htmlBody: e.formatted_body ?? undefined,
     type: msgType,
     mediaUrl: e.media_url ?? undefined,
+    mediaAlt: e.body,
+    mediaMimeType: e.media_mimetype ?? undefined,
+    mediaEncryptionInfo: e.media_encryption_info ?? undefined,
   };
 }
 
