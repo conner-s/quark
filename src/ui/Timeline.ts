@@ -724,8 +724,16 @@ export class Timeline {
 
     this._skeletonShownAt = Date.now();
 
+    // Use position:fixed coordinates matching the timeline's viewport rect so
+    // the overlay isn't clipped or scrolled by the timeline's overflow:auto.
+    const rect = this._el.getBoundingClientRect();
+
     const overlay = document.createElement("div");
     overlay.className = "skeleton-overlay";
+    overlay.style.top = `${rect.top}px`;
+    overlay.style.left = `${rect.left}px`;
+    overlay.style.width = `${rect.width}px`;
+    overlay.style.height = `${rect.height}px`;
     this._skeletonEl = overlay;
 
     const groups: Array<{ nameWidth: number; lines: number[] }> = [
@@ -771,7 +779,8 @@ export class Timeline {
     });
 
     overlay.appendChild(fragment);
-    this._el.appendChild(overlay);
+    // Append to body so it isn't clipped by the timeline's overflow or scroll position
+    document.body.appendChild(overlay);
   }
 
   /**

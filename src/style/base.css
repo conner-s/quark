@@ -1023,7 +1023,6 @@ body {
   flex-direction: column;
   gap: 12px;
   min-height: 0;
-  position: relative; /* anchor for skeleton-overlay absolute positioning */
 }
 
 .timeline__loading-more {
@@ -4385,11 +4384,11 @@ a:hover {
 
 /* ── Timeline skeleton ────────────────────────────────────────────────────── */
 
-/* Floating overlay — sits on top of the timeline while messages load */
+/* Fixed-position overlay — appended to body, sized to match the timeline's
+   viewport rect so scroll position and overflow:auto don't affect it. */
 .skeleton-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
+  position: fixed;
+  z-index: 200;
   background-color: var(--bg);
   display: flex;
   flex-direction: column;
