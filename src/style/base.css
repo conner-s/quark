@@ -1803,12 +1803,13 @@ img[data-mx-emoticon] {
 
 img.reaction__emoji {
   height: calc(var(--reaction-size) + 4px);
+  padding: 2px;
   width: auto;
   vertical-align: middle;
 }
 
 span.reaction__emoji {
-  font-size: var(--reaction-size);
+  font-size: calc(var(--font-size));
   line-height: 1;
   margin-top: 4px;
   margin-bottom: 4px;
