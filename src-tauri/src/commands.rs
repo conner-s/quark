@@ -674,7 +674,8 @@ pub async fn get_url_preview(
 
     // ── 2. Direct HTTP fallback: fetch the page and extract OG tags ───────
     let http = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (compatible; Quark Matrix Client)")
+        // Use a realistic browser UA; some sites (YouTube, Twitter proxies) gate content on it
+        .user_agent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .timeout(std::time::Duration::from_secs(8))
         .build()
         .map_err(|e| format!("HTTP client error: {e}"))?;
@@ -693,10 +694,11 @@ pub async fn get_url_preview(
         return Ok(None);
     }
 
-    // Read up to 64 KB — OG tags are always in <head>
+    // Read up to 128 KB — OG tags live in <head> which is usually within 32 KB,
+    // but some JS-heavy sites push it further down.
     let bytes = resp.bytes().await
         .map_err(|e| format!("URL read failed: {e}"))?;
-    let html = String::from_utf8_lossy(&bytes[..bytes.len().min(65536)]).into_owned();
+    let html = String::from_utf8_lossy(&bytes[..bytes.len().min(131_072)]).into_owned();
 
     let title = extract_og_tag(&html, "og:title")
         .or_else(|| extract_html_title(&html));
@@ -711,29 +713,40 @@ pub async fn get_url_preview(
     Ok(Some(UrlPreview { title, description, image_url, site_name }))
 }
 
-/// Extract a `<meta property="prop" content="...">` value from HTML.
-/// Handles both attribute orderings.
+/// Extract a `<meta property="og:…" content="…">` value from HTML.
+///
+/// Handles:
+/// - Both attribute orderings (property before/after content)
+/// - Both double-quote and single-quote attribute delimiters
+/// - ASCII-case-insensitive matching
 fn extract_og_tag(html: &str, property: &str) -> Option<String> {
-    let html_lower = html.to_ascii_lowercase();
-    let needle = format!("property=\"{}\"", property.to_ascii_lowercase());
+    let lower = html.to_ascii_lowercase();
+    let prop_lc = property.to_ascii_lowercase();
+
+    // Build both quote variants of the property needle once.
+    let dq_prop = format!("property=\"{}\"", prop_lc);
+    let sq_prop = format!("property='{}'", prop_lc);
+
     let mut search_from = 0;
-
     loop {
-        let prop_pos = html_lower[search_from..].find(&needle)? + search_from;
+        // Find the earliest occurrence of either quote style.
+        let found = [dq_prop.as_str(), sq_prop.as_str()]
+            .iter()
+            .filter_map(|n| lower[search_from..].find(n).map(|i| i + search_from))
+            .min();
+        let prop_pos = found?;
 
-        // Walk back to find the opening <meta
-        let tag_start = html_lower[..prop_pos].rfind("<meta")?;
-        // Walk forward to find the closing >
-        let tag_end = html_lower[prop_pos..].find('>').map(|i| i + prop_pos + 1)
-            .unwrap_or(html.len());
+        // Walk back to the opening <meta of this tag.
+        let tag_start = lower[..prop_pos].rfind("<meta")?;
+        // Walk forward to the closing > of this tag.
+        let tag_end = lower[prop_pos..].find('>').map(|i| i + prop_pos + 1)
+            .unwrap_or(lower.len());
 
-        let tag = &html[tag_start..tag_end];
-        let tag_lower = &html_lower[tag_start..tag_end];
-
-        if let Some(c) = tag_lower.find("content=\"") {
-            let val_start = tag_start + c + 9;
-            if let Some(val_len) = html[val_start..].find('"') {
-                return Some(decode_html_entities(&html[val_start..val_start + val_len]));
+        // Extract the content attribute value (both quote styles).
+        let tag_lower = &lower[tag_start..tag_end];
+        if let Some(val) = extract_attr(html, tag_lower, tag_start, "content") {
+            if !val.is_empty() {
+                return Some(decode_html_entities(&val));
             }
         }
 
@@ -741,7 +754,22 @@ fn extract_og_tag(html: &str, property: &str) -> Option<String> {
     }
 }
 
-/// Extract the `<title>` text as a last-resort title.
+/// Extract an attribute value from a tag, supporting both `attr="val"` and `attr='val'`.
+/// `tag_lower` is the lowercased slice; `tag_start` is its byte offset in the original `html`.
+fn extract_attr(html: &str, tag_lower: &str, tag_start: usize, attr: &str) -> Option<String> {
+    for (open, close) in [("=\"", '"'), ("='", '\'')] {
+        let needle = format!("{}{}", attr, open);
+        if let Some(rel_start) = tag_lower.find(&needle) {
+            let val_start = tag_start + rel_start + needle.len();
+            if let Some(val_len) = html[val_start..].find(close) {
+                return Some(html[val_start..val_start + val_len].to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Extract `<title>` text as a last-resort title source.
 fn extract_html_title(html: &str) -> Option<String> {
     let lower = html.to_ascii_lowercase();
     let start = lower.find("<title>")? + 7;
@@ -750,7 +778,7 @@ fn extract_html_title(html: &str) -> Option<String> {
     if raw.is_empty() { None } else { Some(decode_html_entities(raw)) }
 }
 
-/// Decode the most common HTML entities in attribute values.
+/// Decode the most common HTML entities found in OG attribute values.
 fn decode_html_entities(s: &str) -> String {
     s.replace("&amp;", "&")
      .replace("&lt;", "<")
