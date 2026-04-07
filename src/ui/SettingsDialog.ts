@@ -8,6 +8,7 @@ import type { CacheStats } from "../ipc/media.js";
 import { getAppConfig, setAppConfig } from "../ipc/app_config.js";
 import type { AppConfig } from "../ipc/app_config.js";
 import { loadTheme } from "../app/actions.js";
+import { AppState } from "../app/state.js";
 
 type SettingsTab = "general" | "media" | "gif" | "emoji" | "notifications" | "themes";
 
@@ -292,6 +293,14 @@ export class SettingsDialog {
       (v) => { draft = { ...draft, general: { ...draft.general, confirm_redact: v } }; },
     ));
 
+    section.appendChild(this._makeSectionTitle("Input"));
+
+    section.appendChild(this._makeCheckbox(
+      "Vim mode (modal editing with Normal/Insert/Command modes)",
+      draft.general.vim_mode,
+      (v) => { draft = { ...draft, general: { ...draft.general, vim_mode: v } }; },
+    ));
+
     section.appendChild(this._makeSectionTitle("Appearance"));
 
     section.appendChild(this._makeSelectRow(
@@ -325,7 +334,11 @@ export class SettingsDialog {
 
     const actions = document.createElement("div");
     actions.className = "settings-dialog__section settings-dialog__actions";
-    actions.appendChild(this._makeSaveButton(() => setAppConfig(draft)));
+    actions.appendChild(this._makeSaveButton(async () => {
+      await setAppConfig(draft);
+      // Apply vim mode change at runtime
+      AppState.set("vimMode", draft.general.vim_mode);
+    }));
     section.appendChild(actions);
   }
 

@@ -32,6 +32,7 @@ export class Input {
   private _onFilePick: ((file: File) => void) | null = null;
   private _onFocusEnterInsert: (() => void) | null = null;
   private _fileInputEl: HTMLInputElement | null = null;
+  private _vimMode: boolean = true;
 
   constructor() {
     this._el = document.createElement("div");
@@ -278,9 +279,24 @@ export class Input {
     this._fieldEl.blur();
   }
 
+  /** Show or hide the vim mode indicator. When hidden, the input always behaves as Insert. */
+  setVimMode(enabled: boolean): void {
+    this._vimMode = enabled;
+    this._modeEl.style.display = enabled ? "" : "none";
+  }
+
   setMode(mode: Mode): void {
     const label: string = mode;
     this._currentMode = label;
+
+    // When vim is disabled, keep the indicator hidden
+    if (!this._vimMode) {
+      this._modeEl.style.display = "none";
+      this._fieldEl.placeholder = "…";
+      return;
+    }
+
+    this._modeEl.style.display = "";
 
     // Remove previous mode class
     for (const cls of Object.values(MODE_CSS_CLASS)) {

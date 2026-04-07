@@ -22,6 +22,8 @@ export interface AppStateSnapshot {
   replyToEventId: string | null;
   threadRootEventId: string | null;
   memberListVisible: boolean;
+  /** When false, vim modal editing is disabled — the app stays in Insert mode. */
+  vimMode: boolean;
 }
 
 export type StateChangeKey = keyof AppStateSnapshot;
@@ -67,6 +69,7 @@ class AppStateManager {
     replyToEventId: null,
     threadRootEventId: null,
     memberListVisible: false,
+    vimMode: true,
   };
 
   private _listeners: Map<string, Set<StateChangeListener>> = new Map();

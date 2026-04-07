@@ -366,7 +366,7 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     }
     case "get_app_config":
       return {
-        general: { theme: "phosphor", notifications: true, confirm_redact: true, icon_radius: "50%" },
+        general: { theme: "phosphor", notifications: true, confirm_redact: true, icon_radius: "50%", vim_mode: true },
         sync: { sliding_sync: true, timeline_limit: 50 },
         media: { auto_load_images: true, max_image_width: 600, max_image_height: 400, sticker_max_size: 256, cache_size_mb: 500 },
         gif: { provider: "tenor", api_key: "", rating: "pg", cache_results: true },
