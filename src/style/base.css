@@ -1041,7 +1041,7 @@ body {
   align-self: flex-end;
   background: var(--bg-secondary, var(--bg));
   color: var(--accent);
-  border: var(--border-width) solid var(--accent);
+  border: var(--border-width) solid var(--border-color);
   border-radius: 4px;
   padding: 4px 10px;
   font-size: calc(var(--font-size) - 1px);
