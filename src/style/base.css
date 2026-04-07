@@ -3638,7 +3638,7 @@ a:hover {
 .settings-dialog__number-input,
 .settings-dialog__select,
 .settings-dialog__text-input {
-  background: transparent;
+  background: var(--bg);
   border: var(--border-width) solid var(--border-color);
   color: var(--fg);
   font-family: var(--font-family);
@@ -3660,6 +3660,11 @@ a:hover {
 
 .settings-dialog__select {
   cursor: pointer;
+}
+
+.settings-dialog__select option {
+  background: var(--bg);
+  color: var(--fg);
 }
 
 .settings-dialog__text-input {
