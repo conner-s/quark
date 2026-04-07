@@ -73,19 +73,25 @@ function buildUrlPreviewCard(preview: { title: string | null; description: strin
     img.className = "message__url-preview-img";
     img.alt = "";
     img.setAttribute("aria-hidden", "true");
+    img.addEventListener("error", () => { imgWrap.style.display = "none"; });
     imgWrap.appendChild(img);
     card.appendChild(imgWrap);
 
-    // Load image async — imageUrl is an mxc:// URL
-    void invoke<{ data_base64: string; mime_type: string }>("download_media", {
-      mxcUrl: preview.imageUrl,
-      thumbnail: true,
-      thumbnailWidth: 80,
-      thumbnailHeight: 80,
-      encryptionInfo: null,
-    }).then((dl) => {
-      img.src = `data:${dl.mime_type};base64,${dl.data_base64}`;
-    }).catch(() => { imgWrap.style.display = "none"; });
+    if (preview.imageUrl.startsWith("mxc://")) {
+      // Matrix-proxied image — download via IPC and convert to data URL
+      void invoke<{ data_base64: string; mime_type: string }>("download_media", {
+        mxcUrl: preview.imageUrl,
+        thumbnail: true,
+        thumbnailWidth: 80,
+        thumbnailHeight: 80,
+        encryptionInfo: null,
+      }).then((dl) => {
+        img.src = `data:${dl.mime_type};base64,${dl.data_base64}`;
+      }).catch(() => { imgWrap.style.display = "none"; });
+    } else {
+      // Plain https:// URL from direct-fetch fallback — set directly; CSP is null
+      img.src = preview.imageUrl;
+    }
   }
 
   const meta = document.createElement("div");

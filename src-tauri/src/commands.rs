@@ -680,7 +680,15 @@ pub async fn get_url_preview(
         .build()
         .map_err(|e| format!("HTTP client error: {e}"))?;
 
-    let resp = http.get(&url).send().await
+    let resp = http.get(&url)
+        // Mimic a real browser request so CDN/bot-detection layers serve full HTML
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header("Accept-Language", "en-US,en;q=0.5")
+        // Request uncompressed content; reqwest doesn't have gzip enabled by default
+        .header("Accept-Encoding", "identity")
+        .header("Cache-Control", "no-cache")
+        .header("Upgrade-Insecure-Requests", "1")
+        .send().await
         .map_err(|e| format!("URL fetch failed: {e}"))?;
 
     // Only parse HTML responses
