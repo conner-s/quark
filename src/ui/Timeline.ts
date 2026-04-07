@@ -705,6 +705,61 @@ export class Timeline {
     this._loadingEl.style.display = "none";
   }
 
+  /**
+   * Replace the timeline content with skeleton placeholder rows while a room
+   * is loading. Cleared automatically when setMessages() is next called.
+   */
+  showSkeleton(): void {
+    this._el.classList.add("timeline--skeleton");
+    this._selectedIndex = -1;
+    this._messages = [];
+    this._listEl.innerHTML = "";
+
+    const groups: Array<{ nameWidth: number; lines: number[] }> = [
+      { nameWidth: 38, lines: [72, 48] },
+      { nameWidth: 52, lines: [88, 35, 61] },
+      { nameWidth: 31, lines: [44] },
+      { nameWidth: 65, lines: [79, 28] },
+      { nameWidth: 43, lines: [91, 56] },
+      { nameWidth: 58, lines: [67] },
+      { nameWidth: 35, lines: [82, 44, 23] },
+    ];
+
+    const fragment = document.createDocumentFragment();
+    groups.forEach((group, gi) => {
+      const row = document.createElement("div");
+      row.className = "skeleton-group";
+      row.style.animationDelay = `${gi * 60}ms`;
+
+      const avatar = document.createElement("div");
+      avatar.className = "skeleton-group__avatar";
+      avatar.style.animationDelay = `${gi * 60}ms`;
+
+      const content = document.createElement("div");
+      content.className = "skeleton-group__content";
+
+      const name = document.createElement("div");
+      name.className = "skeleton-group__name";
+      name.style.width = `${group.nameWidth}%`;
+      name.style.animationDelay = `${gi * 60}ms`;
+      content.appendChild(name);
+
+      group.lines.forEach((width, li) => {
+        const line = document.createElement("div");
+        line.className = "skeleton-group__line";
+        line.style.width = `${width}%`;
+        line.style.animationDelay = `${gi * 60 + li * 30}ms`;
+        content.appendChild(line);
+      });
+
+      row.appendChild(avatar);
+      row.appendChild(content);
+      fragment.appendChild(row);
+    });
+
+    this._listEl.appendChild(fragment);
+  }
+
   /** Prepend older messages above the current list, preserving scroll position. */
   prependMessages(msgs: MessageData[]): void {
     if (msgs.length === 0) return;
@@ -1630,6 +1685,7 @@ export class Timeline {
   }
 
   private _renderAll(): void {
+    this._el.classList.remove("timeline--skeleton");
     this._listEl.innerHTML = "";
     const groups = groupMessages(this._messages);
     const fragment = document.createDocumentFragment();

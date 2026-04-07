@@ -4264,3 +4264,186 @@ a:hover {
   flex-shrink: 0;
   background-color: rgba(255, 255, 255, 0.02);
 }
+
+/* ── Startup overlay ──────────────────────────────────────────────────────── */
+
+#startup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background-color: var(--bg, #0a0a0a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 600ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#startup-overlay.startup-overlay--out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.startup-overlay__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.startup-overlay__logo {
+  font-family: var(--font-family, "JetBrains Mono", monospace);
+  font-size: 52px;
+  font-weight: bold;
+  letter-spacing: 0.25em;
+  color: var(--accent-primary, #00ff41);
+  text-shadow:
+    0 0 10px var(--accent-primary, #00ff41),
+    0 0 30px color-mix(in srgb, var(--accent-primary, #00ff41) 40%, transparent),
+    0 0 60px color-mix(in srgb, var(--accent-primary, #00ff41) 20%, transparent);
+  animation:
+    startup-logo-in 600ms cubic-bezier(0.16, 1, 0.3, 1) both,
+    startup-flicker 6s ease-in-out 1.2s infinite;
+}
+
+@keyframes startup-logo-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    letter-spacing: 0.4em;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    letter-spacing: 0.25em;
+  }
+}
+
+@keyframes startup-flicker {
+  0%, 88%, 90%, 92%, 100% { opacity: 1; }
+  89% { opacity: 0.78; }
+  91% { opacity: 0.92; }
+}
+
+.startup-overlay__sub {
+  font-family: var(--font-family, monospace);
+  font-size: 10px;
+  letter-spacing: 0.5em;
+  color: var(--roomlist-muted, #444444);
+  text-transform: uppercase;
+  animation: startup-sub-in 500ms ease 200ms both;
+}
+
+@keyframes startup-sub-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.startup-overlay__progress {
+  width: 180px;
+  height: 1px;
+  background-color: var(--border-color, #333333);
+  position: relative;
+  overflow: hidden;
+  animation: startup-sub-in 400ms ease 300ms both;
+}
+
+.startup-overlay__bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0%;
+  background-color: var(--accent-primary, #00ff41);
+  box-shadow: 0 0 8px var(--accent-primary, #00ff41);
+  animation: startup-bar-fill 1.8s cubic-bezier(0.4, 0, 0.2, 1) 300ms forwards;
+}
+
+@keyframes startup-bar-fill {
+  0%  { width: 0%; }
+  50% { width: 68%; }
+  80% { width: 87%; }
+  100% { width: 100%; }
+}
+
+/* CRT scanline overlay */
+.startup-overlay__scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 1px,
+    rgba(0, 0, 0, 0.22) 1px,
+    rgba(0, 0, 0, 0.22) 2px
+  );
+  opacity: 0.5;
+}
+
+/* ── Timeline skeleton ────────────────────────────────────────────────────── */
+
+.timeline--skeleton {
+  overflow: hidden;
+}
+
+.skeleton-group {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  opacity: 0;
+  animation: skeleton-fade-in 280ms ease forwards;
+}
+
+@keyframes skeleton-fade-in {
+  to { opacity: 1; }
+}
+
+.skeleton-group__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--icon-radius, 50%);
+  flex-shrink: 0;
+}
+
+.skeleton-group__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 1px;
+}
+
+.skeleton-group__name {
+  height: 9px;
+  border-radius: 2px;
+  max-width: 160px;
+}
+
+.skeleton-group__line {
+  height: 9px;
+  border-radius: 2px;
+}
+
+/* Shared shimmer animation for all skeleton elements */
+.skeleton-group__avatar,
+.skeleton-group__name,
+.skeleton-group__line {
+  background-color: var(--border-color);
+  background-image: linear-gradient(
+    90deg,
+    var(--border-color) 0%,
+    color-mix(in srgb, var(--accent-primary) 9%, var(--border-color)) 50%,
+    var(--border-color) 100%
+  );
+  background-size: 300% 100%;
+  animation:
+    skeleton-fade-in 280ms ease forwards,
+    skeleton-shimmer 2.6s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 100% 50%; }
+  100% { background-position: -100% 50%; }
+}

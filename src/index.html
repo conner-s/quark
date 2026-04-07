@@ -8,6 +8,16 @@
     <link rel="stylesheet" href="./theme/vars.css" />
   </head>
   <body>
+    <div id="startup-overlay" aria-hidden="true">
+      <div class="startup-overlay__inner">
+        <div class="startup-overlay__logo">QUARK</div>
+        <div class="startup-overlay__sub">matrix client</div>
+        <div class="startup-overlay__progress">
+          <div class="startup-overlay__bar"></div>
+        </div>
+      </div>
+      <div class="startup-overlay__scanlines"></div>
+    </div>
     <div id="app"></div>
     <script type="module" src="./main.ts"></script>
   </body>

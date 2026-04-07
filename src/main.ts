@@ -16,6 +16,17 @@ import { showMainLayout } from "./ui/App.js";
 
 const DEBUG_MODE = new URLSearchParams(window.location.search).has("debug");
 
+// ── Startup overlay ───────────────────────────────────────────────────────────
+// The overlay is embedded in index.html so it's visible from the first paint
+// before any JS runs. Dismiss it once the app is ready to be interacted with.
+
+function dismissStartupOverlay(): void {
+  const overlay = document.getElementById("startup-overlay");
+  if (!overlay) return;
+  overlay.classList.add("startup-overlay--out");
+  overlay.addEventListener("transitionend", () => overlay.remove(), { once: true });
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 const appEl = document.getElementById("app");
@@ -40,6 +51,7 @@ if (DEBUG_MODE) {
   showMainLayout(components);
   setupKeyboard(components);
   void refreshRooms().then(async () => {
+    dismissStartupOverlay();
     // Auto-select the first room so the timeline is populated
     const rooms = AppState.get("roomListCache");
     if (rooms.length > 0) {
@@ -54,6 +66,8 @@ if (DEBUG_MODE) {
 
 if (!DEBUG_MODE) {
   void attemptSessionRestore(components).then((restored) => {
+    // Dismiss the overlay regardless — either the main layout or login is now ready.
+    dismissStartupOverlay();
     if (restored) {
       setupKeyboard(components);
       void startSync(components);

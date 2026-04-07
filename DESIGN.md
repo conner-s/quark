@@ -686,7 +686,7 @@ quark/
 - [x] Add quick navigation palette, similar to discord's ctrl+k — `QuickNavPalette` overlay opened with Ctrl+K; filters `roomListCache` in real-time; ↑/↓ or j/k to navigate, Enter to jump, Esc to close
 - [x] @mention autocomplete — typing `@` in insert mode opens a member picker; prefix+fuzzy filtered; inserts display name on select
 - [x] Unread message separator — `── new messages ──` line inserted before first unread message on room enter; timeline scrolls to separator
-- [ ] Skeleton page while messages are loading
+- [x] Skeleton page while messages are loading — phosphor-green shimmer skeleton rows shown immediately on room select; startup overlay with QUARK logo + progress bar covers the window during session restore and fades out when ready
 - [ ] Ability to disable vim mode
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`

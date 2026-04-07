@@ -313,6 +313,10 @@ export async function selectRoom(roomId: string): Promise<void> {
   _paginationLoading = false;
   roomList.setActiveRoom(roomId);
 
+  // Show skeleton immediately before the async IPC fetch so the timeline doesn't
+  // appear blank while waiting for message data.
+  timeline.showSkeleton();
+
   // Clear typing indicator when switching rooms
   const typingTextEl = typingIndicator.querySelector(".typing-indicator__text");
   if (typingTextEl) typingTextEl.textContent = "";
