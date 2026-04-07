@@ -198,6 +198,8 @@ function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[], t
     mediaUrl: e.media_url ?? undefined,
     mediaMimeType: e.media_mimetype ?? undefined,
     mediaEncryptionInfo: e.media_encryption_info ?? undefined,
+    mediaThumbnailUrl: e.media_thumbnail_url ?? undefined,
+    mediaThumbnailEncryptionInfo: e.media_thumbnail_encryption_info ?? undefined,
     reactions: e.reactions?.map((r) => ({
       key: r.key,
       count: r.count,
@@ -1185,6 +1187,8 @@ export async function openThread(eventId: string): Promise<void> {
       mediaAlt: e.body,
       mediaMimeType: e.media_mimetype ?? undefined,
       mediaEncryptionInfo: e.media_encryption_info ?? undefined,
+      mediaThumbnailUrl: e.media_thumbnail_url ?? undefined,
+      mediaThumbnailEncryptionInfo: e.media_thumbnail_encryption_info ?? undefined,
     }));
     timeline.openInlineThread(eventId, replyData);
     _downloadMessageImages(replies, {

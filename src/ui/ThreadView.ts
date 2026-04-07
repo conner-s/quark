@@ -15,6 +15,8 @@ export interface ThreadMessageData {
   mediaAlt?: string;
   mediaMimeType?: string;
   mediaEncryptionInfo?: string;
+  mediaThumbnailUrl?: string;
+  mediaThumbnailEncryptionInfo?: string;
   reactions?: ReactionGroup[];
 }
 

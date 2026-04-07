@@ -396,6 +396,9 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return { data_base64: btoa(svg), mime_type: "image/svg+xml", filename: null };
     }
 
+    case "get_url_preview":
+      return null;
+
     default:
       console.warn(`[mock] unhandled command: ${cmd}`, args);
       return null;

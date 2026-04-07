@@ -96,7 +96,22 @@ export interface TimelineEvent {
   media_height: number | null;
   /** JSON-serialized EncryptedFile for E2EE media; absent for plain media. */
   media_encryption_info?: string | null;
+  /** mxc:// URL for the video thumbnail image (from VideoInfo.thumbnail_source). */
+  media_thumbnail_url?: string | null;
+  /** JSON-serialized EncryptedFile for E2EE video thumbnails. */
+  media_thumbnail_encryption_info?: string | null;
   reactions?: ReactionGroup[];
+}
+
+// ─── URL Preview ──────────────────────────────────────────────────────────────
+
+/** OpenGraph-like metadata returned by get_url_preview — matches commands::UrlPreview */
+export interface UrlPreview {
+  title: string | null;
+  description: string | null;
+  /** mxc:// URL for the preview image */
+  image_url: string | null;
+  site_name: string | null;
 }
 
 // ─── Reactions ────────────────────────────────────────────────────────────────

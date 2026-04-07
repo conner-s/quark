@@ -61,8 +61,8 @@ export {
 } from "./emoji.js";
 
 // ─── Media ────────────────────────────────────────────────────────────────────
-export { downloadMedia, getThumbnail, uploadMedia, sendPastedImage, sendFile, saveMediaToTemp, openMediaExternally, getCacheStats, clearMediaCache, setCacheSizeLimit } from "./media.js";
-export type { CacheStats } from "./media.js";
+export { downloadMedia, getThumbnail, uploadMedia, sendPastedImage, sendFile, saveMediaToTemp, openMediaExternally, getCacheStats, clearMediaCache, setCacheSizeLimit, getUrlPreview } from "./media.js";
+export type { CacheStats, UrlPreview } from "./media.js";
 
 // ─── Notifications ────────────────────────────────────────────────────────────
 export { getNotificationConfig, setNotificationConfig, muteRoomIpc, unmuteRoomIpc, testNotification } from "./notifications.js";

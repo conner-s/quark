@@ -43,6 +43,102 @@ function appendLinkifiedText(container: HTMLElement, text: string): void {
   }
 }
 
+// ── URL preview cards ─────────────────────────────────────────────────────────
+
+/** In-memory cache: url → preview data (null = fetched but no preview available) */
+const _urlPreviewCache = new Map<string, { title: string | null; description: string | null; imageUrl: string | null; siteName: string | null } | null>();
+
+/**
+ * Extracts the first http/https URL from a text string.
+ * Returns null if none found.
+ */
+function extractFirstUrl(text: string): string | null {
+  const re = /https?:\/\/[^\s<>"')\]]+/g;
+  const m = re.exec(text);
+  if (!m) return null;
+  return m[0].replace(/[.,;:!?]+$/, "");
+}
+
+/**
+ * Builds a URL preview card element. The image (if present) is loaded async.
+ */
+function buildUrlPreviewCard(preview: { title: string | null; description: string | null; imageUrl: string | null; siteName: string | null }): HTMLElement {
+  const card = document.createElement("div");
+  card.className = "message__url-preview";
+
+  if (preview.imageUrl) {
+    const imgWrap = document.createElement("div");
+    imgWrap.className = "message__url-preview-img-wrap";
+    const img = document.createElement("img");
+    img.className = "message__url-preview-img";
+    img.alt = "";
+    img.setAttribute("aria-hidden", "true");
+    imgWrap.appendChild(img);
+    card.appendChild(imgWrap);
+
+    // Load image async — imageUrl is an mxc:// URL
+    void invoke<{ data_base64: string; mime_type: string }>("download_media", {
+      mxcUrl: preview.imageUrl,
+      thumbnail: true,
+      thumbnailWidth: 80,
+      thumbnailHeight: 80,
+      encryptionInfo: null,
+    }).then((dl) => {
+      img.src = `data:${dl.mime_type};base64,${dl.data_base64}`;
+    }).catch(() => { imgWrap.style.display = "none"; });
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "message__url-preview-meta";
+
+  if (preview.siteName) {
+    const site = document.createElement("div");
+    site.className = "message__url-preview-site";
+    site.textContent = preview.siteName;
+    meta.appendChild(site);
+  }
+
+  if (preview.title) {
+    const title = document.createElement("div");
+    title.className = "message__url-preview-title";
+    title.textContent = preview.title;
+    meta.appendChild(title);
+  }
+
+  if (preview.description) {
+    const desc = document.createElement("div");
+    desc.className = "message__url-preview-desc";
+    desc.textContent = preview.description;
+    meta.appendChild(desc);
+  }
+
+  card.appendChild(meta);
+  return card;
+}
+
+/**
+ * Asynchronously fetch a URL preview and append the card to `container`.
+ * Uses the module-level cache to avoid duplicate fetches.
+ */
+function attachUrlPreview(url: string, container: HTMLElement): void {
+  if (_urlPreviewCache.has(url)) {
+    const cached = _urlPreviewCache.get(url)!;
+    if (cached !== null) container.appendChild(buildUrlPreviewCard(cached));
+    return;
+  }
+  void invoke<{ title: string | null; description: string | null; image_url: string | null; site_name: string | null } | null>("get_url_preview", { url })
+    .then((preview) => {
+      if (!preview) {
+        _urlPreviewCache.set(url, null);
+        return;
+      }
+      const data = { title: preview.title, description: preview.description, imageUrl: preview.image_url, siteName: preview.site_name };
+      _urlPreviewCache.set(url, data);
+      container.appendChild(buildUrlPreviewCard(data));
+    })
+    .catch(() => { _urlPreviewCache.set(url, null); });
+}
+
 // ── Avatar generation ─────────────────────────────────────────────────────────
 
 const AVATAR_COLORS = [
@@ -114,6 +210,10 @@ export interface MessageData {
   mediaMimeType?: string;
   /** JSON-serialized EncryptedFile for E2EE video/audio; absent for plain media */
   mediaEncryptionInfo?: string;
+  /** mxc:// URL of the video thumbnail image */
+  mediaThumbnailUrl?: string;
+  /** JSON-serialized EncryptedFile for E2EE video thumbnail */
+  mediaThumbnailEncryptionInfo?: string;
   /** Reply preview */
   replyTo?: ReplyPreviewData;
   /** Reactions */
@@ -180,12 +280,15 @@ function buildTimeSeparator(isoString: string): HTMLElement {
  * Build a click-to-play affordance for video messages.
  * Dispatches `quark:open-video` when activated so actions.ts can decide
  * whether to play inline (GStreamer available) or open externally.
+ * If `thumbnailMxcUrl` is provided the thumbnail is loaded async and shown.
  */
 function buildVideoAffordance(
   mxcUrl?: string,
   filename?: string,
   mimeType?: string,
   encryptionInfo?: string,
+  thumbnailMxcUrl?: string,
+  thumbnailEncryptionInfo?: string,
 ): HTMLElement {
   const el = document.createElement("div");
   el.className = "message__video-affordance";
@@ -193,11 +296,41 @@ function buildVideoAffordance(
   el.setAttribute("tabindex", "0");
   el.title = "Click to play video";
 
-  const icon = document.createElement("span");
-  icon.className = "message__video-affordance-icon";
-  icon.textContent = "▶";
-  icon.setAttribute("aria-hidden", "true");
-  el.appendChild(icon);
+  if (thumbnailMxcUrl) {
+    const thumbWrap = document.createElement("div");
+    thumbWrap.className = "message__video-affordance-thumb";
+    const thumbImg = document.createElement("img");
+    thumbImg.className = "message__video-affordance-thumb-img";
+    thumbImg.alt = "";
+    thumbImg.setAttribute("aria-hidden", "true");
+    thumbWrap.appendChild(thumbImg);
+
+    // Overlay play icon on thumbnail
+    const overlay = document.createElement("span");
+    overlay.className = "message__video-affordance-thumb-overlay";
+    overlay.textContent = "▶";
+    overlay.setAttribute("aria-hidden", "true");
+    thumbWrap.appendChild(overlay);
+
+    el.appendChild(thumbWrap);
+
+    // Load thumbnail async
+    void invoke<{ data_base64: string; mime_type: string }>("download_media", {
+      mxcUrl: thumbnailMxcUrl,
+      thumbnail: true,
+      thumbnailWidth: 160,
+      thumbnailHeight: 90,
+      encryptionInfo: thumbnailEncryptionInfo ?? null,
+    }).then((dl) => {
+      thumbImg.src = `data:${dl.mime_type};base64,${dl.data_base64}`;
+    }).catch(() => { /* thumbnail failed to load — affordance still works */ });
+  } else {
+    const icon = document.createElement("span");
+    icon.className = "message__video-affordance-icon";
+    icon.textContent = "▶";
+    icon.setAttribute("aria-hidden", "true");
+    el.appendChild(icon);
+  }
 
   const label = document.createElement("span");
   label.className = "message__video-affordance-label";
@@ -361,7 +494,7 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     row.appendChild(img);
   } else if (type === "video") {
     row.classList.add("message--video");
-    const aff = buildVideoAffordance(msg.mediaUrl, msg.mediaAlt, msg.mediaMimeType, msg.mediaEncryptionInfo);
+    const aff = buildVideoAffordance(msg.mediaUrl, msg.mediaAlt, msg.mediaMimeType, msg.mediaEncryptionInfo, msg.mediaThumbnailUrl, msg.mediaThumbnailEncryptionInfo);
     row.appendChild(aff);
   } else if (type === "sticker") {
     const img = document.createElement("img");
@@ -410,6 +543,12 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     }
 
     row.appendChild(body);
+
+    // ── URL preview card ─────────────────────────────────────────────────
+    const previewUrl = extractFirstUrl(msg.body);
+    if (previewUrl) {
+      attachUrlPreview(previewUrl, row);
+    }
   }
 
   // ── Reactions ──────────────────────────────────────────────────────────
@@ -1352,7 +1491,7 @@ export class Timeline {
       img.loading = "lazy";
       row.appendChild(img);
     } else if (type === "video") {
-      const aff = buildVideoAffordance(msg.mediaUrl, msg.mediaAlt, msg.mediaMimeType, msg.mediaEncryptionInfo);
+      const aff = buildVideoAffordance(msg.mediaUrl, msg.mediaAlt, msg.mediaMimeType, msg.mediaEncryptionInfo, msg.mediaThumbnailUrl, msg.mediaThumbnailEncryptionInfo);
       row.appendChild(aff);
     } else {
       const body = document.createElement("div");

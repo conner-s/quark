@@ -625,6 +625,58 @@ pub async fn send_sticker(
     crate::matrix::stickers::send_sticker(&client, &room_id, &sticker).await
 }
 
+// ─── URL Preview Commands ─────────────────────────────────────────────────────
+
+/// OpenGraph-like metadata returned by the homeserver's URL preview API.
+#[derive(Debug, serde::Serialize)]
+pub struct UrlPreview {
+    pub title: Option<String>,
+    pub description: Option<String>,
+    /// mxc:// URL for the preview image (resolve via download_media).
+    pub image_url: Option<String>,
+    pub site_name: Option<String>,
+}
+
+/// Fetch URL preview metadata from the homeserver (MSC or /_matrix/media/v3/preview_url).
+/// Returns None if the homeserver returns no data or the URL has no preview.
+#[tauri::command]
+pub async fn get_url_preview(
+    state: State<'_, MatrixState>,
+    url: String,
+) -> Result<Option<UrlPreview>, String> {
+    let client = get_client(&state)?;
+
+    #[allow(deprecated)]
+    use matrix_sdk::ruma::api::client::media::get_media_preview::v3::Request as PreviewRequest;
+
+    #[allow(deprecated)]
+    let request = PreviewRequest::new(url);
+
+    #[allow(deprecated)]
+    let response = client
+        .send(request, None)
+        .await
+        .map_err(|e| format!("URL preview request failed: {e}"))?;
+
+    let Some(data) = response.data else {
+        return Ok(None);
+    };
+
+    let value: serde_json::Value = serde_json::from_str(data.get())
+        .map_err(|e| format!("Failed to parse preview JSON: {e}"))?;
+
+    let title = value.get("og:title").and_then(|v| v.as_str()).map(str::to_string);
+    let description = value.get("og:description").and_then(|v| v.as_str()).map(str::to_string);
+    let image_url = value.get("og:image").and_then(|v| v.as_str()).map(str::to_string);
+    let site_name = value.get("og:site_name").and_then(|v| v.as_str()).map(str::to_string);
+
+    if title.is_none() && description.is_none() && image_url.is_none() {
+        return Ok(None);
+    }
+
+    Ok(Some(UrlPreview { title, description, image_url, site_name }))
+}
+
 // ─── Crypto Commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]

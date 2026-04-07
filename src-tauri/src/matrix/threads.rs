@@ -175,6 +175,8 @@ pub async fn get_thread_timeline(
                         media_width: None,
                         media_height: None,
                         media_encryption_info: None,
+                        media_thumbnail_url: None,
+                        media_thumbnail_encryption_info: None,
                         reactions: vec![],
                     });
                 }

@@ -493,6 +493,8 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
         media_width,
         media_height,
         media_encryption_info,
+        media_thumbnail_url: None,
+        media_thumbnail_encryption_info: None,
         reactions: vec![],
     })
 }
@@ -538,6 +540,8 @@ mod tests {
             media_width: None,
             media_height: None,
             media_encryption_info: None,
+            media_thumbnail_url: None,
+            media_thumbnail_encryption_info: None,
             reactions: vec![],
         }
     }

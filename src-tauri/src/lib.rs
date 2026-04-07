@@ -76,6 +76,8 @@ pub fn run() {
             // Stickers
             commands::get_sticker_packs,
             commands::send_sticker,
+            // URL Preview
+            commands::get_url_preview,
             // Media
             commands::download_media,
             commands::save_media_to_temp,

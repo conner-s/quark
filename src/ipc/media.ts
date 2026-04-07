@@ -1,9 +1,9 @@
 // Media IPC calls
 
 import { invoke } from "./invoke.js";
-import type { MediaDownload } from "./types.js";
+import type { MediaDownload, UrlPreview } from "./types.js";
 
-export type { MediaDownload };
+export type { MediaDownload, UrlPreview };
 
 // ─── Cache Stats ─────────────────────────────────────────────────────────────
 
@@ -129,4 +129,14 @@ export async function sendPastedImage(
   filename: string,
 ): Promise<string> {
   return invoke<string>("send_pasted_image", { roomId, dataBase64, mimeType, filename });
+}
+
+// ─── URL Preview ─────────────────────────────────────────────────────────────
+
+/**
+ * Fetch OpenGraph-like metadata for a URL from the homeserver preview API.
+ * Returns null if the homeserver returns no preview data.
+ */
+export async function getUrlPreview(url: string): Promise<UrlPreview | null> {
+  return invoke<UrlPreview | null>("get_url_preview", { url });
 }

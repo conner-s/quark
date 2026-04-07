@@ -41,6 +41,12 @@ pub struct TimelineEvent {
     /// JSON-serialized EncryptedFile for E2EE media; None for plain (unencrypted) media.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_encryption_info: Option<String>,
+    /// mxc:// URL of the video thumbnail image (from VideoInfo.thumbnail_source).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_thumbnail_url: Option<String>,
+    /// JSON-serialized EncryptedFile for E2EE video thumbnails.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_thumbnail_encryption_info: Option<String>,
     /// Aggregated reactions from the same fetch batch.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reactions: Vec<ReactionGroup>,
@@ -207,6 +213,8 @@ fn convert_sync_sticker(ev: matrix_sdk::ruma::events::OriginalSyncMessageLikeEve
         media_width: w,
         media_height: h,
         media_encryption_info: enc,
+        media_thumbnail_url: None,
+        media_thumbnail_encryption_info: None,
         reactions: vec![],
     }
 }
@@ -216,7 +224,7 @@ fn convert_sync_room_message(ev: OriginalSyncRoomMessageEvent) -> TimelineEvent 
     let sender = ev.sender.to_string();
     let event_id = ev.event_id.to_string();
 
-    let (body, formatted_body, msg_type, media_url, media_mimetype, media_width, media_height, media_encryption_info) =
+    let (body, formatted_body, msg_type, media_url, media_mimetype, media_width, media_height, media_encryption_info, media_thumbnail_url, media_thumbnail_encryption_info) =
         extract_message_content(&ev.content);
 
     let (is_edit, relates_to_event_id, in_reply_to, thread_root) =
@@ -238,6 +246,8 @@ fn convert_sync_room_message(ev: OriginalSyncRoomMessageEvent) -> TimelineEvent 
         media_width,
         media_height,
         media_encryption_info,
+        media_thumbnail_url,
+        media_thumbnail_encryption_info,
         reactions: vec![],
     }
 }
@@ -252,6 +262,8 @@ fn extract_message_content(
     Option<String>,
     Option<u64>,
     Option<u64>,
+    Option<String>,
+    Option<String>,
     Option<String>,
 ) {
     use matrix_sdk::ruma::events::room::MediaSource;
@@ -269,11 +281,7 @@ fn extract_message_content(
             text.body.clone(),
             text.formatted.as_ref().map(|f| f.body.clone()),
             "m.text".to_string(),
-            None,
-            None,
-            None,
-            None,
-            None,
+            None, None, None, None, None, None, None,
         ),
         MessageType::Image(image) => {
             let url = match &image.source {
@@ -290,7 +298,7 @@ fn extract_message_content(
             } else {
                 (None, None, None)
             };
-            (image.body.clone(), None, "m.image".to_string(), url, mime, w, h, enc)
+            (image.body.clone(), None, "m.image".to_string(), url, mime, w, h, enc, None, None)
         }
         MessageType::Video(video) => {
             let url = match &video.source {
@@ -298,16 +306,29 @@ fn extract_message_content(
                 MediaSource::Encrypted(file) => Some(file.url.to_string()),
             };
             let enc = enc_info(&video.source);
-            let (w, h, mime) = if let Some(info) = &video.info {
+            let (w, h, mime, thumb_url, thumb_enc) = if let Some(info) = &video.info {
+                let thumb_url = info.thumbnail_source.as_ref().map(|src| match src {
+                    MediaSource::Plain(uri) => uri.to_string(),
+                    MediaSource::Encrypted(file) => file.url.to_string(),
+                });
+                let thumb_enc = info.thumbnail_source.as_ref().and_then(|src| {
+                    if let MediaSource::Encrypted(file) = src {
+                        serde_json::to_string(file.as_ref()).ok()
+                    } else {
+                        None
+                    }
+                });
                 (
                     info.width.map(|v| v.into()),
                     info.height.map(|v| v.into()),
                     info.mimetype.clone(),
+                    thumb_url,
+                    thumb_enc,
                 )
             } else {
-                (None, None, None)
+                (None, None, None, None, None)
             };
-            (video.body.clone(), None, "m.video".to_string(), url, mime, w, h, enc)
+            (video.body.clone(), None, "m.video".to_string(), url, mime, w, h, enc, thumb_url, thumb_enc)
         }
         MessageType::Audio(audio) => {
             let url = match &audio.source {
@@ -315,7 +336,7 @@ fn extract_message_content(
                 MediaSource::Encrypted(file) => Some(file.url.to_string()),
             };
             let enc = enc_info(&audio.source);
-            (audio.body.clone(), None, "m.audio".to_string(), url, None, None, None, enc)
+            (audio.body.clone(), None, "m.audio".to_string(), url, None, None, None, enc, None, None)
         }
         MessageType::File(file_msg) => {
             let url = match &file_msg.source {
@@ -323,37 +344,25 @@ fn extract_message_content(
                 MediaSource::Encrypted(f) => Some(f.url.to_string()),
             };
             let enc = enc_info(&file_msg.source);
-            (file_msg.body.clone(), None, "m.file".to_string(), url, None, None, None, enc)
+            (file_msg.body.clone(), None, "m.file".to_string(), url, None, None, None, enc, None, None)
         }
         MessageType::Emote(emote) => (
             emote.body.clone(),
             emote.formatted.as_ref().map(|f| f.body.clone()),
             "m.emote".to_string(),
-            None,
-            None,
-            None,
-            None,
-            None,
+            None, None, None, None, None, None, None,
         ),
         MessageType::Notice(notice) => (
             notice.body.clone(),
             notice.formatted.as_ref().map(|f| f.body.clone()),
             "m.notice".to_string(),
-            None,
-            None,
-            None,
-            None,
-            None,
+            None, None, None, None, None, None, None,
         ),
         _ => (
             "[unsupported message type]".to_string(),
             None,
             "m.unknown".to_string(),
-            None,
-            None,
-            None,
-            None,
-            None,
+            None, None, None, None, None, None, None,
         ),
     }
 }
@@ -661,6 +670,8 @@ mod tests {
             media_width: None,
             media_height: None,
             media_encryption_info: None,
+            media_thumbnail_url: None,
+            media_thumbnail_encryption_info: None,
             reactions: vec![],
         }
     }
