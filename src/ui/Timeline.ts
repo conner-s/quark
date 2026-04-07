@@ -528,6 +528,10 @@ export class Timeline {
   private _el: HTMLElement;
   private _listEl: HTMLElement;
   private _loadingEl: HTMLElement;
+  /** Floating skeleton overlay shown while a room loads; null when not active */
+  private _skeletonEl: HTMLElement | null = null;
+  /** Timestamp when the skeleton was last shown, used to enforce a minimum display time */
+  private _skeletonShownAt = 0;
   /** Whether the user has scrolled up away from the bottom */
   private _scrolledUp = false;
   /** Track messages for grouping on append */
@@ -706,14 +710,23 @@ export class Timeline {
   }
 
   /**
-   * Replace the timeline content with skeleton placeholder rows while a room
-   * is loading. Cleared automatically when setMessages() is next called.
+   * Show a floating skeleton overlay while a room's timeline is loading.
+   * The overlay sits on top of the existing content so real messages can render
+   * beneath it. Call setMessages() to trigger the fade-out, which waits for
+   * images to finish loading before dismissing.
    */
   showSkeleton(): void {
-    this._el.classList.add("timeline--skeleton");
-    this._selectedIndex = -1;
-    this._messages = [];
-    this._listEl.innerHTML = "";
+    // Dismiss any existing skeleton immediately (rapid room switching)
+    if (this._skeletonEl) {
+      this._skeletonEl.remove();
+      this._skeletonEl = null;
+    }
+
+    this._skeletonShownAt = Date.now();
+
+    const overlay = document.createElement("div");
+    overlay.className = "skeleton-overlay";
+    this._skeletonEl = overlay;
 
     const groups: Array<{ nameWidth: number; lines: number[] }> = [
       { nameWidth: 38, lines: [72, 48] },
@@ -729,11 +742,11 @@ export class Timeline {
     groups.forEach((group, gi) => {
       const row = document.createElement("div");
       row.className = "skeleton-group";
-      row.style.animationDelay = `${gi * 60}ms`;
+      row.style.animationDelay = `${gi * 55}ms`;
 
       const avatar = document.createElement("div");
       avatar.className = "skeleton-group__avatar";
-      avatar.style.animationDelay = `${gi * 60}ms`;
+      avatar.style.animationDelay = `${gi * 55}ms`;
 
       const content = document.createElement("div");
       content.className = "skeleton-group__content";
@@ -741,14 +754,14 @@ export class Timeline {
       const name = document.createElement("div");
       name.className = "skeleton-group__name";
       name.style.width = `${group.nameWidth}%`;
-      name.style.animationDelay = `${gi * 60}ms`;
+      name.style.animationDelay = `${gi * 55}ms`;
       content.appendChild(name);
 
       group.lines.forEach((width, li) => {
         const line = document.createElement("div");
         line.className = "skeleton-group__line";
         line.style.width = `${width}%`;
-        line.style.animationDelay = `${gi * 60 + li * 30}ms`;
+        line.style.animationDelay = `${gi * 55 + li * 30}ms`;
         content.appendChild(line);
       });
 
@@ -757,7 +770,57 @@ export class Timeline {
       fragment.appendChild(row);
     });
 
-    this._listEl.appendChild(fragment);
+    overlay.appendChild(fragment);
+    this._el.appendChild(overlay);
+  }
+
+  /**
+   * Fade out the skeleton overlay, waiting for any images in the freshly-rendered
+   * list to finish loading first. Enforces a minimum skeleton display time so
+   * fast loads don't produce a jarring flash.
+   */
+  private _fadeOutSkeletonAfterImages(): void {
+    const skeleton = this._skeletonEl;
+    if (!skeleton) return;
+
+    const MIN_MS = 600;
+
+    const doFade = () => {
+      // Guard against a new skeleton being shown before this fires
+      if (this._skeletonEl !== skeleton) return;
+      skeleton.classList.add("skeleton-overlay--out");
+      skeleton.addEventListener("transitionend", () => skeleton.remove(), { once: true });
+      this._skeletonEl = null;
+    };
+
+    const scheduleWithMinimum = () => {
+      const elapsed = Date.now() - this._skeletonShownAt;
+      const remaining = Math.max(0, MIN_MS - elapsed);
+      setTimeout(doFade, remaining);
+    };
+
+    // Collect images that haven't finished loading yet
+    const imgs = Array.from(this._listEl.querySelectorAll<HTMLImageElement>("img"));
+    const pending = imgs.filter((img) => !img.complete);
+
+    if (pending.length === 0) {
+      scheduleWithMinimum();
+      return;
+    }
+
+    // Wait for all pending images, then enforce the minimum
+    let resolved = 0;
+    const onSettled = () => {
+      resolved++;
+      if (resolved >= pending.length) scheduleWithMinimum();
+    };
+    pending.forEach((img) => {
+      img.addEventListener("load", onSettled, { once: true });
+      img.addEventListener("error", onSettled, { once: true });
+    });
+
+    // Hard timeout: don't hold the skeleton forever if an image stalls
+    setTimeout(scheduleWithMinimum, 3000);
   }
 
   /** Prepend older messages above the current list, preserving scroll position. */
@@ -870,6 +933,7 @@ export class Timeline {
       });
     }
     this._updateJumpToLatestVisibility();
+    this._fadeOutSkeletonAfterImages();
   }
 
   /** Append a single message, scrolling to bottom if not scrolled up */
@@ -1685,7 +1749,6 @@ export class Timeline {
   }
 
   private _renderAll(): void {
-    this._el.classList.remove("timeline--skeleton");
     this._listEl.innerHTML = "";
     const groups = groupMessages(this._messages);
     const fragment = document.createDocumentFragment();

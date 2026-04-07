@@ -1023,6 +1023,7 @@ body {
   flex-direction: column;
   gap: 12px;
   min-height: 0;
+  position: relative; /* anchor for skeleton-overlay absolute positioning */
 }
 
 .timeline__loading-more {
@@ -4384,13 +4385,28 @@ a:hover {
 
 /* ── Timeline skeleton ────────────────────────────────────────────────────── */
 
-.timeline--skeleton {
+/* Floating overlay — sits on top of the timeline while messages load */
+.skeleton-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background-color: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 16px 14px;
   overflow: hidden;
+  transition: opacity 380ms ease;
+}
+
+.skeleton-overlay--out {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .skeleton-group {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: flex-start;
   opacity: 0;
   animation: skeleton-fade-in 280ms ease forwards;
@@ -4411,8 +4427,8 @@ a:hover {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding-top: 1px;
+  gap: 7px;
+  padding-top: 2px;
 }
 
 .skeleton-group__name {
@@ -4426,7 +4442,7 @@ a:hover {
   border-radius: 2px;
 }
 
-/* Shared shimmer animation for all skeleton elements */
+/* Shared shimmer for all skeleton fill elements */
 .skeleton-group__avatar,
 .skeleton-group__name,
 .skeleton-group__line {
