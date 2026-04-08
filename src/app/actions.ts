@@ -1724,7 +1724,14 @@ export function openGifPicker(): void {
     _gifResultCount = 0;
     gifPicker.setStatus("Searching…");
     try {
-      const results = await searchGifs(_gifQuery, "tenor", "", 20);
+      const config = await getAppConfig();
+      const results = await searchGifs(
+        _gifQuery,
+        config.gif.provider,
+        config.gif.api_key,
+        20,
+        config.gif.rating,
+      );
       _gifResultCount = results.length;
       gifPicker.setResults(results);
       gifPicker.setStatus(
@@ -1743,8 +1750,15 @@ export function openGifPicker(): void {
     if (!_gifQuery) return;
     gifPicker.setStatus("Loading more…");
     try {
+      const config = await getAppConfig();
       // Re-fetch with a larger limit to append more results
-      const more = await searchGifs(_gifQuery, "tenor", "", _gifResultCount + 20);
+      const more = await searchGifs(
+        _gifQuery,
+        config.gif.provider,
+        config.gif.api_key,
+        _gifResultCount + 20,
+        config.gif.rating,
+      );
       _gifResultCount = more.length;
       gifPicker.setResults(more);
       gifPicker.setStatus(
