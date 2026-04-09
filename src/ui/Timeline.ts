@@ -1692,6 +1692,40 @@ export class Timeline {
       const nameEl = wrapper.querySelector<HTMLElement>(".message-group__sender");
       if (nameEl) nameEl.textContent = displayName;
     }
+    // Also update reply preview sender labels that reference this user
+    const localPart = senderId.startsWith("@") ? senderId.slice(1).split(":")[0] : senderId;
+    const displayLocalPart = displayName.startsWith("@") ? displayName.slice(1).split(":")[0] : displayName;
+    for (const el of this._listEl.querySelectorAll<HTMLElement>(".reply-preview__sender")) {
+      if (el.textContent === localPart) el.textContent = displayLocalPart;
+    }
+  }
+
+  /**
+   * Update the body text of an existing message in place.
+   * Used to apply incoming edit events without re-rendering the whole timeline.
+   */
+  updateMessageBody(eventId: string, newBody: string, newHtmlBody?: string): void {
+    const idx = this._messages.findIndex((m) => m.id === eventId);
+    if (idx >= 0) {
+      this._messages[idx].body = newBody;
+      if (newHtmlBody !== undefined) this._messages[idx].htmlBody = newHtmlBody;
+    }
+    const el = this.getMessageElementById(eventId);
+    if (!el) return;
+    const bodyEl = el.querySelector<HTMLElement>(".message__body");
+    if (!bodyEl) return;
+    if (newHtmlBody) {
+      bodyEl.innerHTML = newHtmlBody;
+    } else {
+      bodyEl.textContent = newBody;
+    }
+    // Mark as edited if not already marked
+    if (!el.querySelector(".message__edited-marker")) {
+      const marker = document.createElement("span");
+      marker.className = "message__edited-marker";
+      marker.textContent = " (edited)";
+      bodyEl.appendChild(marker);
+    }
   }
 
   updateSenderAvatar(sender: string, dataUrl: string): void {

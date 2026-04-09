@@ -224,8 +224,19 @@ fn convert_sync_room_message(ev: OriginalSyncRoomMessageEvent) -> TimelineEvent 
     let sender = ev.sender.to_string();
     let event_id = ev.event_id.to_string();
 
+    // For replacement (edit) events use m.new_content so the actual updated body
+    // is used rather than the "* fallback" stored in the top-level msgtype.
+    let effective_content: std::borrow::Cow<RoomMessageEventContent> =
+        if let Some(Relation::Replacement(r)) = &ev.content.relates_to {
+            let mut c = ev.content.clone();
+            c.msgtype = r.new_content.msgtype.clone();
+            std::borrow::Cow::Owned(c)
+        } else {
+            std::borrow::Cow::Borrowed(&ev.content)
+        };
+
     let (body, formatted_body, msg_type, media_url, media_mimetype, media_width, media_height, media_encryption_info, media_thumbnail_url, media_thumbnail_encryption_info) =
-        extract_message_content(&ev.content);
+        extract_message_content(&effective_content);
 
     let (is_edit, relates_to_event_id, in_reply_to, thread_root) =
         extract_relations(&ev.content);

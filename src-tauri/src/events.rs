@@ -356,8 +356,16 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
         }
     };
 
+    // For replacement (edit) events use m.new_content so we get the actual updated
+    // body instead of the "* fallback" body stored in the top-level msgtype.
+    let effective_msgtype = if let Some(Relation::Replacement(r)) = &content.relates_to {
+        &r.new_content.msgtype
+    } else {
+        &content.msgtype
+    };
+
     let (body, formatted_body, msg_type, media_url, media_mimetype, media_width, media_height, media_encryption_info) =
-        match &content.msgtype {
+        match effective_msgtype {
             MessageType::Text(text) => (
                 text.body.clone(),
                 text.formatted.as_ref().map(|f| f.body.clone()),

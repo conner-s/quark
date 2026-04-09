@@ -3,7 +3,7 @@
 import { AppState } from "./state.js";
 import type { AppComponents } from "../ui/App.js";
 import type { TimelineEvent, RoomInfo } from "../ipc/types.js";
-import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage, resolveSenderAvatarUrl, ensureSenderAvatarDownloaded, applyIncomingRedaction } from "./actions.js";
+import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage, resolveSenderAvatarUrl, ensureSenderAvatarDownloaded, applyIncomingRedaction, stripReplyFallback } from "./actions.js";
 import { showToast } from "../ui/NotificationToast.js";
 import { handleIncomingMessage } from "./notifications.js";
 
@@ -80,19 +80,39 @@ function timelineEventToMessage(e: TimelineEvent) {
     return "text" as const;
   })();
 
+  // Build reply preview from the current timeline state
+  let replyTo: import("../ui/Timeline.js").ReplyPreviewData | undefined;
+  if (e.in_reply_to) {
+    const allEvents = AppState.get("currentTimeline");
+    const parent = allEvents.find((ev) => ev.event_id === e.in_reply_to);
+    if (parent) {
+      replyTo = {
+        eventId: parent.event_id,
+        senderName: resolveDisplayName(parent.sender),
+        body: parent.body.slice(0, 80),
+      };
+    }
+  }
+
+  // Strip Matrix reply fallback so the quoted original doesn't render twice
+  const { body: displayBody, htmlBody: displayHtml } = e.in_reply_to
+    ? stripReplyFallback(e.body, e.formatted_body ?? undefined)
+    : { body: e.body, htmlBody: e.formatted_body ?? undefined };
+
   return {
     id: e.event_id,
     senderId: e.sender,
     senderName: resolveDisplayName(e.sender),
     senderAvatarUrl: resolveSenderAvatarUrl(e.sender),
     timestamp: new Date(e.timestamp).toISOString(),
-    body: e.body,
-    htmlBody: e.formatted_body ?? undefined,
+    body: displayBody,
+    htmlBody: displayHtml,
     type: msgType,
     mediaUrl: e.media_url ?? undefined,
     mediaAlt: e.body,
     mediaMimeType: e.media_mimetype ?? undefined,
     mediaEncryptionInfo: e.media_encryption_info ?? undefined,
+    replyTo,
   };
 }
 
@@ -144,6 +164,13 @@ export async function startSync(components: AppComponents): Promise<() => void> 
               });
             }
             timeline.incrementThreadReplyCount(payload.event.thread_root);
+          } else if (payload.event.is_edit && payload.event.relates_to_event_id) {
+            // Edit: update the original message body in place
+            timeline.updateMessageBody(
+              payload.event.relates_to_event_id,
+              payload.event.body,
+              payload.event.formatted_body ?? undefined,
+            );
           } else {
             timeline.appendMessage(timelineEventToMessage(payload.event));
             downloadSyncMessageImage(payload.event, timeline);

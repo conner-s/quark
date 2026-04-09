@@ -133,6 +133,35 @@ export function resolveDisplayName(userId: string): string {
   return _memberDisplayName.get(userId) ?? userId;
 }
 
+/**
+ * Strip the Matrix reply fallback content from a message body.
+ * Per spec, reply messages include a quoted fallback for clients that don't
+ * support m.in_reply_to — modern clients should remove it before displaying.
+ *
+ * - formatted_body: `<mx-reply><blockquote>…</blockquote></mx-reply>` prefix
+ * - body: `> quoted line\n` block followed by a blank line
+ */
+export function stripReplyFallback(body: string, htmlBody?: string): { body: string; htmlBody?: string } {
+  let strippedBody = body;
+  let strippedHtml = htmlBody;
+
+  // Strip > quoted fallback lines from plain body (everything up to first blank line)
+  const blankLineIdx = body.indexOf("\n\n");
+  if (blankLineIdx !== -1) {
+    const prefix = body.slice(0, blankLineIdx);
+    if (prefix.split("\n").every((line) => line.startsWith("> "))) {
+      strippedBody = body.slice(blankLineIdx + 2);
+    }
+  }
+
+  // Strip <mx-reply>...</mx-reply> from HTML body
+  if (htmlBody) {
+    strippedHtml = htmlBody.replace(/^<mx-reply>[\s\S]*?<\/mx-reply>/, "").trimStart();
+  }
+
+  return { body: strippedBody, htmlBody: strippedHtml };
+}
+
 // ── Constants ────────────────────────────────────────────────────────────────
 const THUMBNAIL_SIZE = 64;
 
@@ -190,6 +219,11 @@ function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[], t
 
   const ownUserId = AppState.get("ownUserId");
 
+  // Strip Matrix reply fallback content so the quoted original doesn't render twice
+  const { body: displayBody, htmlBody: displayHtml } = e.in_reply_to
+    ? stripReplyFallback(e.body, e.formatted_body ?? undefined)
+    : { body: e.body, htmlBody: e.formatted_body ?? undefined };
+
   return {
     id: e.event_id,
     senderId: e.sender,
@@ -197,8 +231,8 @@ function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[], t
     senderAvatarUrl,
     isOwn: ownUserId ? e.sender === ownUserId : false,
     timestamp: new Date(e.timestamp).toISOString(),
-    body: e.body,
-    htmlBody: e.formatted_body ?? undefined,
+    body: displayBody,
+    htmlBody: displayHtml,
     type: msgType,
     mediaUrl: e.media_url ?? undefined,
     mediaMimeType: e.media_mimetype ?? undefined,
@@ -320,6 +354,9 @@ export async function selectRoom(roomId: string): Promise<void> {
   AppState.set("currentRoomId", roomId);
   AppState.set("activePanel", "timeline");
   if (AppState.get("threadRootEventId")) closeThread();
+  // Clear per-room display name cache so stale names from the previous room
+  // don't appear in reply previews before the new room's member list loads.
+  _memberDisplayName.clear();
   _prevBatch = null;
   _nextBatch = null;
   _inContextView = false;
@@ -525,6 +562,15 @@ async function loadMoreMessages(): Promise<void> {
       _downloadMessageImages(page.events, timeline);
       _downloadInlineEmoji(timeline);
       void _downloadReactionEmoji(page.events, timeline);
+      // Download avatars for senders not yet cached (e.g., older messages
+      // from users whose avatars weren't in the initial timeline page).
+      const seenSenders = new Set<string>();
+      for (const e of page.events) {
+        if (!seenSenders.has(e.sender)) {
+          seenSenders.add(e.sender);
+          ensureSenderAvatarDownloaded(e.sender, timeline);
+        }
+      }
       break;
     }
   } catch (err) {
@@ -567,6 +613,13 @@ export async function jumpToMessage(eventId: string): Promise<void> {
     _downloadMessageImages(ctx.events, timeline);
     _downloadInlineEmoji(timeline);
     void _downloadReactionEmoji(ctx.events, timeline);
+    const seenSenders = new Set<string>();
+    for (const e of ctx.events) {
+      if (!seenSenders.has(e.sender)) {
+        seenSenders.add(e.sender);
+        ensureSenderAvatarDownloaded(e.sender, timeline);
+      }
+    }
   } catch (err) {
     showError(`Failed to load message: ${err instanceof Error ? err.message : String(err)}`);
   }
