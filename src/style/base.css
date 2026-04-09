@@ -1019,6 +1019,7 @@ body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  overflow-anchor: none; /* disable browser scroll anchoring — all adjustments are manual */
   scrollbar-gutter: stable; /* always reserve scrollbar space so message-bubble right edges stay fixed */
   padding: 10px 12px;
   display: flex;

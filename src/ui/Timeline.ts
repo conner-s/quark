@@ -1814,20 +1814,21 @@ export class Timeline {
     if (!el) return;
     const img = el.querySelector<HTMLImageElement>(".message__image, .message__sticker");
     if (!img) return;
+    // Measure before and after in the same synchronous task.
+    // Data URLs are decoded immediately, so el.offsetHeight reflects the
+    // new size after the forced layout that follows the src assignment.
+    // Doing this synchronously avoids the async load-event racing with
+    // in-progress momentum scroll (which a deferred scrollTop set would interrupt).
     const prevHeight = el.offsetHeight;
     img.src = dataUrl;
-    // If the message is above the visible scroll area and the image expands it
-    // (e.g. media_width/height were absent so no placeholder space was reserved),
-    // compensate scrollTop so the viewport doesn't jump.
-    img.addEventListener("load", () => {
-      const heightDelta = el.offsetHeight - prevHeight;
-      if (heightDelta <= 0) return;
+    const heightDelta = el.offsetHeight - prevHeight; // forces layout; data URL already decoded
+    if (heightDelta > 0) {
       const elRect = el.getBoundingClientRect();
       const scrollRect = this._el.getBoundingClientRect();
       if (elRect.bottom < scrollRect.top) {
         this._el.scrollTop += heightDelta;
       }
-    }, { once: true });
+    }
   }
 
   /**
