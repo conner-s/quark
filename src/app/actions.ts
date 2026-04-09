@@ -263,6 +263,8 @@ function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[], t
     type: msgType,
     mediaUrl: e.media_url ?? undefined,
     mediaMimeType: e.media_mimetype ?? undefined,
+    mediaWidth: e.media_width ?? undefined,
+    mediaHeight: e.media_height ?? undefined,
     mediaEncryptionInfo: e.media_encryption_info ?? undefined,
     mediaThumbnailUrl: e.media_thumbnail_url ?? undefined,
     mediaThumbnailEncryptionInfo: e.media_thumbnail_encryption_info ?? undefined,

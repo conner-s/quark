@@ -124,13 +124,29 @@ function buildUrlPreviewCard(preview: { title: string | null; description: strin
 }
 
 /**
+ * Append a URL preview card and, if the container is above the visible scroll
+ * area, compensate scrollTop so the viewport doesn't jump.
+ */
+function appendCardAboveViewportSafe(card: HTMLElement, container: HTMLElement): void {
+  container.appendChild(card);
+  const scrollEl = container.closest<HTMLElement>(".timeline");
+  if (!scrollEl) return;
+  const cardHeight = card.offsetHeight; // force layout to measure
+  const cRect = container.getBoundingClientRect();
+  const sRect = scrollEl.getBoundingClientRect();
+  if (cRect.bottom < sRect.top) {
+    scrollEl.scrollTop += cardHeight;
+  }
+}
+
+/**
  * Asynchronously fetch a URL preview and append the card to `container`.
  * Uses the module-level cache to avoid duplicate fetches.
  */
 function attachUrlPreview(url: string, container: HTMLElement): void {
   if (_urlPreviewCache.has(url)) {
     const cached = _urlPreviewCache.get(url)!;
-    if (cached !== null) container.appendChild(buildUrlPreviewCard(cached));
+    if (cached !== null) appendCardAboveViewportSafe(buildUrlPreviewCard(cached), container);
     return;
   }
   void invoke<{ title: string | null; description: string | null; image_url: string | null; site_name: string | null } | null>("get_url_preview", { url })
@@ -141,7 +157,7 @@ function attachUrlPreview(url: string, container: HTMLElement): void {
       }
       const data = { title: preview.title, description: preview.description, imageUrl: preview.image_url, siteName: preview.site_name };
       _urlPreviewCache.set(url, data);
-      container.appendChild(buildUrlPreviewCard(data));
+      appendCardAboveViewportSafe(buildUrlPreviewCard(data), container);
     })
     .catch((err) => {
       console.warn("[url-preview] failed for", url, err);
@@ -217,6 +233,9 @@ export interface MessageData {
   mediaUrl?: string;
   /** Alt text for image / sticker messages; filename for video */
   mediaAlt?: string;
+  /** Natural pixel dimensions of the image — used to reserve layout space before src loads */
+  mediaWidth?: number;
+  mediaHeight?: number;
   /** MIME type for media messages (used for video canPlayType check) */
   mediaMimeType?: string;
   /** JSON-serialized EncryptedFile for E2EE video/audio; absent for plain media */
@@ -498,6 +517,12 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     img.className = "message__image";
     img.src = msg.mediaUrl ?? "";
     img.alt = msg.mediaAlt ?? "image";
+    // Setting width/height lets the browser reserve the correct layout space before
+    // the image data loads, preventing a scroll jump when content is above the viewport.
+    if (msg.mediaWidth && msg.mediaHeight) {
+      img.width = msg.mediaWidth;
+      img.height = msg.mediaHeight;
+    }
     // Mark GIFs so the focus/blur handler can pause/resume animation
     if ((msg.mediaUrl ?? "").match(/\.gif($|\?)/i) || msg.mediaMimeType === "image/gif") {
       img.dataset.gif = "1";
@@ -511,6 +536,10 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     const img = document.createElement("img");
     img.className = "message__sticker";
     img.src = msg.mediaUrl ?? "";
+    if (msg.mediaWidth && msg.mediaHeight) {
+      img.width = msg.mediaWidth;
+      img.height = msg.mediaHeight;
+    }
     img.alt = msg.mediaAlt ?? "sticker";
     row.appendChild(img);
   } else if (type === "file") {
@@ -1784,7 +1813,21 @@ export class Timeline {
     const el = this.getMessageElementById(eventId);
     if (!el) return;
     const img = el.querySelector<HTMLImageElement>(".message__image, .message__sticker");
-    if (img) img.src = dataUrl;
+    if (!img) return;
+    const prevHeight = el.offsetHeight;
+    img.src = dataUrl;
+    // If the message is above the visible scroll area and the image expands it
+    // (e.g. media_width/height were absent so no placeholder space was reserved),
+    // compensate scrollTop so the viewport doesn't jump.
+    img.addEventListener("load", () => {
+      const heightDelta = el.offsetHeight - prevHeight;
+      if (heightDelta <= 0) return;
+      const elRect = el.getBoundingClientRect();
+      const scrollRect = this._el.getBoundingClientRect();
+      if (elRect.bottom < scrollRect.top) {
+        this._el.scrollTop += heightDelta;
+      }
+    }, { once: true });
   }
 
   /**
