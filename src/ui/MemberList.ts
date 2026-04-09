@@ -2,21 +2,15 @@
 
 import { attachResizeHandle } from "./ResizeHandle.js";
 import { isAnimatedUrl } from "../app/animated_urls.js";
+import { hashColor } from "./avatarColors.js";
 
 export type PresenceStatus = "online" | "unavailable" | "offline";
 export type PowerLevel = "admin" | "mod" | "member";
 
 // ── Avatar helpers ────────────────────────────────────────────────────────────
 
-const AVATAR_COLORS = [
-  "#00ff41", "#00aaff", "#ff4466", "#ffaa00",
-  "#aa44ff", "#00ffcc", "#ff6600", "#44ccff",
-];
-
 function _memberColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+  return hashColor(name);
 }
 
 function _buildFallbackAvatar(name: string): HTMLElement {

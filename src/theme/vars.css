@@ -88,6 +88,23 @@
   --focus-color: #00ff41;
   --focus-width: 1px;
 
+  /* ── Overlays & shadows ──────────────────────────────────────────────── */
+  --overlay-bg: rgba(0, 0, 0, 0.65);
+  --overlay-bg-dark: rgba(0, 0, 0, 0.88);
+  --shadow-color: rgba(0, 0, 0, 0.6);
+
+  /* ── Hover / surface tints (white-on-dark) ───────────────────────────── */
+  --surface-dim: rgba(255, 255, 255, 0.02);
+  --surface-subtle: rgba(255, 255, 255, 0.03);
+  --surface-hover: rgba(255, 255, 255, 0.04);
+  --surface-hover-strong: rgba(255, 255, 255, 0.06);
+  --surface-hover-active: rgba(255, 255, 255, 0.1);
+
+  /* ── Media ───────────────────────────────────────────────────────────── */
+  --media-bg: #000;
+  --media-icon-fg: #fff;
+  --scanline-color: rgba(0, 0, 0, 0.22);
+
   /* ── Eye-candy ─────────────────────────────────────────────────────── */
   --glow-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
   --glow-radius: 6px;

@@ -1,17 +1,10 @@
 // Header bar for the main panel — room name, topic, member count, encryption
 
 import { isAnimatedUrl } from "../app/animated_urls.js";
-
-// ── Avatar colours (mirrors Timeline.ts palette) ──────────────────────────────
-const AVATAR_COLORS = [
-  "#00ff41", "#00aaff", "#ff4466", "#ffaa00",
-  "#aa44ff", "#00ffcc", "#ff6600", "#44ccff",
-];
+import { hashColor } from "./avatarColors.js";
 
 function _roomColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+  return hashColor(name);
 }
 
 export interface RoomHeaderData {

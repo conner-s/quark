@@ -4,6 +4,7 @@ import { createReactionBar, updateReactionBar, type ReactionGroup } from "./Reac
 import { invoke } from "../ipc/invoke.js";
 import type { ThreadMessageData } from "./ThreadView.js";
 import { isAnimatedUrl } from "../app/animated_urls.js";
+import { hashColor } from "./avatarColors.js";
 
 // ── URL linkification ─────────────────────────────────────────────────────────
 
@@ -167,15 +168,8 @@ function attachUrlPreview(url: string, container: HTMLElement): void {
 
 // ── Avatar generation ─────────────────────────────────────────────────────────
 
-const AVATAR_COLORS = [
-  "#00ff41", "#00aaff", "#ff4466", "#ffaa00",
-  "#aa44ff", "#00ffcc", "#ff6600", "#44ccff",
-];
-
 function senderColor(sender: string): string {
-  let h = 0;
-  for (let i = 0; i < sender.length; i++) h = (h * 31 + sender.charCodeAt(i)) & 0xffff;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+  return hashColor(sender);
 }
 
 function buildFallbackAvatar(sender: string): HTMLElement {

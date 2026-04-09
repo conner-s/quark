@@ -267,7 +267,7 @@ body {
 
 .room-list__item--unread {
   color: var(--roomlist-unread);
-  text-shadow: 0 0 4px rgba(255, 255, 255, 0.15);
+  text-shadow: 0 0 4px color-mix(in srgb, var(--roomlist-unread) 15%, transparent);
   animation: unread-pulse 2s ease-in-out infinite;
 }
 
@@ -432,7 +432,7 @@ body {
 }
 
 .thread-view__message:hover {
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--surface-dim);
 }
 
 .thread-view__message:focus {
@@ -642,7 +642,7 @@ body {
 }
 
 .thread-inline__message:hover {
-  background-color: rgba(255, 255, 255, 0.025);
+  background-color: var(--surface-dim);
 }
 
 .thread-inline__message--own {
@@ -1214,7 +1214,7 @@ body {
 }
 
 .message:hover {
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--surface-dim);
 }
 
 /* ── Hover action bar ────────────────────────────────────────────────────── */
@@ -1494,21 +1494,21 @@ body {
   gap: 6px;
   margin-top: 4px;
   padding: 4px 10px;
-  border: 1px solid var(--color-border, #333);
+  border: 1px solid var(--border-color);
   border-radius: 2px;
   cursor: pointer;
   user-select: none;
   max-width: 400px;
-  color: var(--color-fg, #ccc);
-  background: var(--color-bg-alt, rgba(255,255,255,0.03));
+  color: var(--fg);
+  background: var(--surface-subtle);
   font-family: inherit;
   font-size: inherit;
 }
 
 .message__video-affordance:hover,
 .message__video-affordance:focus-visible {
-  border-color: var(--color-accent, #00ff41);
-  color: var(--color-accent, #00ff41);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
   outline: none;
 }
 
@@ -1517,8 +1517,8 @@ body {
   position: relative;
   overflow: hidden;
   pointer-events: none;
-  border-color: var(--color-accent, #00ff41);
-  color: var(--color-accent, #00ff41);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
 }
 
 .message__video-affordance--loading::after {
@@ -1528,7 +1528,7 @@ body {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    var(--color-accent, #00ff41) 50%,
+    var(--accent-primary) 50%,
     transparent 100%
   );
   opacity: 0.15;
@@ -1559,7 +1559,7 @@ body {
   width: 160px;
   height: 90px;
   flex-shrink: 0;
-  background: var(--color-bg, #0a0a0a);
+  background: var(--bg);
   border-radius: 1px;
   overflow: hidden;
 }
@@ -1578,8 +1578,8 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 1.4em;
-  color: #fff;
-  text-shadow: 0 0 6px rgba(0,0,0,0.8);
+  color: var(--media-icon-fg);
+  text-shadow: 0 0 6px var(--shadow-color);
   pointer-events: none;
 }
 
@@ -1591,21 +1591,21 @@ body {
   gap: 6px;
   margin-top: 4px;
   padding: 4px 10px;
-  border: 1px solid var(--color-border, #333);
+  border: 1px solid var(--border-color);
   border-radius: 2px;
   cursor: pointer;
   user-select: none;
   max-width: 400px;
-  color: var(--color-fg, #ccc);
-  background: var(--color-bg-alt, rgba(255,255,255,0.03));
+  color: var(--fg);
+  background: var(--surface-subtle);
   font-family: inherit;
   font-size: inherit;
 }
 
 .message__file-affordance:hover,
 .message__file-affordance:focus-visible {
-  border-color: var(--color-accent, #00ff41);
-  color: var(--color-accent, #00ff41);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
   outline: none;
 }
 
@@ -1635,7 +1635,7 @@ body {
   width: auto;
   height: auto;
   margin-top: 4px;
-  background: #000;
+  background: var(--media-bg);
   border-radius: 2px;
 }
 
@@ -1647,8 +1647,8 @@ body {
   gap: 8px;
   margin-top: 6px;
   padding: 6px 8px;
-  border-left: 2px solid var(--color-accent, #00ff41);
-  background: var(--color-bg-alt, rgba(255,255,255,0.03));
+  border-left: 2px solid var(--accent-primary);
+  background: var(--surface-subtle);
   max-width: 480px;
   border-radius: 0 2px 2px 0;
 }
@@ -1659,7 +1659,7 @@ body {
   height: 56px;
   overflow: hidden;
   border-radius: 2px;
-  background: var(--color-bg, #0a0a0a);
+  background: var(--bg);
 }
 
 .message__url-preview-img {
@@ -1678,7 +1678,7 @@ body {
 
 .message__url-preview-site {
   font-size: calc(var(--font-size) - 2px);
-  color: var(--color-accent, #00ff41);
+  color: var(--accent-primary);
   opacity: 0.8;
   white-space: nowrap;
   overflow: hidden;
@@ -1687,7 +1687,7 @@ body {
 
 .message__url-preview-title {
   font-size: var(--font-size);
-  color: var(--color-fg, #ccc);
+  color: var(--fg);
   font-weight: bold;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1696,7 +1696,7 @@ body {
 
 .message__url-preview-desc {
   font-size: calc(var(--font-size) - 1px);
-  color: var(--color-fg-dim, #888);
+  color: var(--reaction-count);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1871,7 +1871,7 @@ span.reaction__emoji {
   gap: 0;
   background-color: var(--bg);
   border: var(--border-width) solid var(--accent-primary);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6),
+  box-shadow: 0 4px 20px var(--shadow-color),
               0 0 0 1px color-mix(in srgb, var(--accent-primary) 20%, transparent);
   z-index: 300;
   width: 300px;
@@ -2011,7 +2011,7 @@ span.reaction__emoji {
   height: min(420px, calc(100vh - 100px));
   background-color: var(--bg);
   border: var(--border-width) solid var(--accent-primary);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 4px 24px var(--shadow-color);
   z-index: 250;
   display: flex;
   flex-direction: column;
@@ -2071,7 +2071,7 @@ span.reaction__emoji {
 .emoji-picker__category-btn--active {
   opacity: 1;
   border-color: var(--accent-primary);
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--surface-hover);
 }
 
 .emoji-picker__category-img {
@@ -2095,8 +2095,8 @@ span.reaction__emoji {
   outline: none;
 }
 
-.emoji-picker__tab:hover { color: var(--fg); background-color: rgba(255,255,255,0.04); }
-.emoji-picker__tab--active { color: var(--accent-primary); background-color: rgba(255,255,255,0.03); }
+.emoji-picker__tab:hover { color: var(--fg); background-color: var(--surface-hover); }
+.emoji-picker__tab--active { color: var(--accent-primary); background-color: var(--surface-subtle); }
 
 .emoji-picker__search {
   background: transparent;
@@ -2139,7 +2139,7 @@ span.reaction__emoji {
 
 .emoji-picker__cell:hover,
 .emoji-picker__cell:focus {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--surface-hover-active);
 }
 
 .emoji-picker__img {
@@ -2157,7 +2157,7 @@ span.reaction__emoji {
   height: min(420px, calc(100vh - 100px));
   background-color: var(--bg);
   border: var(--border-width) solid var(--accent-primary);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 4px 24px var(--shadow-color);
   z-index: 250;
   display: flex;
   flex-direction: column;
@@ -2226,7 +2226,7 @@ span.reaction__emoji {
 
 .sticker-picker__cell:hover,
 .sticker-picker__cell--focused,
-.sticker-picker__cell:focus { background-color: rgba(255, 255, 255, 0.1); }
+.sticker-picker__cell:focus { background-color: var(--surface-hover-active); }
 
 .sticker-picker__img {
   width: 100%;
@@ -2504,7 +2504,7 @@ span.reaction__emoji {
 .image-lightbox {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.88);
+  background: var(--overlay-bg-dark);
   display: none;
   align-items: center;
   justify-content: center;
@@ -2918,7 +2918,7 @@ a:hover {
 }
 
 .shortcode-preview__item:hover {
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--surface-hover);
 }
 
 .shortcode-preview__item--active {
@@ -2963,7 +2963,7 @@ a:hover {
   display: flex;              /* overridden to "none" when hidden */
   align-items: center;
   justify-content: center;
-  background-color: rgba(0, 0, 0, 0.65);
+  background-color: var(--overlay-bg);
   z-index: 200;
   /* subtle fade-in */
   animation: gif-picker-fade-in 0.1s ease;
@@ -2982,7 +2982,7 @@ a:hover {
   max-height: min(540px, calc(100vh - 80px));
   background-color: var(--bg);
   border: var(--border-width) solid var(--accent-primary);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-color);
+  box-shadow: 0 8px 32px var(--shadow-color), 0 0 0 1px var(--border-color);
   overflow: hidden;
 }
 
@@ -2994,7 +2994,7 @@ a:hover {
   padding: 6px 10px;
   border-bottom: var(--border-width) solid var(--border-color);
   flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-subtle);
 }
 
 .gif-picker__title {
@@ -3084,7 +3084,7 @@ a:hover {
   position: relative;
   display: block;
   overflow: hidden;
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--surface-hover);
   border: var(--border-width) solid transparent;
   cursor: pointer;
   padding: 0;
@@ -3116,7 +3116,7 @@ a:hover {
   left: 0;
   right: 0;
   padding: 2px 4px;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: var(--overlay-bg);
   color: var(--fg);
   font-size: calc(var(--font-size) - 3px);
   white-space: nowrap;
@@ -3142,7 +3142,7 @@ a:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--surface-dim);
 }
 
 /* ── Help dialog ─────────────────────────────────────────────────────────── */
@@ -3153,7 +3153,7 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(0, 0, 0, 0.65);
+  background-color: var(--overlay-bg);
   z-index: 200;
   animation: gif-picker-fade-in 0.1s ease;
 }
@@ -3165,7 +3165,7 @@ a:hover {
   max-height: min(520px, calc(100vh - 80px));
   background-color: var(--bg);
   border: var(--border-width) solid var(--accent-primary);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-color);
+  box-shadow: 0 8px 32px var(--shadow-color), 0 0 0 1px var(--border-color);
   overflow: hidden;
 }
 
@@ -3176,7 +3176,7 @@ a:hover {
   padding: 6px 10px;
   border-bottom: var(--border-width) solid var(--border-color);
   flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-subtle);
 }
 
 .help-dialog__title {
@@ -3216,12 +3216,12 @@ a:hover {
 
 .help-dialog__tab:hover {
   color: var(--fg);
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--surface-hover);
 }
 
 .help-dialog__tab--active {
   color: var(--accent-primary);
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-subtle);
 }
 
 /* Scrollable area holding headings + table */
@@ -3269,7 +3269,7 @@ a:hover {
 
 .help-dialog__row:focus,
 .help-dialog__row:hover {
-  background-color: rgba(255, 255, 255, 0.06);
+  background-color: var(--surface-hover-strong);
 }
 
 .help-dialog__row:focus .help-dialog__cmd-name,
@@ -3320,7 +3320,7 @@ a:hover {
   color: var(--roomlist-muted);
   font-size: calc(var(--font-size) - 2px);
   flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--surface-dim);
 }
 
 /* ── Profile dialog ──────────────────────────────────────────────────────── */
@@ -3334,7 +3334,7 @@ a:hover {
   gap: 0;
   background-color: var(--bg);
   border: var(--border-width) solid var(--accent-primary);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6),
+  box-shadow: 0 4px 20px var(--shadow-color),
               0 0 0 1px color-mix(in srgb, var(--accent-primary) 20%, transparent);
   z-index: 300;
   width: auto;
@@ -3491,7 +3491,7 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(0, 0, 0, 0.65);
+  background-color: var(--overlay-bg);
   z-index: 200;
   animation: gif-picker-fade-in 0.1s ease;
 }
@@ -3503,7 +3503,7 @@ a:hover {
   max-height: min(520px, calc(100vh - 80px));
   background-color: var(--bg);
   border: var(--border-width) solid var(--accent-primary);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-color);
+  box-shadow: 0 8px 32px var(--shadow-color), 0 0 0 1px var(--border-color);
   overflow: hidden;
 }
 
@@ -3523,7 +3523,7 @@ a:hover {
   padding: 6px 10px;
   border-bottom: var(--border-width) solid var(--border-color);
   flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-subtle);
 }
 
 .verification-dialog__title {
@@ -3632,7 +3632,7 @@ a:hover {
   color: var(--roomlist-muted);
   font-size: calc(var(--font-size) - 2px);
   flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--surface-dim);
   text-align: center;
 }
 
@@ -3671,7 +3671,7 @@ a:hover {
   gap: 8px;
   margin: 12px 16px;
   color: var(--accent-primary, #00ff41);
-  font-size: calc(var(--font-size, 14px) - 2px);
+  font-size: calc(var(--font-size) - 2px);
   white-space: nowrap;
   user-select: none;
 }
@@ -3691,8 +3691,8 @@ a:hover {
   align-items: center;
   gap: 8px;
   margin: 12px 16px;
-  color: var(--color-timestamp, var(--msg-timestamp, #444444));
-  font-size: calc(var(--font-size, 14px) - 2px);
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
   white-space: nowrap;
   user-select: none;
 }
@@ -3701,7 +3701,7 @@ a:hover {
 .time-separator::after {
   content: "";
   flex: 1;
-  border-top: 1px solid var(--color-border, var(--border, #333333));
+  border-top: 1px solid var(--border-color);
   opacity: 0.5;
 }
 
@@ -3713,7 +3713,7 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(0, 0, 0, 0.65);
+  background-color: var(--overlay-bg);
   z-index: 200;
   animation: gif-picker-fade-in 0.1s ease;
 }
@@ -3725,7 +3725,7 @@ a:hover {
   max-height: min(520px, calc(100vh - 80px));
   background-color: var(--bg);
   border: var(--border-width) solid var(--accent-primary);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-color);
+  box-shadow: 0 8px 32px var(--shadow-color), 0 0 0 1px var(--border-color);
   overflow: hidden;
   outline: none;
 }
@@ -3737,7 +3737,7 @@ a:hover {
   padding: 6px 10px;
   border-bottom: var(--border-width) solid var(--border-color);
   flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-subtle);
 }
 
 .settings-dialog__title {
@@ -3776,12 +3776,12 @@ a:hover {
 
 .settings-dialog__tab:hover {
   color: var(--fg);
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--surface-hover);
 }
 
 .settings-dialog__tab--active {
   color: var(--accent-primary);
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-subtle);
 }
 
 .settings-dialog__content {
@@ -3948,12 +3948,12 @@ a:hover {
 }
 
 .settings-dialog__btn--danger {
-  border-color: var(--color-error, #ff4455);
-  color: var(--color-error, #ff4455);
+  border-color: var(--accent-error);
+  color: var(--accent-error);
 }
 
 .settings-dialog__btn--danger:hover {
-  background: color-mix(in srgb, var(--color-error, #ff4455) 15%, transparent);
+  background: color-mix(in srgb, var(--accent-error) 15%, transparent);
 }
 
 .settings-dialog__theme-btn {
@@ -3985,7 +3985,7 @@ a:hover {
   color: var(--roomlist-muted);
   font-size: calc(var(--font-size) - 2px);
   flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--surface-dim);
 }
 
 /* ── Room Info dialog ─────────────────────────────────────────────────────── */
@@ -3999,7 +3999,7 @@ a:hover {
   gap: 0;
   background-color: var(--bg);
   border: var(--border-width) solid var(--accent-primary);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6),
+  box-shadow: 0 4px 20px var(--shadow-color),
               0 0 0 1px color-mix(in srgb, var(--accent-primary) 20%, transparent);
   z-index: 300;
   width: 360px;
@@ -4094,12 +4094,12 @@ a:hover {
 }
 
 .room-info-dialog__btn--danger {
-  border-color: var(--color-error, #ff4455);
-  color: var(--color-error, #ff4455);
+  border-color: var(--accent-error);
+  color: var(--accent-error);
 }
 
 .room-info-dialog__btn--danger:hover {
-  background: color-mix(in srgb, var(--color-error, #ff4455) 15%, transparent);
+  background: color-mix(in srgb, var(--accent-error) 15%, transparent);
 }
 
 .room-info-dialog__btn--muted {
@@ -4123,7 +4123,7 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(0, 0, 0, 0.65);
+  background-color: var(--overlay-bg);
   z-index: 200;
   animation: gif-picker-fade-in 0.1s ease;
 }
@@ -4135,7 +4135,7 @@ a:hover {
   max-height: min(480px, calc(100vh - 80px));
   background-color: var(--bg);
   border: var(--border-width) solid var(--accent-primary);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-color);
+  box-shadow: 0 8px 32px var(--shadow-color), 0 0 0 1px var(--border-color);
   overflow: hidden;
   outline: none;
 }
@@ -4147,7 +4147,7 @@ a:hover {
   padding: 6px 10px;
   border-bottom: var(--border-width) solid var(--border-color);
   flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-subtle);
 }
 
 .pinned-dialog__title {
@@ -4184,7 +4184,7 @@ a:hover {
 }
 
 .pinned-dialog__item:hover {
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--surface-hover);
   cursor: pointer;
 }
 
@@ -4240,7 +4240,7 @@ a:hover {
   color: var(--roomlist-muted);
   font-size: calc(var(--font-size) - 2px);
   flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--surface-dim);
 }
 
 /* ── Room Directory dialog ────────────────────────────────────────────────── */
@@ -4251,7 +4251,7 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(0, 0, 0, 0.65);
+  background-color: var(--overlay-bg);
   z-index: 200;
   animation: gif-picker-fade-in 0.1s ease;
 }
@@ -4263,7 +4263,7 @@ a:hover {
   max-height: min(560px, calc(100vh - 80px));
   background-color: var(--bg);
   border: var(--border-width) solid var(--accent-primary);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-color);
+  box-shadow: 0 8px 32px var(--shadow-color), 0 0 0 1px var(--border-color);
   overflow: hidden;
 }
 
@@ -4274,7 +4274,7 @@ a:hover {
   padding: 6px 10px;
   border-bottom: var(--border-width) solid var(--border-color);
   flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-subtle);
 }
 
 .room-dir-dialog__title {
@@ -4341,11 +4341,11 @@ a:hover {
 }
 
 .room-dir-dialog__item:hover {
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--surface-hover);
 }
 
 .room-dir-dialog__item--focused {
-  background-color: rgba(255, 255, 255, 0.06);
+  background-color: var(--surface-hover-strong);
 }
 
 .room-dir-dialog__name {
@@ -4404,7 +4404,7 @@ a:hover {
   color: var(--roomlist-muted);
   font-size: calc(var(--font-size) - 2px);
   flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--surface-dim);
 }
 
 /* ── Quick navigation palette ─────────────────────────────────────────────── */
@@ -4416,7 +4416,7 @@ a:hover {
   align-items: flex-start;
   justify-content: center;
   padding-top: 80px;
-  background-color: rgba(0, 0, 0, 0.65);
+  background-color: var(--overlay-bg);
   z-index: 300;
   animation: gif-picker-fade-in 0.1s ease;
 }
@@ -4428,7 +4428,7 @@ a:hover {
   max-height: min(400px, calc(100vh - 140px));
   background-color: var(--bg);
   border: var(--border-width) solid var(--border-color);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-color);
+  box-shadow: 0 8px 32px var(--shadow-color), 0 0 0 1px var(--border-color);
   overflow: hidden;
 }
 
@@ -4479,11 +4479,11 @@ a:hover {
 }
 
 .quick-nav-palette__item:hover {
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--surface-hover);
 }
 
 .quick-nav-palette__item--focused {
-  background-color: rgba(255, 255, 255, 0.06);
+  background-color: var(--surface-hover-strong);
 }
 
 .quick-nav-palette__name {
@@ -4515,7 +4515,7 @@ a:hover {
   color: var(--roomlist-muted);
   font-size: calc(var(--font-size) - 2px);
   flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--surface-dim);
 }
 
 /* ── Startup overlay ──────────────────────────────────────────────────────── */
@@ -4629,8 +4629,8 @@ a:hover {
     0deg,
     transparent 0px,
     transparent 1px,
-    rgba(0, 0, 0, 0.22) 1px,
-    rgba(0, 0, 0, 0.22) 2px
+    var(--scanline-color) 1px,
+    var(--scanline-color) 2px
   );
   opacity: 0.5;
 }
