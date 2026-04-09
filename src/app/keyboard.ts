@@ -35,6 +35,7 @@ import {
 import { AppState } from "./state.js";
 import { loadQuarkrc } from "../ipc/config.js";
 import type { ParsedRc } from "../ipc/types.js";
+import { getAppConfig } from "../ipc/app_config.js";
 import type { KeyContext } from "../vim/keybindings.js";
 import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
 import { showToast } from "../ui/NotificationToast.js";
@@ -439,6 +440,29 @@ export function setupKeyboard(components: AppComponents): void {
 
   registerDefaultBindings();
 
+  // Load vim mode preference from persisted config
+  void getAppConfig().then((cfg) => {
+    AppState.set("vimMode", cfg.general.vim_mode);
+    // Apply immediately — the state listener won't fire if the value matches the default
+    input.setVimMode(cfg.general.vim_mode);
+    if (!cfg.general.vim_mode) {
+      modeManager.transition(Mode.Insert);
+      input.focus();
+    }
+  }).catch(() => { /* use default (true) */ });
+
+  // React to vim mode toggling at runtime (e.g. from Settings)
+  AppState.on("vimMode", (_key, enabled) => {
+    if (enabled) {
+      modeManager.transition(Mode.Normal);
+      input.blur();
+    } else {
+      modeManager.transition(Mode.Insert);
+      input.focus();
+    }
+    input.setVimMode(enabled);
+  });
+
   // Member count in the header toggles the member list sidebar
   roomHeader.setMemberCountClickHandler(() => toggleMemberList());
 
@@ -479,7 +503,7 @@ export function setupKeyboard(components: AppComponents): void {
 
   // Clicking the input field while not in Insert mode switches to Insert mode
   input.onFocusEnterInsert(() => {
-    if (modeManager.current !== Mode.Insert) {
+    if (AppState.get("vimMode") && modeManager.current !== Mode.Insert) {
       modeManager.transition(Mode.Insert);
       input.focus();
     }
@@ -644,11 +668,14 @@ export function setupKeyboard(components: AppComponents): void {
 
     if (quickNavPalette.isVisible()) return;
 
-    // Escape (or Ctrl+[) always resets to Normal (if not already) and clears sequences
+    // Escape (or Ctrl+[) always resets to Normal (if not already) and clears sequences.
+    // When vim mode is disabled, Escape just closes overlays — don't leave Insert mode.
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
-      modeManager.transition(Mode.Normal);
-      keymapManager.resetSequence();
-      commandBar.hide();
+      if (AppState.get("vimMode")) {
+        modeManager.transition(Mode.Normal);
+        keymapManager.resetSequence();
+        commandBar.hide();
+      }
       AppState.close();
       return;
     }
@@ -657,6 +684,13 @@ export function setupKeyboard(components: AppComponents): void {
     if (!AppState.get("loggedIn")) return;
 
     if (mode === Mode.Insert) {
+      handleInsertKeydown(e, components);
+      return;
+    }
+
+    // When vim mode is disabled we should never reach Normal/Visual/Command,
+    // but guard just in case — treat everything as Insert.
+    if (!AppState.get("vimMode")) {
       handleInsertKeydown(e, components);
       return;
     }

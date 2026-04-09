@@ -21,6 +21,10 @@ pub struct GeneralConfig {
     /// CSS border-radius for space/room icons (e.g. "50%" for circles, "8px" for rounded squares, "0" for square).
     #[serde(default = "default_icon_radius")]
     pub icon_radius: String,
+    /// Enable vim-style modal editing (Normal/Insert/Command/Visual modes).
+    /// When false, the app behaves like a standard text input — always in Insert mode.
+    #[serde(default = "bool_true")]
+    pub vim_mode: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -126,7 +130,7 @@ fn default_autocomplete_min_chars() -> u32 { 2 }
 
 impl Default for GeneralConfig {
     fn default() -> Self {
-        Self { theme: default_theme_name(), notifications: true, confirm_redact: true, icon_radius: default_icon_radius() }
+        Self { theme: default_theme_name(), notifications: true, confirm_redact: true, icon_radius: default_icon_radius(), vim_mode: true }
     }
 }
 
