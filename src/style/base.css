@@ -1025,14 +1025,24 @@ body {
   flex-direction: column;
   gap: 12px;
   min-height: 0;
+  position: relative; /* positioning context for the absolute loading indicator */
 }
 
 .timeline__loading-more {
+  /* Taken out of the layout flow so it never shifts _listEl or affects scrollHeight.
+     This prevents the "jump on pagination" caused by the indicator appearing/disappearing
+     inside a flex container with gap. It renders as an overlay at the top of the viewport
+     while the user is scrolled near the top. */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   text-align: center;
   color: var(--msg-system);
   font-size: calc(var(--font-size) - 2px);
-  padding: 4px 0;
-  flex-shrink: 0;
+  padding: 4px 12px;
+  background: var(--bg);
+  z-index: 1;
 }
 
 .timeline__jump-to-latest {

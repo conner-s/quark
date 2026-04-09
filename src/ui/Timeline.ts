@@ -953,20 +953,9 @@ export class Timeline {
     this._loadingEl.style.display = "block";
   }
 
-  /** Hide the loading indicator.
-   *
-   * Compensates scrollTop for the removed element's height so the visible
-   * messages don't jump when the indicator disappears.
-   */
+  /** Hide the loading indicator. */
   hideLoadingMore(): void {
-    if (this._loadingEl.style.display === "none") return;
-    const h = this._loadingEl.offsetHeight;
     this._loadingEl.style.display = "none";
-    // Keep viewport anchored: the indicator's height has been removed from
-    // scrollHeight, so scrollTop must shrink by the same amount.
-    if (h > 0) {
-      this._el.scrollTop = Math.max(0, this._el.scrollTop - h);
-    }
   }
 
   /**
