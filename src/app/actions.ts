@@ -178,6 +178,33 @@ function roomInfoToEntry(r: RoomInfo): RoomEntry {
   };
 }
 
+/**
+ * Apply edit events to their originals and return only non-edit events.
+ * For each m.replace event the latest edit (by timestamp) wins.
+ * The returned array can be passed directly to timelineEventToMessage.
+ */
+function _applyEdits(events: TimelineEvent[]): TimelineEvent[] {
+  // Collect latest edit per original event ID
+  const latestEdit = new Map<string, TimelineEvent>();
+  for (const e of events) {
+    if (e.is_edit && e.relates_to_event_id) {
+      const existing = latestEdit.get(e.relates_to_event_id);
+      if (!existing || e.timestamp > existing.timestamp) {
+        latestEdit.set(e.relates_to_event_id, e);
+      }
+    }
+  }
+  if (latestEdit.size === 0) return events.filter((e) => !e.is_edit);
+
+  return events
+    .filter((e) => !e.is_edit)
+    .map((e) => {
+      const edit = latestEdit.get(e.event_id);
+      if (!edit) return e;
+      return { ...e, body: edit.body, formatted_body: edit.formatted_body };
+    });
+}
+
 /** Build a map of thread root event IDs → reply count from a batch of events. */
 function _buildThreadRootCounts(events: TimelineEvent[]): Map<string, number> {
   const counts = new Map<string, number>();
@@ -435,7 +462,7 @@ export async function selectRoom(roomId: string): Promise<void> {
     // Thread replies (thread_root set) are excluded from the main timeline;
     // they belong in the thread panel only.
     const threadRootCounts = _buildThreadRootCounts(events);
-    const mainEvents = events.filter((e) => !e.thread_root);
+    const mainEvents = _applyEdits(events).filter((e) => !e.thread_root);
     const messages = mainEvents.map((e) => timelineEventToMessage(e, events, threadRootCounts));
     // Pass unread count so the timeline can insert a "── new messages ──" separator
     if (roomInfo && roomInfo.unread_count > 0) {
@@ -555,7 +582,7 @@ async function loadMoreMessages(): Promise<void> {
       AppState.set("currentTimeline", [...page.events, ...existingEvents]);
 
       const threadRootCounts = _buildThreadRootCounts(page.events);
-      const mainEvents = page.events.filter((e) => !e.thread_root);
+      const mainEvents = _applyEdits(page.events).filter((e) => !e.thread_root);
       const messages = mainEvents.map((e) => timelineEventToMessage(e, page.events, threadRootCounts));
       timeline.prependMessages(messages);
 
@@ -604,7 +631,7 @@ export async function jumpToMessage(eventId: string): Promise<void> {
 
     AppState.set("currentTimeline", ctx.events);
     const threadRootCounts = _buildThreadRootCounts(ctx.events);
-    const mainEvents = ctx.events.filter((e) => !e.thread_root);
+    const mainEvents = _applyEdits(ctx.events).filter((e) => !e.thread_root);
     const messages = mainEvents.map((e) => timelineEventToMessage(e, ctx.events, threadRootCounts));
     timeline.setMessages(messages);
     timeline.setContextView(_inContextView);
@@ -648,7 +675,7 @@ export async function jumpToLatest(): Promise<void> {
 
     AppState.set("currentTimeline", page.events);
     const threadRootCounts = _buildThreadRootCounts(page.events);
-    const mainEvents = page.events.filter((e) => !e.thread_root);
+    const mainEvents = _applyEdits(page.events).filter((e) => !e.thread_root);
     const messages = mainEvents.map((e) => timelineEventToMessage(e, page.events, threadRootCounts));
     timeline.setMessages(messages);
     timeline.setContextView(false);

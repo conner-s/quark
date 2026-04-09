@@ -695,6 +695,9 @@ quark/
   - [ ] Outside of text select mode but in normal mode, 'p' should paste into the compose box
   - [ ] In text select mode in normal mode in the compose box, 'p' should paste into the compose box at the cursor position
 
+#### Messaging
+- [ ] **Message revision history UI** — clicking the "(edited)" marker on a message opens a dialog showing all previous versions of the message (fetched via `get_event_context` or a dedicated revision history IPC that queries `m.replace` events for the original event ID). Show each revision with its timestamp and sender.
+
 #### Hardening
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
 - [ ] Performance profiling — large rooms (1000+ messages), many emoji packs
