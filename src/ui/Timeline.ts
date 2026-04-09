@@ -803,6 +803,8 @@ export class Timeline {
   private _scrollTopFired = false;
   /** Handle for the cleanup timeout of the scroll animation, so we can cancel it */
   private _scrollAnimCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Handle for the post-render scroll-to-bottom timer started in setMessages, so it can be cancelled on re-render */
+  private _postRenderScrollTimer: ReturnType<typeof setTimeout> | null = null;
   /** Number of unread messages at the tail of the current message list. */
   private _unreadCount = 0;
 
@@ -951,9 +953,20 @@ export class Timeline {
     this._loadingEl.style.display = "block";
   }
 
-  /** Hide the loading indicator. */
+  /** Hide the loading indicator.
+   *
+   * Compensates scrollTop for the removed element's height so the visible
+   * messages don't jump when the indicator disappears.
+   */
   hideLoadingMore(): void {
+    if (this._loadingEl.style.display === "none") return;
+    const h = this._loadingEl.offsetHeight;
     this._loadingEl.style.display = "none";
+    // Keep viewport anchored: the indicator's height has been removed from
+    // scrollHeight, so scrollTop must shrink by the same amount.
+    if (h > 0) {
+      this._el.scrollTop = Math.max(0, this._el.scrollTop - h);
+    }
   }
 
   /**
@@ -1142,6 +1155,11 @@ export class Timeline {
       this._listEl.style.transition = "";
       this._listEl.style.transform = "";
     }
+    // Cancel any pending post-render scroll timer from a previous setMessages call
+    if (this._postRenderScrollTimer !== null) {
+      clearTimeout(this._postRenderScrollTimer);
+      this._postRenderScrollTimer = null;
+    }
 
     // Reset selection so _selectedIndex can't be out-of-range for the new message list.
     // Without this, navigating after a room switch can get stuck because _selectedIndex
@@ -1185,7 +1203,12 @@ export class Timeline {
       requestAnimationFrame(() => {
         this._scrollToBottom();
         // Second pass after a short delay to catch any late-loading content
-        setTimeout(() => this._scrollToBottom(), 150);
+        // (e.g. custom emoji or stickers that aren't covered by the image load listener).
+        // Store the handle so a subsequent setMessages call can cancel it.
+        this._postRenderScrollTimer = setTimeout(() => {
+          this._postRenderScrollTimer = null;
+          this._scrollToBottom();
+        }, 150);
       });
     }
     this._updateJumpToLatestVisibility();
