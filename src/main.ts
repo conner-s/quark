@@ -106,22 +106,51 @@ components.spaceStrip.onSettingsClick(() => {
 // ── GIF pause/resume on window focus ─────────────────────────────────────────
 // Freeze GIF animations while the window is hidden or blurred to avoid wasting
 // CPU/GPU when the user is not looking at the app.
+//
+// When a loaded GIF is paused we capture its current frame to a <canvas> and
+// hide the <img>. This means scrolling to a paused GIF while unfocused shows
+// the last frame instead of an empty rectangle.
+
+const _gifCanvases = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
 
 function pauseGifs(): void {
   document.querySelectorAll<HTMLImageElement>('img[data-gif="1"]').forEach((img) => {
-    if (!img.dataset.gifSrc && img.hasAttribute("src")) {
-      img.dataset.gifSrc = img.getAttribute("src") ?? "";
-      img.removeAttribute("src");
+    if (img.dataset.gifSrc || !img.hasAttribute("src")) return;
+    img.dataset.gifSrc = img.getAttribute("src") ?? "";
+
+    // If the image is already decoded, capture the current frame as a canvas
+    // placeholder so the user sees a still frame instead of a blank box.
+    if (img.complete && img.naturalWidth > 0 && img.parentNode) {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.className = img.className;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        img.parentNode.insertBefore(canvas, img);
+        img.style.display = "none";
+        _gifCanvases.set(img, canvas);
+      }
     }
+
+    img.removeAttribute("src");
   });
 }
 
 function resumeGifs(): void {
   document.querySelectorAll<HTMLImageElement>('img[data-gif="1"]').forEach((img) => {
-    if (img.dataset.gifSrc) {
-      img.src = img.dataset.gifSrc;
-      delete img.dataset.gifSrc;
+    if (!img.dataset.gifSrc) return;
+
+    const canvas = _gifCanvases.get(img);
+    if (canvas) {
+      canvas.remove();
+      _gifCanvases.delete(img);
+      img.style.display = "";
     }
+
+    img.src = img.dataset.gifSrc;
+    delete img.dataset.gifSrc;
   });
 }
 
