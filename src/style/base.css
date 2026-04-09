@@ -3036,6 +3036,16 @@ a:hover {
   opacity: 0.6;
 }
 
+.gif-picker__powered-by {
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 2px);
+  color: var(--roomlist-muted);
+  opacity: 0.6;
+  flex-shrink: 0;
+  white-space: nowrap;
+  user-select: none;
+}
+
 /* Scrollable GIF grid */
 .gif-picker__grid {
   flex: 1;

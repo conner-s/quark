@@ -1,5 +1,7 @@
 // Header bar for the main panel — room name, topic, member count, encryption
 
+import { isAnimatedUrl } from "../app/animated_urls.js";
+
 // ── Avatar colours (mirrors Timeline.ts palette) ──────────────────────────────
 const AVATAR_COLORS = [
   "#00ff41", "#00aaff", "#ff4466", "#ffaa00",
@@ -191,6 +193,7 @@ export class RoomHeader {
     img.src = url;
     img.alt = "";
     img.setAttribute("aria-hidden", "true");
+    if (isAnimatedUrl(url)) img.dataset.gif = "1";
     img.onerror = () => { /* keep existing element on load failure */ };
     this._avatarEl.replaceWith(img);
     this._avatarEl = img;
@@ -219,6 +222,7 @@ export class RoomHeader {
       img.src = data.avatarUrl;
       img.alt = "";
       img.setAttribute("aria-hidden", "true");
+      if (isAnimatedUrl(data.avatarUrl)) img.dataset.gif = "1";
       img.onerror = () => {
         const fallback = this._buildFallback(displayName, color);
         img.replaceWith(fallback);

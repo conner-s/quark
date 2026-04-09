@@ -109,9 +109,9 @@ components.spaceStrip.onSettingsClick(() => {
 
 function pauseGifs(): void {
   document.querySelectorAll<HTMLImageElement>('img[data-gif="1"]').forEach((img) => {
-    if (img.src && !img.dataset.gifSrc) {
-      img.dataset.gifSrc = img.src;
-      img.src = "";
+    if (!img.dataset.gifSrc && img.hasAttribute("src")) {
+      img.dataset.gifSrc = img.getAttribute("src") ?? "";
+      img.removeAttribute("src");
     }
   });
 }

@@ -1,5 +1,7 @@
 // Space selector strip — narrow vertical column of space icons
 
+import { isAnimatedUrl } from "../app/animated_urls.js";
+
 export interface SpaceItem {
   id: string;
   /** Display label (first letter of name used as fallback icon) */
@@ -90,12 +92,14 @@ export class SpaceStrip {
     const existing = item.querySelector("img");
     if (existing) {
       existing.src = dataUrl;
+      if (isAnimatedUrl(dataUrl)) existing.dataset.gif = "1";
     } else {
       item.textContent = "";
       const img = document.createElement("img");
 	  img.className = "space-strip__icon";
       img.src = dataUrl;
       img.alt = "";
+      if (isAnimatedUrl(dataUrl)) img.dataset.gif = "1";
       item.appendChild(img);
     }
   }
@@ -170,6 +174,7 @@ export class SpaceStrip {
       img.style.width = "20px";
       img.style.height = "20px";
       img.style.objectFit = "cover";
+      if (isAnimatedUrl(item.avatarUrl)) img.dataset.gif = "1";
       el.appendChild(img);
     } else {
       el.textContent = overrideLabel ?? item.name.charAt(0).toUpperCase();

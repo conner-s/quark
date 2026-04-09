@@ -1,6 +1,7 @@
 // Profile dialog — shows the current user's own profile
 
 import { keymapManager } from "../vim/keybindings.js";
+import { isAnimatedUrl } from "../app/animated_urls.js";
 
 export interface ProfileData {
   userId: string;
@@ -218,6 +219,7 @@ export class ProfileDialog {
       img.src = data.avatarUrl;
       img.alt = data.displayName ?? data.userId;
       img.className = "profile-dialog__avatar-img";
+      if (isAnimatedUrl(data.avatarUrl)) img.dataset.gif = "1";
       this._avatarEl.appendChild(img);
     } else {
       // Fallback: colored initial square

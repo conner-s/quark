@@ -1,5 +1,7 @@
 // Inline @mention autocomplete popup — appears when user types @name in insert mode
 
+import { isAnimatedUrl } from "../app/animated_urls.js";
+
 export interface MentionEntry {
   userId: string;
   displayName: string;
@@ -106,6 +108,7 @@ export class MentionPreview {
         img.className = "shortcode-preview__emoji-img";
         img.width = 20;
         img.height = 20;
+        if (isAnimatedUrl(entry.avatarUrl)) img.dataset.gif = "1";
         item.appendChild(img);
       } else {
         const fallback = document.createElement("span");

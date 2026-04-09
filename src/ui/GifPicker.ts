@@ -18,6 +18,8 @@ export class GifPicker {
   private _statusEl: HTMLElement;
   private _gridEl: HTMLElement;
 
+  private _poweredByEl: HTMLElement;
+
   private _results: GifResult[] = [];
   private _focusIndex = 0;
 
@@ -79,6 +81,11 @@ export class GifPicker {
     this._searchEl.setAttribute("autocomplete", "off");
     this._searchEl.setAttribute("spellcheck", "false");
     searchWrap.appendChild(this._searchEl);
+
+    this._poweredByEl = document.createElement("span");
+    this._poweredByEl.className = "gif-picker__powered-by";
+    this._poweredByEl.setAttribute("aria-hidden", "true");
+    searchWrap.appendChild(this._poweredByEl);
 
     this._searchEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
@@ -147,6 +154,11 @@ export class GifPicker {
 
   setStatus(text: string): void {
     this._statusEl.textContent = text;
+  }
+
+  setProvider(provider: string): void {
+    const label = provider === "tenor" ? "Tenor" : provider === "giphy" ? "Giphy" : provider;
+    this._poweredByEl.textContent = label ? `Powered by ${label}` : "";
   }
 
   // ── Private ────────────────────────────────────────────────────────────

@@ -53,6 +53,7 @@ import { applyTheme } from "../theme/loader.js";
 import { BUILTIN_THEME_MAP } from "../theme/builtins.js";
 import { getAppConfig } from "../ipc/app_config.js";
 import { setCurrentThemeName } from "../ui/SettingsDialog.js";
+import { registerAnimatedUrl } from "./animated_urls.js";
 
 import type { AppComponents } from "../ui/App.js";
 import type { RoomInfo, TimelineEvent, RoomMember } from "../ipc/types.js";
@@ -120,7 +121,11 @@ const _dmRoomByUser = new Map<string, string>();
 function _mediaToBlobUrl(mimeType: string, base64: string): string {
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
   const blob = new Blob([bytes], { type: mimeType });
-  return URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
+  if (mimeType === "image/gif" || mimeType === "image/webp") {
+    registerAnimatedUrl(url);
+  }
+  return url;
 }
 
 /** Resolve a user ID to its display name, falling back to the raw ID. */
@@ -1787,6 +1792,11 @@ export function openGifPicker(): void {
   });
 
   gifPicker.show();
+
+  // Set "Powered by" branding based on configured provider
+  getAppConfig().then((config) => {
+    gifPicker.setProvider(config.gif.provider);
+  }).catch(() => {/* ignore */});
 }
 
 /** Open the sticker tab of the unified emoji/sticker picker. */

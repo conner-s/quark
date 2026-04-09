@@ -3,6 +3,7 @@
 import { createReactionBar, updateReactionBar, type ReactionGroup } from "./Reactions.js";
 import { invoke } from "../ipc/invoke.js";
 import type { ThreadMessageData } from "./ThreadView.js";
+import { isAnimatedUrl } from "../app/animated_urls.js";
 
 // ── URL linkification ─────────────────────────────────────────────────────────
 
@@ -181,6 +182,7 @@ function buildAvatarElement(sender: string, avatarUrl?: string): HTMLElement {
     img.src = avatarUrl;
     img.alt = "";
     img.setAttribute("aria-hidden", "true");
+    if (isAnimatedUrl(avatarUrl)) img.dataset.gif = "1";
     img.onerror = () => img.replaceWith(buildFallbackAvatar(sender));
     return img;
   }
@@ -1702,6 +1704,7 @@ export class Timeline {
       img.src = dataUrl;
       img.alt = "";
       img.setAttribute("aria-hidden", "true");
+      if (isAnimatedUrl(dataUrl)) img.dataset.gif = "1";
       img.onerror = () => img.replaceWith(buildFallbackAvatar(sender));
       fallback.replaceWith(img);
     }

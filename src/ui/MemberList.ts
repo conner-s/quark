@@ -1,6 +1,7 @@
 // Room member sidebar
 
 import { attachResizeHandle } from "./ResizeHandle.js";
+import { isAnimatedUrl } from "../app/animated_urls.js";
 
 export type PresenceStatus = "online" | "unavailable" | "offline";
 export type PowerLevel = "admin" | "mod" | "member";
@@ -37,6 +38,7 @@ function _buildAvatarElement(name: string, avatarUrl?: string): HTMLElement {
     img.src = avatarUrl;
     img.alt = "";
     img.setAttribute("aria-hidden", "true");
+    if (isAnimatedUrl(avatarUrl)) img.dataset.gif = "1";
     img.onerror = () => img.replaceWith(_buildFallbackAvatar(name));
     return img;
   }
@@ -172,6 +174,7 @@ export class MemberList {
     img.src = resolvedUrl;
     img.alt = "";
     img.setAttribute("aria-hidden", "true");
+    if (isAnimatedUrl(resolvedUrl)) img.dataset.gif = "1";
     img.onerror = () => img.replaceWith(_buildFallbackAvatar(name));
     existing.replaceWith(img);
   }
