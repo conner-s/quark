@@ -97,6 +97,22 @@ export class ReplyPreview {
     this._el.setAttribute("aria-label", `Replying to ${data.senderName}`);
   }
 
+  /** Show an edit-mode banner (sending will edit the original message). */
+  showEdit(snippet: string): void {
+    this._threadMode = false;
+    this._currentReply = null;
+    this._el.classList.remove("reply-preview-bar--thread");
+    this._el.classList.add("reply-preview-bar--edit");
+
+    this._senderEl.textContent = "Editing";
+    const MAX_SNIPPET = 80;
+    this._snippetEl.textContent =
+      snippet.length > MAX_SNIPPET ? snippet.slice(0, MAX_SNIPPET) + "…" : snippet;
+
+    this._el.style.display = "";
+    this._el.setAttribute("aria-label", "Editing message");
+  }
+
   /** Show a thread-mode banner (sending goes to the open inline thread). */
   showThread(snippet: string): void {
     this._threadMode = true;
@@ -117,6 +133,7 @@ export class ReplyPreview {
     this._currentReply = null;
     this._threadMode = false;
     this._el.classList.remove("reply-preview-bar--thread");
+    this._el.classList.remove("reply-preview-bar--edit");
   }
 
   isVisible(): boolean {

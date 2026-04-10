@@ -1193,6 +1193,28 @@ export function cancelReply(): void {
 }
 
 /**
+ * Begin inline editing of an own message — loads the body into the compose box
+ * and shows the edit banner above it.
+ */
+export function startEdit(eventId: string, body: string): void {
+  const { replyPreview, input } = getComponents();
+  AppState.set("editingEventId", eventId);
+  replyPreview.showEdit(body);
+  input.setValue(body);
+}
+
+/**
+ * Cancel an in-progress inline edit — clears the compose box and the banner.
+ */
+export function cancelEdit(): void {
+  const { replyPreview, input } = getComponents();
+  if (AppState.get("editingEventId") === null) return;
+  AppState.set("editingEventId", null);
+  input.setValue("");
+  replyPreview.hide();
+}
+
+/**
  * Edit an existing message.
  */
 export async function editMessage(eventId: string, newBody: string): Promise<void> {

@@ -1403,6 +1403,19 @@ body {
   color: var(--msg-thread-indicator);
 }
 
+.reply-preview-bar--edit {
+  border-left-color: var(--accent-warn, #c8a000);
+  background-color: color-mix(in srgb, var(--accent-warn, #c8a000) 6%, transparent);
+}
+
+.reply-preview-bar--edit .reply-preview-bar__indicator {
+  color: var(--accent-warn, #c8a000);
+}
+
+.reply-preview-bar--edit .reply-preview-bar__sender {
+  color: var(--accent-warn, #c8a000);
+}
+
 /* ── Reply preview (in-timeline, on received/sent reply messages) ─────────── */
 
 .reply-preview {

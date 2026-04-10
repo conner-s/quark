@@ -53,7 +53,7 @@ const BINDINGS: BindingEntry[] = [
   // Message actions
   { keys: "r",       mode: "normal",   description: "Reply to selected message",       action: "reply",           context: "global" },
   { keys: "e",       mode: "normal",   description: "React to selected message",       action: "react",           context: "global" },
-  { keys: "E",       mode: "normal",   description: "Edit selected message",           action: "edit",            context: "global" },
+  { keys: "E / c",   mode: "normal",   description: "Edit (revise) selected message",  action: "edit",            context: "global" },
   { keys: "dd",      mode: "normal",   description: "Redact (delete) selected message",action: "redact",          context: "global" },
   { keys: "t",       mode: "normal",   description: "Open thread for selected message",action: "open-thread",     context: "global" },
   { keys: "m",       mode: "normal",   description: "Toggle member list panel",        action: "toggle-members",  context: "global" },

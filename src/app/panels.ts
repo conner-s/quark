@@ -2,7 +2,7 @@
 // Kept separate from keyboard.ts (keyboard concerns) and state.ts (no UI deps).
 
 import { AppState } from "./state.js";
-import { cancelReply, closeThread } from "./actions.js";
+import { cancelReply, cancelEdit, closeThread } from "./actions.js";
 import type { AppComponents } from "../ui/App.js";
 
 export function setupPanelNav(components: AppComponents): void {
@@ -37,6 +37,7 @@ export function setupPanelNav(components: AppComponents): void {
     close: () => {
       timeline.clearSelection();
       cancelReply();
+      cancelEdit();
       closeThread();
     },
   });

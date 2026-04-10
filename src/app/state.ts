@@ -20,6 +20,8 @@ export interface AppStateSnapshot {
   spaceRoomIds: string[];
   currentTimeline: TimelineEvent[];
   replyToEventId: string | null;
+  /** Event ID of the message currently being edited inline, or null. */
+  editingEventId: string | null;
   threadRootEventId: string | null;
   memberListVisible: boolean;
   /** When false, vim modal editing is disabled — the app stays in Insert mode. */
@@ -67,6 +69,7 @@ class AppStateManager {
     spaceRoomIds: [],
     currentTimeline: [],
     replyToEventId: null,
+    editingEventId: null,
     threadRootEventId: null,
     memberListVisible: false,
     vimMode: true,

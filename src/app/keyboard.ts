@@ -20,6 +20,9 @@ import {
   executeCommand,
   toggleMemberList,
   startReply,
+  startEdit,
+  cancelEdit,
+  editMessage,
   redactMessage,
   openThread,
   closeThread,
@@ -69,6 +72,7 @@ function registerDefaultBindings(): void {
   keymapManager.nmap("e", "react");
   keymapManager.nmap("dd", "redact");
   keymapManager.nmap("E", "edit");
+  keymapManager.nmap("c", "edit");
   keymapManager.nmap("t", "open-thread");
   keymapManager.nmap("m", "toggle-members");
   keymapManager.nmap("P", "open-profile");
@@ -211,9 +215,19 @@ function dispatchAction(action: string, components: AppComponents): void {
       break;
     }
 
-    case "edit":
-      document.dispatchEvent(new CustomEvent("quark:action", { detail: { action } }));
+    case "edit": {
+      const msgId = timeline.selectedMessageId;
+      if (msgId) {
+        const events = AppState.get("currentTimeline");
+        const evt = events.find((e) => e.event_id === msgId);
+        if (evt && evt.sender === AppState.get("ownUserId")) {
+          startEdit(msgId, evt.body);
+          modeManager.transition(Mode.Insert);
+          input.focus();
+        }
+      }
       break;
+    }
 
     case "toggle-members":
       toggleMemberList();
@@ -407,13 +421,21 @@ function handleInsertKeydown(e: KeyboardEvent, components: AppComponents): void 
     return;
   }
 
-  // Enter → send message (or reply)
+  // Enter → send message, reply, or commit an inline edit
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     shortcodePreview.hide();
     const body = input.getValue().trim();
     if (body) {
-      void sendMessage(body);
+      const editingId = AppState.get("editingEventId");
+      if (editingId) {
+        AppState.set("editingEventId", null);
+        components.replyPreview.hide();
+        input.setValue("");
+        void editMessage(editingId, body);
+      } else {
+        void sendMessage(body);
+      }
     }
     return;
   }
@@ -608,6 +630,7 @@ export function setupKeyboard(components: AppComponents): void {
   // Reply preview dismiss → cancel reply
   components.replyPreview.onDismiss(() => {
     cancelReply();
+    cancelEdit();
   });
 
   // Thread view close → closeThread (sidebar fallback)

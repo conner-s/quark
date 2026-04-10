@@ -137,7 +137,7 @@ This mirrors Cinny's approach: spaces have visual identity through icons, but th
 | Timeline      | `e`           | React to selected message     |
 | Timeline      | `t`           | Open/enter thread             |
 | Timeline      | `dd`          | Redact own message            |
-| Timeline      | `E`           | Edit own message              |
+| Timeline      | `E` / `c`     | Edit own message              |
 | Insert        | `Ctrl-e`      | Open emoji/sticker picker     |
 | Insert        | `Ctrl-g`      | Open GIF search               |
 | Insert        | `Tab`         | Autocomplete :shortcode:      |
