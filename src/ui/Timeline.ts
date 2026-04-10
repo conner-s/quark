@@ -274,6 +274,8 @@ export interface MessageData {
   threadReplyCount?: number;
   /** If true, this message has been edited at least once — show the (edited) marker. */
   wasEdited?: boolean;
+  /** The original body before any edits were applied. */
+  originalBody?: string;
 }
 
 function formatTimestamp(isoString: string): string {
@@ -949,7 +951,7 @@ export class Timeline {
         if (msgEl) {
           const eventId = msgEl.dataset.messageId!;
           const msg = this._messages.find((m) => m.id === eventId);
-          this._onShowRevisionHistoryCallback?.(eventId, msg?.body ?? "");
+          this._onShowRevisionHistoryCallback?.(eventId, msg?.originalBody ?? msg?.body ?? "");
         }
         return;
       }

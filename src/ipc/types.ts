@@ -103,6 +103,8 @@ export interface TimelineEvent {
   reactions?: ReactionGroup[];
   /** Frontend-only: set by _applyEdits when this original event has been replaced by at least one edit. */
   was_edited?: boolean;
+  /** Frontend-only: the body before any edits were applied (set by _applyEdits). */
+  original_body?: string;
 }
 
 // ─── URL Preview ──────────────────────────────────────────────────────────────
