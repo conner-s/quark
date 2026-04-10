@@ -33,6 +33,9 @@ const KNOWN_COMMANDS: string[] = [
   "info",
   "pinned",
   "directory",
+  "roomsettings",
+  "spacesettings",
+  "debug",
 ];
 
 /**

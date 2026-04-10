@@ -4722,3 +4722,121 @@ a:hover {
   0%   { background-position: 100% 50%; }
   100% { background-position: -100% 50%; }
 }
+
+/* ── Room Settings Dialog ─────────────────────────────────────────────────── */
+
+.room-settings-dialog__wide-input {
+  flex: 1;
+  min-width: 0;
+  max-width: 340px;
+}
+
+.room-settings-dialog__user-row {
+  gap: 6px;
+}
+
+.room-settings-dialog__user-id {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Debug Viewer ─────────────────────────────────────────────────────────── */
+
+.debug-viewer {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--overlay-bg);
+  z-index: 300;
+  animation: gif-picker-fade-in 0.1s ease;
+}
+
+.debug-viewer__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(820px, calc(100vw - 40px));
+  max-height: min(640px, calc(100vh - 60px));
+  background-color: var(--bg);
+  border: var(--border-width) solid var(--accent-primary);
+  box-shadow: 0 8px 32px var(--shadow-color), 0 0 0 1px var(--border-color);
+  overflow: hidden;
+  outline: none;
+}
+
+.debug-viewer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+  background-color: var(--surface-subtle);
+}
+
+.debug-viewer__title {
+  color: var(--accent-primary);
+  font-size: calc(var(--font-size) - 1px);
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.debug-viewer__close-hint {
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  opacity: 0.5;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.debug-viewer__toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 4px 10px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+  background-color: var(--surface-dim);
+}
+
+.debug-viewer__toolbar-btn {
+  background: transparent;
+  border: var(--border-width) solid var(--border-color);
+  color: var(--roomlist-muted);
+  font-family: var(--font-mono);
+  font-size: calc(var(--font-size) - 2px);
+  cursor: pointer;
+  padding: 1px 6px;
+  outline: none;
+  letter-spacing: 0.04em;
+}
+
+.debug-viewer__toolbar-btn:hover {
+  color: var(--fg);
+  border-color: var(--fg);
+}
+
+.debug-viewer__body {
+  flex: 1;
+  overflow: auto;
+  padding: 10px 14px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: calc(var(--font-size) - 1px);
+  line-height: 1.5;
+  color: var(--fg);
+  white-space: pre;
+  tab-size: 2;
+}
+
+/* JSON syntax colours (best-effort without a highlighter) */
+.debug-viewer__body {
+  color: var(--fg);
+}

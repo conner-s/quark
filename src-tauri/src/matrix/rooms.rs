@@ -417,6 +417,337 @@ pub async fn search_room_directory(
         .collect())
 }
 
+// ─── Room settings (name / topic / join-rule / history-visibility / power levels) ─
+
+/// Serializable power levels for IPC.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PowerLevels {
+    pub ban: i64,
+    pub kick: i64,
+    pub invite: i64,
+    pub redact: i64,
+    pub state_default: i64,
+    pub events_default: i64,
+    pub users_default: i64,
+    /// Numeric level required to send each named event type key.
+    pub events: std::collections::HashMap<String, i64>,
+    /// Per-user overrides: user_id → power level.
+    pub users: std::collections::HashMap<String, i64>,
+}
+
+/// Get the current power levels for a room, returned as a `PowerLevels` struct.
+pub async fn get_power_levels(client: &Client, room_id: &str) -> Result<PowerLevels, String> {
+    use matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState;
+    use matrix_sdk::ruma::events::StateEventType;
+    use serde_json::Value;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    let raw_opt = room
+        .get_state_event(StateEventType::RoomPowerLevels, "")
+        .await
+        .map_err(|e| format!("Failed to fetch power levels: {e}"))?;
+
+    let raw = raw_opt.ok_or_else(|| format!("No power levels in {room_id}"))?;
+    let val: Value = match raw {
+        RawAnySyncOrStrippedState::Sync(r) => {
+            r.deserialize_as::<Value>().map_err(|e| format!("Deserialize error: {e}"))?
+        }
+        RawAnySyncOrStrippedState::Stripped(r) => {
+            r.deserialize_as::<Value>().map_err(|e| format!("Deserialize error: {e}"))?
+        }
+    };
+
+    let content = &val["content"];
+    let get_i64 = |field: &str, default: i64| -> i64 {
+        content[field].as_i64().unwrap_or(default)
+    };
+
+    let events: std::collections::HashMap<String, i64> = content["events"]
+        .as_object()
+        .map(|m| {
+            m.iter()
+                .filter_map(|(k, v)| Some((k.clone(), v.as_i64()?)))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let users: std::collections::HashMap<String, i64> = content["users"]
+        .as_object()
+        .map(|m| {
+            m.iter()
+                .filter_map(|(k, v)| Some((k.clone(), v.as_i64()?)))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(PowerLevels {
+        ban: get_i64("ban", 50),
+        kick: get_i64("kick", 50),
+        invite: get_i64("invite", 50),
+        redact: get_i64("redact", 50),
+        state_default: get_i64("state_default", 50),
+        events_default: get_i64("events_default", 0),
+        users_default: get_i64("users_default", 0),
+        events,
+        users,
+    })
+}
+
+/// Update the power levels for a room.  Fetches the current event, patches the
+/// user-visible fields, and re-sends.
+pub async fn set_power_levels(
+    client: &Client,
+    room_id: &str,
+    levels: PowerLevels,
+) -> Result<(), String> {
+    use matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState;
+    use matrix_sdk::ruma::events::room::power_levels::RoomPowerLevelsEventContent;
+    use matrix_sdk::ruma::events::StateEventType;
+    use serde_json::Value;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    // Fetch current content as a JSON Value so we can merge cleanly.
+    let raw_opt = room
+        .get_state_event(StateEventType::RoomPowerLevels, "")
+        .await
+        .map_err(|e| format!("Failed to fetch power levels: {e}"))?;
+    let raw = raw_opt.ok_or_else(|| format!("No power levels in {room_id}"))?;
+    let mut val: Value = match raw {
+        RawAnySyncOrStrippedState::Sync(r) => {
+            r.deserialize_as::<Value>().map_err(|e| format!("Deserialize error: {e}"))?
+        }
+        RawAnySyncOrStrippedState::Stripped(r) => {
+            r.deserialize_as::<Value>().map_err(|e| format!("Deserialize error: {e}"))?
+        }
+    };
+
+    // Patch top-level content fields.
+    let content = val["content"].as_object_mut().ok_or("No content in power levels")?;
+    content.insert("ban".into(), levels.ban.into());
+    content.insert("kick".into(), levels.kick.into());
+    content.insert("invite".into(), levels.invite.into());
+    content.insert("redact".into(), levels.redact.into());
+    content.insert("state_default".into(), levels.state_default.into());
+    content.insert("events_default".into(), levels.events_default.into());
+    content.insert("users_default".into(), levels.users_default.into());
+
+    // Patch events map.
+    let events_obj = content
+        .entry("events")
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+        .ok_or("events is not an object")?;
+    for (k, v) in &levels.events {
+        events_obj.insert(k.clone(), (*v).into());
+    }
+
+    // Patch users map.
+    let users_obj = content
+        .entry("users")
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+        .ok_or("users is not an object")?;
+    for (k, v) in &levels.users {
+        users_obj.insert(k.clone(), (*v).into());
+    }
+
+    // Deserialize the patched content into the typed struct and send.
+    let new_content: RoomPowerLevelsEventContent = serde_json::from_value(val["content"].clone())
+        .map_err(|e| format!("Failed to build power levels content: {e}"))?;
+
+    room.send_state_event(new_content)
+        .await
+        .map_err(|e| format!("Failed to set power levels: {e}"))?;
+
+    Ok(())
+}
+
+/// Update a room's display name.
+pub async fn set_room_name(client: &Client, room_id: &str, name: String) -> Result<(), String> {
+    use matrix_sdk::ruma::events::room::name::RoomNameEventContent;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+    room.send_state_event(RoomNameEventContent::new(name))
+        .await
+        .map_err(|e| format!("Failed to set room name: {e}"))?;
+    Ok(())
+}
+
+/// Update a room's topic.
+pub async fn set_room_topic(client: &Client, room_id: &str, topic: String) -> Result<(), String> {
+    use matrix_sdk::ruma::events::room::topic::RoomTopicEventContent;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+    room.send_state_event(RoomTopicEventContent::new(topic))
+        .await
+        .map_err(|e| format!("Failed to set room topic: {e}"))?;
+    Ok(())
+}
+
+/// Set the join rule for a room: "public" | "invite" | "knock" | "private".
+pub async fn set_room_join_rule(client: &Client, room_id: &str, rule: &str) -> Result<(), String> {
+    use matrix_sdk::ruma::events::room::join_rules::{JoinRule, RoomJoinRulesEventContent};
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    let join_rule = match rule {
+        "public" => JoinRule::Public,
+        "invite" => JoinRule::Invite,
+        "knock" => JoinRule::Knock,
+        "private" => JoinRule::Private,
+        other => return Err(format!("Unknown join rule: {other}")),
+    };
+
+    room.send_state_event(RoomJoinRulesEventContent::new(join_rule))
+        .await
+        .map_err(|e| format!("Failed to set join rule: {e}"))?;
+    Ok(())
+}
+
+/// Set the history visibility: "invited" | "joined" | "shared" | "world_readable".
+pub async fn set_room_history_visibility(
+    client: &Client,
+    room_id: &str,
+    visibility: &str,
+) -> Result<(), String> {
+    use matrix_sdk::ruma::events::room::history_visibility::{
+        HistoryVisibility, RoomHistoryVisibilityEventContent,
+    };
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    let hv = match visibility {
+        "invited" => HistoryVisibility::Invited,
+        "joined" => HistoryVisibility::Joined,
+        "shared" => HistoryVisibility::Shared,
+        "world_readable" => HistoryVisibility::WorldReadable,
+        other => return Err(format!("Unknown history visibility: {other}")),
+    };
+
+    room.send_state_event(RoomHistoryVisibilityEventContent::new(hv))
+        .await
+        .map_err(|e| format!("Failed to set history visibility: {e}"))?;
+    Ok(())
+}
+
+// ─── Debug / raw event viewer ─────────────────────────────────────────────────
+
+/// Serializable state event snapshot for the debug viewer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawStateEvent {
+    pub event_type: String,
+    pub state_key: String,
+    pub sender: String,
+    pub content_json: String,
+    pub event_id: Option<String>,
+    pub origin_server_ts: Option<u64>,
+}
+
+/// Fetch the key state events for a room as raw JSON blobs (for the debug viewer).
+pub async fn get_room_state_events(
+    client: &Client,
+    room_id: &str,
+) -> Result<Vec<RawStateEvent>, String> {
+    use matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState;
+    use matrix_sdk::ruma::events::StateEventType;
+    use serde_json::Value;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    let types = [
+        StateEventType::RoomName,
+        StateEventType::RoomTopic,
+        StateEventType::RoomJoinRules,
+        StateEventType::RoomHistoryVisibility,
+        StateEventType::RoomPowerLevels,
+        StateEventType::RoomCanonicalAlias,
+        StateEventType::RoomCreate,
+        StateEventType::RoomEncryption,
+        StateEventType::RoomAvatar,
+        StateEventType::RoomMember,
+    ];
+
+    let mut results = Vec::new();
+
+    for event_type in &types {
+        let evs = match room.get_state_events(event_type.clone()).await {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        for ev in evs {
+            let val: Value = match &ev {
+                RawAnySyncOrStrippedState::Sync(r) => {
+                    match r.deserialize_as::<Value>() { Ok(v) => v, Err(_) => continue }
+                }
+                RawAnySyncOrStrippedState::Stripped(r) => {
+                    match r.deserialize_as::<Value>() { Ok(v) => v, Err(_) => continue }
+                }
+            };
+
+            results.push(RawStateEvent {
+                event_type: val["type"].as_str().unwrap_or("").to_string(),
+                state_key: val["state_key"].as_str().unwrap_or("").to_string(),
+                sender: val["sender"].as_str().unwrap_or("").to_string(),
+                content_json: serde_json::to_string_pretty(&val["content"]).unwrap_or_default(),
+                event_id: val["event_id"].as_str().map(str::to_string),
+                origin_server_ts: val["origin_server_ts"].as_u64(),
+            });
+        }
+    }
+
+    Ok(results)
+}
+
+/// Get the full raw JSON for a single timeline event (for the debug viewer).
+pub async fn get_raw_event(
+    client: &Client,
+    room_id: &str,
+    event_id: &str,
+) -> Result<String, String> {
+    use matrix_sdk::ruma::EventId;
+    use serde_json::Value;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+    let event_id = EventId::parse(event_id).map_err(|e| format!("Invalid event ID: {e}"))?;
+
+    let ev = room
+        .event(&event_id, None)
+        .await
+        .map_err(|e| format!("Failed to fetch event: {e}"))?;
+
+    let json_str = ev.raw().json().get().to_string();
+    let val: Value =
+        serde_json::from_str(&json_str).map_err(|e| format!("Failed to parse event JSON: {e}"))?;
+    serde_json::to_string_pretty(&val).map_err(|e| format!("Failed to serialize: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

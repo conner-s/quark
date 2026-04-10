@@ -62,6 +62,16 @@ pub fn run() {
             commands::mark_room_read,
             commands::get_pinned_events,
             commands::search_room_directory,
+            // Room settings
+            commands::get_power_levels,
+            commands::set_power_levels,
+            commands::set_room_name,
+            commands::set_room_topic,
+            commands::set_room_join_rule,
+            commands::set_room_history_visibility,
+            // Debug viewer
+            commands::get_room_state_events,
+            commands::get_raw_event,
             // Timeline
             commands::get_timeline,
             commands::get_event_context,

@@ -228,6 +228,10 @@ Scoped maps (`tmap`, `rmap`, `pmap`) take precedence over global `nmap` when tha
 :emoji                       Manage emoji packs
 :gif <query>                 Search and send a GIF
 :source <path>               Reload quarkrc or source a file
+:roomsettings                Open room settings (name/topic/access/permissions)
+:spacesettings               Open space settings (name/topic/children)
+:debug                       Open debug viewer for current room state events
+:debug $eventId              Open debug viewer for a specific event
 ```
 
 ---
@@ -659,8 +663,10 @@ quark/
 - [x] Emoji and sticker picker styling. Should show in box above compose area.
 - [x] Threads animate open a space between message bubbles and display there.
 - [x] Settings UI — `SettingsDialog` overlay with Notifications, Media Cache, and Themes tabs; opened with `:settings` or `?` key
-- [ ] Permissions UI
-- [x] Room info/configuration UI — `RoomInfoDialog` shows room name/topic/member count/encryption/ID, mute toggle, and leave button; opened with `:info` or `I` key
+- [x] Permissions UI — `RoomSettingsDialog` exposes General (name/topic), Access (join rule/history visibility), and Permissions (power levels with per-user overrides) tabs; opened via `:roomsettings` command or `[settings]` button in RoomInfoDialog
+- [x] Space settings UI — `SpaceSettingsDialog` exposes General (name/topic) and Children (list of child rooms/spaces) tabs; opened via `:spacesettings` command
+- [x] Debug viewer — `DebugViewer` shows raw JSON for room state events, specific timeline events (`$eventId`), and user profiles; opened via `:debug`, `:debug $eventId`, or `[raw]` button in RoomInfoDialog; supports [copy] to clipboard
+- [x] Room info/configuration UI — `RoomInfoDialog` shows room name/topic/member count/encryption/ID, mute toggle, and leave button; now also has `[settings]` and `[raw]` action buttons; opened with `:info` or `I` key
 - [x] Polish pass over top right status UI. User state (online, status, etc.) should go in the bottom left. Mode is no longer needed since it's in the compose UI. Presence status_msg shown in status bar; editable via click or S key.
 - [x] Mouse interactions — hover react (😀) and reply (↩) buttons on messages
 - [x] Mouse interactions — click on profile to open profile view

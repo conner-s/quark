@@ -131,6 +131,28 @@ export class RoomInfoDialog {
     });
     actions.appendChild(muteBtn);
 
+    // Settings button — open room settings
+    const settingsBtn = document.createElement("button");
+    settingsBtn.type = "button";
+    settingsBtn.className = "room-info-dialog__btn";
+    settingsBtn.textContent = "[settings]";
+    settingsBtn.addEventListener("click", () => {
+      this.hide();
+      document.dispatchEvent(new CustomEvent("quark:action", { detail: { action: "open-room-settings" } }));
+    });
+    actions.appendChild(settingsBtn);
+
+    // Raw button — open debug viewer for this room
+    const rawBtn = document.createElement("button");
+    rawBtn.type = "button";
+    rawBtn.className = "room-info-dialog__btn";
+    rawBtn.textContent = "[raw]";
+    rawBtn.addEventListener("click", () => {
+      this.hide();
+      document.dispatchEvent(new CustomEvent("quark:action", { detail: { action: "open-debug" } }));
+    });
+    actions.appendChild(rawBtn);
+
     // Leave button — fires the leave-room action via custom event
     const leaveBtn = document.createElement("button");
     leaveBtn.type = "button";

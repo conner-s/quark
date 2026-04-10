@@ -379,6 +379,52 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     case "mute_room":
     case "unmute_room":
       return null;
+
+    // ─── Room Settings ────────────────────────────────────────────────────
+    case "get_power_levels":
+      return {
+        ban: 50, kick: 50, invite: 50, redact: 50,
+        state_default: 50, events_default: 0, users_default: 0,
+        events: { "m.room.name": 50, "m.room.topic": 50, "m.room.avatar": 50 },
+        users: { "@alice:matrix.org": 100, "@bob:matrix.org": 50 },
+      };
+    case "set_power_levels":
+    case "set_room_name":
+    case "set_room_topic":
+    case "set_room_join_rule":
+    case "set_room_history_visibility":
+      return null;
+
+    // ─── Debug Viewer ─────────────────────────────────────────────────────
+    case "get_room_state_events": {
+      const roomId = (args?.roomId as string) ?? "!general:matrix.org";
+      return [
+        { event_type: "m.room.create", state_key: "", sender: "@alice:matrix.org", content_json: JSON.stringify({ creator: "@alice:matrix.org", room_version: "10" }, null, 2), event_id: "$create:matrix.org", origin_server_ts: Date.now() - 86400_000 * 30 },
+        { event_type: "m.room.name", state_key: "", sender: "@alice:matrix.org", content_json: JSON.stringify({ name: "general" }, null, 2), event_id: "$name:matrix.org", origin_server_ts: Date.now() - 86400_000 * 29 },
+        { event_type: "m.room.topic", state_key: "", sender: "@alice:matrix.org", content_json: JSON.stringify({ topic: "General discussion" }, null, 2), event_id: "$topic:matrix.org", origin_server_ts: Date.now() - 86400_000 * 28 },
+        { event_type: "m.room.join_rules", state_key: "", sender: "@alice:matrix.org", content_json: JSON.stringify({ join_rule: "invite" }, null, 2), event_id: "$joinrules:matrix.org", origin_server_ts: Date.now() - 86400_000 * 27 },
+        { event_type: "m.room.history_visibility", state_key: "", sender: "@alice:matrix.org", content_json: JSON.stringify({ history_visibility: "shared" }, null, 2), event_id: "$hv:matrix.org", origin_server_ts: Date.now() - 86400_000 * 26 },
+        { event_type: "m.room.power_levels", state_key: "", sender: "@alice:matrix.org", content_json: JSON.stringify({ ban: 50, kick: 50, invite: 50, events_default: 0, users_default: 0 }, null, 2), event_id: "$pl:matrix.org", origin_server_ts: Date.now() - 86400_000 * 25 },
+        { event_type: "m.room.encryption", state_key: "", sender: "@alice:matrix.org", content_json: JSON.stringify({ algorithm: "m.megolm.v1.aes-sha2" }, null, 2), event_id: "$enc:matrix.org", origin_server_ts: Date.now() - 86400_000 * 24 },
+        { event_type: "m.room.member", state_key: "@alice:matrix.org", sender: "@alice:matrix.org", content_json: JSON.stringify({ membership: "join", displayname: "Alice" }, null, 2), event_id: "$member-alice:matrix.org", origin_server_ts: Date.now() - 86400_000 * 30 },
+      ];
+    }
+    case "get_raw_event": {
+      const eventId = (args?.eventId as string) ?? "$mock";
+      const ev = MOCK_TIMELINE.find((e) => e.event_id === eventId) ?? MOCK_TIMELINE[0];
+      return JSON.stringify({
+        event_id: ev.event_id,
+        type: "m.room.message",
+        sender: ev.sender,
+        origin_server_ts: ev.timestamp,
+        content: {
+          msgtype: ev.msg_type ?? "m.text",
+          body: ev.body,
+          ...(ev.formatted_body ? { formatted_body: ev.formatted_body, format: "org.matrix.custom.html" } : {}),
+        },
+        unsigned: { age: Date.now() - ev.timestamp },
+      }, null, 2);
+    }
     case "save_media_to_temp":
       return `/tmp/quark-mock-video.mp4`;
     case "open_media_externally":

@@ -256,6 +256,35 @@ export interface PublicRoomInfo {
   member_count: number | null;
 }
 
+// ─── Room Settings ────────────────────────────────────────────────────────────
+
+/** Power levels for a room — matches matrix::rooms::PowerLevels */
+export interface PowerLevels {
+  ban: number;
+  kick: number;
+  invite: number;
+  redact: number;
+  state_default: number;
+  events_default: number;
+  users_default: number;
+  /** event type string → required power level */
+  events: Record<string, number>;
+  /** user_id → power level override */
+  users: Record<string, number>;
+}
+
+// ─── Debug Viewer ─────────────────────────────────────────────────────────────
+
+/** A single raw state event — matches matrix::rooms::RawStateEvent */
+export interface RawStateEvent {
+  event_type: string;
+  state_key: string;
+  sender: string;
+  content_json: string;
+  event_id: string | null;
+  origin_server_ts: number | null;
+}
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 /**

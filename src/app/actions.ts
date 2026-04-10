@@ -1795,6 +1795,46 @@ export function openRoomDirectory(): void {
   roomDirectoryDialog.show();
 }
 
+/**
+ * Open the room settings dialog for the current room.
+ */
+export async function openRoomSettings(): Promise<void> {
+  const { roomSettingsDialog } = getComponents();
+  await roomSettingsDialog.show();
+}
+
+/**
+ * Open the space settings dialog for the current or specified space.
+ */
+export async function openSpaceSettings(spaceId?: string): Promise<void> {
+  const { spaceSettingsDialog } = getComponents();
+  await spaceSettingsDialog.show(spaceId);
+}
+
+/**
+ * Open the debug viewer for the current room's state events.
+ */
+export async function openDebugViewer(subject?: import("../ui/DebugViewer.js").DebugSubject): Promise<void> {
+  const { debugViewer } = getComponents();
+  if (subject) {
+    await debugViewer.show(subject);
+  } else {
+    await debugViewer.showCurrentRoom();
+  }
+}
+
+/**
+ * Open the debug viewer for a specific event in the current room.
+ */
+export async function openDebugViewerForEvent(eventId: string): Promise<void> {
+  const roomId = AppState.snapshot.currentRoomId;
+  if (!roomId) {
+    showError("No room selected");
+    return;
+  }
+  await openDebugViewer({ kind: "event", roomId, eventId });
+}
+
 // GIF picker search state (persisted across picker open/close within a session)
 let _gifQuery = "";
 let _gifResultCount = 0;
@@ -2036,6 +2076,30 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
 
     case "directory": {
       openRoomDirectory();
+      break;
+    }
+
+    case "roomsettings":
+    case "room-settings": {
+      void openRoomSettings();
+      break;
+    }
+
+    case "spacesettings":
+    case "space-settings": {
+      void openSpaceSettings();
+      break;
+    }
+
+    case "debug": {
+      const subjectArg = parsed.args[0];
+      if (subjectArg && subjectArg.startsWith("$")) {
+        // :debug $eventId — show raw event
+        void openDebugViewerForEvent(subjectArg);
+      } else {
+        // :debug — show room state
+        void openDebugViewer();
+      }
       break;
     }
 

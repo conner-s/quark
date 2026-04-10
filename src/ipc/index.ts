@@ -31,6 +31,8 @@ export type {
   ParsedRc,
   PinnedEventInfo,
   PublicRoomInfo,
+  PowerLevels,
+  RawStateEvent,
 } from "./types.js";
 
 // ─── Client (auth) ────────────────────────────────────────────────────────────
@@ -97,6 +99,18 @@ export { getThreadRoots, getThreadTimeline, sendThreadReplyIpc } from "./threads
 // ─── GIF ──────────────────────────────────────────────────────────────────────
 export { searchGifs, sendGif } from "./gif.js";
 export type { GifProvider } from "./gif.js";
+
+// ─── Room Settings ────────────────────────────────────────────────────────────
+export {
+  getPowerLevels,
+  setPowerLevels,
+  setRoomName,
+  setRoomTopic,
+  setRoomJoinRule,
+  setRoomHistoryVisibility,
+  getRoomStateEvents,
+  getRawEvent,
+} from "./room_settings.js";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 export { loadTheme, parseQuarkrc } from "./config.js";

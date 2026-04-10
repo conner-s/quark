@@ -12,6 +12,9 @@ import {
   openProfileDialog,
   openSettings,
   openRoomInfo,
+  openRoomSettings,
+  openSpaceSettings,
+  openDebugViewer,
   openPinnedMessages,
   openRoomDirectory,
   executeCommand,
@@ -199,6 +202,18 @@ function dispatchAction(action: string, components: AppComponents): void {
 
     case "open-room-info":
       void openRoomInfo();
+      break;
+
+    case "open-room-settings":
+      void openRoomSettings();
+      break;
+
+    case "open-space-settings":
+      void openSpaceSettings();
+      break;
+
+    case "open-debug":
+      void openDebugViewer();
       break;
 
     case "edit-status":
@@ -436,6 +451,7 @@ export function setupKeyboard(components: AppComponents): void {
   const { input, commandBar, shortcodePreview, mentionPreview, timeline,
           emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker,
           settingsDialog, roomInfoDialog, pinnedMessagesDialog, roomDirectoryDialog,
+          roomSettingsDialog, spaceSettingsDialog, debugViewer,
           roomHeader, imageLightbox, quickNavPalette } = components;
 
   registerDefaultBindings();
@@ -636,6 +652,15 @@ export function setupKeyboard(components: AppComponents): void {
     void refreshRoomMembers();
   });
 
+  // ── quark:action events from UI components ───────────────────────────────
+  // Components that can't import actions.ts dispatch quark:action custom events.
+  document.addEventListener("quark:action" as keyof DocumentEventMap, (e: Event) => {
+    const detail = (e as CustomEvent<{ action: string }>).detail;
+    if (detail?.action) {
+      dispatchAction(detail.action, components);
+    }
+  });
+
   // ── Global keydown ──────────────────────────────────────────────────────
   document.addEventListener("keydown", (e) => {
     const mode = modeManager.current;
@@ -655,7 +680,9 @@ export function setupKeyboard(components: AppComponents): void {
     if (gifPicker.isVisible() || verification.isVisible() || helpDialog.isVisible() ||
         profileDialog.isVisible() || devicePicker.isVisible() ||
         settingsDialog.isVisible() || roomInfoDialog.isVisible() ||
-        pinnedMessagesDialog.isVisible() || roomDirectoryDialog.isVisible()) return;
+        pinnedMessagesDialog.isVisible() || roomDirectoryDialog.isVisible() ||
+        roomSettingsDialog.isVisible() || spaceSettingsDialog.isVisible() ||
+        debugViewer.isVisible()) return;
 
     // Quick nav palette — Ctrl+K opens from any mode (except when already open)
     if (e.ctrlKey && e.key === "k" && !quickNavPalette.isVisible()) {

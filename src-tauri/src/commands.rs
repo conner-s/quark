@@ -229,6 +229,86 @@ pub async fn search_room_directory(
     crate::matrix::rooms::search_room_directory(&client, filter, limit).await
 }
 
+// ─── Room Settings Commands ───────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_power_levels(
+    state: State<'_, MatrixState>,
+    room_id: String,
+) -> Result<crate::matrix::rooms::PowerLevels, String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::get_power_levels(&client, &room_id).await
+}
+
+#[tauri::command]
+pub async fn set_power_levels(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    levels: crate::matrix::rooms::PowerLevels,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::set_power_levels(&client, &room_id, levels).await
+}
+
+#[tauri::command]
+pub async fn set_room_name(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    name: String,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::set_room_name(&client, &room_id, name).await
+}
+
+#[tauri::command]
+pub async fn set_room_topic(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    topic: String,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::set_room_topic(&client, &room_id, topic).await
+}
+
+#[tauri::command]
+pub async fn set_room_join_rule(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    rule: String,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::set_room_join_rule(&client, &room_id, &rule).await
+}
+
+#[tauri::command]
+pub async fn set_room_history_visibility(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    visibility: String,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::set_room_history_visibility(&client, &room_id, &visibility).await
+}
+
+#[tauri::command]
+pub async fn get_room_state_events(
+    state: State<'_, MatrixState>,
+    room_id: String,
+) -> Result<Vec<crate::matrix::rooms::RawStateEvent>, String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::get_room_state_events(&client, &room_id).await
+}
+
+#[tauri::command]
+pub async fn get_raw_event(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    event_id: String,
+) -> Result<String, String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::get_raw_event(&client, &room_id, &event_id).await
+}
+
 // ─── Timeline Commands ────────────────────────────────────────────────────────
 
 #[tauri::command]

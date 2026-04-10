@@ -26,6 +26,9 @@ import { RoomDirectoryDialog } from "./RoomDirectoryDialog.js";
 import { ImageLightbox } from "./ImageLightbox.js";
 import { QuickNavPalette } from "./QuickNavPalette.js";
 import { MentionPreview } from "./MentionPreview.js";
+import { RoomSettingsDialog } from "./RoomSettingsDialog.js";
+import { SpaceSettingsDialog } from "./SpaceSettingsDialog.js";
+import { DebugViewer } from "./DebugViewer.js";
 
 // ── AppComponents ─────────────────────────────────────────────────────────────
 
@@ -64,6 +67,9 @@ export interface AppComponents {
   imageLightbox: ImageLightbox;
   quickNavPalette: QuickNavPalette;
   mentionPreview: MentionPreview;
+  roomSettingsDialog: RoomSettingsDialog;
+  spaceSettingsDialog: SpaceSettingsDialog;
+  debugViewer: DebugViewer;
 
   // Status
   statusBar: StatusBar;
@@ -110,6 +116,9 @@ export function mountApp(container: HTMLElement): AppComponents {
   const imageLightbox = new ImageLightbox();
   const quickNavPalette = new QuickNavPalette();
   const mentionPreview = new MentionPreview();
+  const roomSettingsDialog = new RoomSettingsDialog();
+  const spaceSettingsDialog = new SpaceSettingsDialog();
+  const debugViewer = new DebugViewer();
 
   // ── Login screen ─────────────────────────────────────────────────────────
   container.appendChild(loginScreen.getElement());
@@ -192,6 +201,9 @@ export function mountApp(container: HTMLElement): AppComponents {
   document.body.appendChild(roomDirectoryDialog.getElement());
   document.body.appendChild(imageLightbox.getElement());
   document.body.appendChild(quickNavPalette.getElement());
+  document.body.appendChild(roomSettingsDialog.getElement());
+  document.body.appendChild(spaceSettingsDialog.getElement());
+  document.body.appendChild(debugViewer.getElement());
 
   return {
     loginScreen,
@@ -220,6 +232,9 @@ export function mountApp(container: HTMLElement): AppComponents {
     imageLightbox,
     quickNavPalette,
     mentionPreview,
+    roomSettingsDialog,
+    spaceSettingsDialog,
+    debugViewer,
     typingIndicator,
     mainLayout,
   };
