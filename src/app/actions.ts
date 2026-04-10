@@ -201,7 +201,7 @@ function _applyEdits(events: TimelineEvent[]): TimelineEvent[] {
     .map((e) => {
       const edit = latestEdit.get(e.event_id);
       if (!edit) return e;
-      return { ...e, body: edit.body, formatted_body: edit.formatted_body };
+      return { ...e, body: edit.body, formatted_body: edit.formatted_body, was_edited: true };
     });
 }
 
@@ -277,6 +277,7 @@ function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEvent[], t
     replyTo,
     isThreadRoot: threadRootCounts ? threadRootCounts.has(e.event_id) : undefined,
     threadReplyCount: threadRootCounts?.get(e.event_id),
+    wasEdited: e.was_edited,
   };
 }
 

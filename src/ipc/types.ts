@@ -101,6 +101,8 @@ export interface TimelineEvent {
   /** JSON-serialized EncryptedFile for E2EE video thumbnails. */
   media_thumbnail_encryption_info?: string | null;
   reactions?: ReactionGroup[];
+  /** Frontend-only: set by _applyEdits when this original event has been replaced by at least one edit. */
+  was_edited?: boolean;
 }
 
 // ─── URL Preview ──────────────────────────────────────────────────────────────

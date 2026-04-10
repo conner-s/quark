@@ -272,6 +272,8 @@ export interface MessageData {
   isThreadRoot?: boolean;
   /** Number of thread replies (shown in the indicator) */
   threadReplyCount?: number;
+  /** If true, this message has been edited at least once — show the (edited) marker. */
+  wasEdited?: boolean;
 }
 
 function formatTimestamp(isoString: string): string {
@@ -600,6 +602,14 @@ function buildMessageElement(msg: MessageData): HTMLElement {
       }
     } else {
       appendLinkifiedText(body, msg.body);
+    }
+
+    if (msg.wasEdited) {
+      const marker = document.createElement("span");
+      marker.className = "message__edited-marker";
+      marker.textContent = " (edited)";
+      marker.title = "Click to view edit history";
+      body.appendChild(marker);
     }
 
     row.appendChild(body);

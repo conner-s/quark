@@ -173,13 +173,11 @@ function dispatchAction(action: string, components: AppComponents): void {
     }
 
     case "paste-to-input": {
-      void navigator.clipboard.readText().then((text) => {
-        if (!text) return;
-        modeManager.transition(Mode.Insert);
-        input.focus();
-        const current = input.getValue();
-        input.setValue(current + text);
-      });
+      // Avoid navigator.clipboard.readText() — on macOS it triggers a system
+      // permission popup for external clipboard sources. Switch to insert mode
+      // and focus the input; the user pastes with ⌘V / Ctrl+V as usual.
+      modeManager.transition(Mode.Insert);
+      input.focus();
       break;
     }
 
