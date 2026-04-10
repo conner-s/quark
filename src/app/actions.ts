@@ -1222,7 +1222,12 @@ export async function editMessage(eventId: string, newBody: string): Promise<voi
   if (!roomId) return;
 
   try {
-    await ipcEditMessage(roomId, eventId, newBody);
+    const editEventId = await ipcEditMessage(roomId, eventId, newBody);
+    // Suppress the sync echo so it doesn't double-apply the update.
+    _ownSentEventIds.add(editEventId);
+    // Optimistically update the DOM immediately without waiting for sync.
+    const { timeline } = getComponents();
+    timeline.updateMessageBody(eventId, newBody);
     showSuccess("Message edited");
   } catch (err) {
     showError(`Failed to edit: ${err instanceof Error ? err.message : String(err)}`);
