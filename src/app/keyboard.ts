@@ -80,6 +80,10 @@ function registerDefaultBindings(): void {
   keymapManager.nmap("Enter", "select");
   keymapManager.nmap("o", "select");
 
+  // copy / paste
+  keymapManager.nmap("y", "copy-message");
+  keymapManager.nmap("p", "paste-to-input");
+
   // close — clears selection / reply / thread for the active panel
   keymapManager.nmap("Escape", "close");
 }
@@ -87,7 +91,7 @@ function registerDefaultBindings(): void {
 // ── Action dispatcher ─────────────────────────────────────────────────────────
 
 function dispatchAction(action: string, components: AppComponents): void {
-  const { input, commandBar, timeline, imageLightbox } = components;
+  const { input, commandBar, timeline, imageLightbox, revisionHistoryDialog } = components;
 
   switch (action) {
     case "mode-insert":
@@ -151,6 +155,31 @@ function dispatchAction(action: string, components: AppComponents): void {
     case "redact": {
       const msgId = timeline.selectedMessageId;
       if (msgId) void redactMessage(msgId);
+      break;
+    }
+
+    case "copy-message": {
+      const msgId = timeline.selectedMessageId;
+      if (msgId) {
+        const events = AppState.get("currentTimeline");
+        const evt = events.find((e) => e.event_id === msgId);
+        if (evt) {
+          void navigator.clipboard.writeText(evt.body).then(() => {
+            showToast("Copied message");
+          });
+        }
+      }
+      break;
+    }
+
+    case "paste-to-input": {
+      void navigator.clipboard.readText().then((text) => {
+        if (!text) return;
+        modeManager.transition(Mode.Insert);
+        input.focus();
+        const current = input.getValue();
+        input.setValue(current + text);
+      });
       break;
     }
 
@@ -451,7 +480,7 @@ export function setupKeyboard(components: AppComponents): void {
   const { input, commandBar, shortcodePreview, mentionPreview, timeline,
           emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker,
           settingsDialog, roomInfoDialog, pinnedMessagesDialog, roomDirectoryDialog,
-          roomSettingsDialog, spaceSettingsDialog, debugViewer,
+          roomSettingsDialog, spaceSettingsDialog, debugViewer, revisionHistoryDialog,
           roomHeader, imageLightbox, quickNavPalette } = components;
 
   registerDefaultBindings();
@@ -497,6 +526,11 @@ export function setupKeyboard(components: AppComponents): void {
   // Image lightbox — wire timeline image clicks
   timeline.onImageClick((src, alt) => {
     imageLightbox.show(src, alt);
+  });
+
+  // Revision history — wire (edited) marker clicks
+  timeline.onShowRevisionHistory((eventId, originalBody) => {
+    revisionHistoryDialog.show(eventId, originalBody);
   });
 
   // ── User keybindings ──────────────────────────────────────────────────────
@@ -682,7 +716,7 @@ export function setupKeyboard(components: AppComponents): void {
         settingsDialog.isVisible() || roomInfoDialog.isVisible() ||
         pinnedMessagesDialog.isVisible() || roomDirectoryDialog.isVisible() ||
         roomSettingsDialog.isVisible() || spaceSettingsDialog.isVisible() ||
-        debugViewer.isVisible()) return;
+        debugViewer.isVisible() || revisionHistoryDialog.isVisible()) return;
 
     // Quick nav palette — Ctrl+K opens from any mode (except when already open)
     if (e.ctrlKey && e.key === "k" && !quickNavPalette.isVisible()) {

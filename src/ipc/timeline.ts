@@ -66,6 +66,17 @@ export async function editMessage(
 }
 
 /**
+ * Fetch all edit revisions (m.replace relations) for a given event, oldest-first.
+ * Matches the Rust `get_message_revisions` command.
+ */
+export async function getMessageRevisions(
+  roomId: string,
+  eventId: string,
+): Promise<TimelineEvent[]> {
+  return invoke<TimelineEvent[]>("get_message_revisions", { roomId, eventId });
+}
+
+/**
  * Redact (delete) a message. Returns the redaction event ID.
  * Matches the Rust `redact_message` command.
  */

@@ -29,6 +29,7 @@ import { MentionPreview } from "./MentionPreview.js";
 import { RoomSettingsDialog } from "./RoomSettingsDialog.js";
 import { SpaceSettingsDialog } from "./SpaceSettingsDialog.js";
 import { DebugViewer } from "./DebugViewer.js";
+import { RevisionHistoryDialog } from "./RevisionHistoryDialog.js";
 
 // ── AppComponents ─────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ export interface AppComponents {
   roomSettingsDialog: RoomSettingsDialog;
   spaceSettingsDialog: SpaceSettingsDialog;
   debugViewer: DebugViewer;
+  revisionHistoryDialog: RevisionHistoryDialog;
 
   // Status
   statusBar: StatusBar;
@@ -119,6 +121,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   const roomSettingsDialog = new RoomSettingsDialog();
   const spaceSettingsDialog = new SpaceSettingsDialog();
   const debugViewer = new DebugViewer();
+  const revisionHistoryDialog = new RevisionHistoryDialog();
 
   // ── Login screen ─────────────────────────────────────────────────────────
   container.appendChild(loginScreen.getElement());
@@ -204,6 +207,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   document.body.appendChild(roomSettingsDialog.getElement());
   document.body.appendChild(spaceSettingsDialog.getElement());
   document.body.appendChild(debugViewer.getElement());
+  document.body.appendChild(revisionHistoryDialog.getElement());
 
   return {
     loginScreen,
@@ -235,6 +239,7 @@ export function mountApp(container: HTMLElement): AppComponents {
     roomSettingsDialog,
     spaceSettingsDialog,
     debugViewer,
+    revisionHistoryDialog,
     typingIndicator,
     mainLayout,
   };

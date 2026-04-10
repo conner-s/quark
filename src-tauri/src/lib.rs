@@ -75,6 +75,7 @@ pub fn run() {
             // Timeline
             commands::get_timeline,
             commands::get_event_context,
+            commands::get_message_revisions,
             commands::send_message,
             commands::edit_message,
             commands::redact_message,

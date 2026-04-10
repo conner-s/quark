@@ -697,18 +697,18 @@ quark/
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
-  - [ ] Outside of text select mode but in normal mode, 'y' should copy the full message
-  - [ ] Outside of text select mode but in normal mode, 'p' should paste into the compose box
+  - [x] Outside of text select mode but in normal mode, 'y' should copy the full message
+  - [x] Outside of text select mode but in normal mode, 'p' should paste into the compose box
   - [ ] In text select mode in normal mode in the compose box, 'p' should paste into the compose box at the cursor position
 
 #### Messaging
-- [ ] **Message revision history UI** — clicking the "(edited)" marker on a message opens a dialog showing all previous versions of the message (fetched via `get_event_context` or a dedicated revision history IPC that queries `m.replace` events for the original event ID). Show each revision with its timestamp and sender.
+- [x] **Message revision history UI** — clicking the "(edited)" marker on a message opens a dialog showing all previous versions of the message (fetched via `get_message_revisions` IPC that queries `m.replace` events for the original event ID). Shows each revision with its timestamp and version label.
 
 #### Hardening
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
 - [ ] Performance profiling — large rooms (1000+ messages), many emoji packs
 - [ ] Command audit - make sure all commands are fully implemented
-- [ ] Use blobs rather than data URLs so the browser can cache (I think this makes sense? Tell me if it doesn't.)
+- [x] Use blobs rather than data URLs — Timeline now uses `URL.createObjectURL()` for media thumbnails and URL-preview images; blob URLs are revoked before each re-render to avoid memory leaks.
 - [ ] Unload messages far out of view in timeline when adding new messages to prevent overloading the timeline
 
 #### Bugs

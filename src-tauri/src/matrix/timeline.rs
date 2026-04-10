@@ -14,6 +14,7 @@ use matrix_sdk::{
     },
     Client,
 };
+use matrix_sdk::ruma::events::relation::RelationType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::info;
@@ -632,6 +633,37 @@ pub async fn get_event_context(
         prev_batch: response.prev_batch_token,
         next_batch: response.next_batch_token,
     })
+}
+
+/// Fetch all edit-revision events (m.replace relations) for a given event.
+/// Returns them sorted oldest-first.
+pub async fn get_message_revisions(
+    client: &Client,
+    room_id: &str,
+    event_id: &str,
+) -> Result<Vec<TimelineEvent>, String> {
+    use matrix_sdk::ruma::api::client::relations::get_relating_events_with_rel_type::v1::Request;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let event_id = EventId::parse(event_id).map_err(|e| format!("Invalid event ID: {e}"))?;
+
+    let request = Request::new(room_id.into(), event_id.into(), RelationType::Replacement);
+    let response = client
+        .send(request, None)
+        .await
+        .map_err(|e| format!("Failed to fetch revisions: {e}"))?;
+
+    let mut revisions: Vec<TimelineEvent> = Vec::new();
+    for raw_ev in response.chunk {
+        if let Ok(deserialized) = raw_ev.deserialize_as::<AnySyncTimelineEvent>() {
+            if let Some(te) = convert_sync_timeline_event(deserialized) {
+                revisions.push(te);
+            }
+        }
+    }
+
+    revisions.sort_by_key(|e| e.timestamp);
+    Ok(revisions)
 }
 
 /// Redact (delete) a message.

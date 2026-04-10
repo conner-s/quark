@@ -6,6 +6,32 @@ import type { ThreadMessageData } from "./ThreadView.js";
 import { isAnimatedUrl } from "../app/animated_urls.js";
 import { hashColor } from "./avatarColors.js";
 
+// ── Blob URL management ───────────────────────────────────────────────────────
+// Blob URLs are more memory-efficient than data: URIs — the binary data is held
+// as typed arrays rather than being embedded inline in the DOM as a base64 string.
+
+const _activeBlobUrls: string[] = [];
+
+/**
+ * Convert a base64+mime media download to a blob object URL.
+ * Registers the URL for cleanup when the timeline is re-rendered.
+ */
+function createBlobUrl(data_base64: string, mime_type: string): string {
+  const binary = atob(data_base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: mime_type });
+  const url = URL.createObjectURL(blob);
+  _activeBlobUrls.push(url);
+  return url;
+}
+
+/** Revoke all tracked blob URLs and clear the registry. */
+function revokeActiveBlobUrls(): void {
+  for (const url of _activeBlobUrls) URL.revokeObjectURL(url);
+  _activeBlobUrls.length = 0;
+}
+
 // ── URL linkification ─────────────────────────────────────────────────────────
 
 const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/g;
@@ -88,7 +114,7 @@ function buildUrlPreviewCard(preview: { title: string | null; description: strin
         thumbnailHeight: 80,
         encryptionInfo: null,
       }).then((dl) => {
-        img.src = `data:${dl.mime_type};base64,${dl.data_base64}`;
+        img.src = createBlobUrl(dl.data_base64, dl.mime_type);
       }).catch(() => { imgWrap.style.display = "none"; });
     } else {
       // Plain https:// URL from direct-fetch fallback — set directly; CSP is null
@@ -346,7 +372,7 @@ function buildVideoAffordance(
       thumbnailHeight: 90,
       encryptionInfo: thumbnailEncryptionInfo ?? null,
     }).then((dl) => {
-      thumbImg.src = `data:${dl.mime_type};base64,${dl.data_base64}`;
+      thumbImg.src = createBlobUrl(dl.data_base64, dl.mime_type);
     }).catch(() => { /* thumbnail failed to load — affordance still works */ });
   } else {
     const icon = document.createElement("span");
@@ -830,6 +856,8 @@ export class Timeline {
   private _postRenderScrollTimer: ReturnType<typeof setTimeout> | null = null;
   /** Number of unread messages at the tail of the current message list. */
   private _unreadCount = 0;
+  /** Fired when an "(edited)" marker is clicked — passes (eventId, originalBody). */
+  private _onShowRevisionHistoryCallback: ((eventId: string, originalBody: string) => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -903,6 +931,19 @@ export class Timeline {
         return;
       }
 
+      // Revision history — clicking "(edited)" marker
+      if (target.classList.contains("message__edited-marker")) {
+        e.preventDefault();
+        e.stopPropagation();
+        const msgEl = target.closest<HTMLElement>("[data-message-id]");
+        if (msgEl) {
+          const eventId = msgEl.dataset.messageId!;
+          const msg = this._messages.find((m) => m.id === eventId);
+          this._onShowRevisionHistoryCallback?.(eventId, msg?.body ?? "");
+        }
+        return;
+      }
+
       const msgEl = target.closest<HTMLElement>("[data-message-id]");
       if (msgEl) {
         const eventId = msgEl.dataset.messageId;
@@ -942,6 +983,11 @@ export class Timeline {
   /** Register a callback fired when the "jump to latest" button is clicked. */
   onJumpToLatest(cb: () => void): void {
     this._onJumpToLatestCallback = cb;
+  }
+
+  /** Register a callback fired when an "(edited)" marker is clicked. */
+  onShowRevisionHistory(cb: (eventId: string, originalBody: string) => void): void {
+    this._onShowRevisionHistoryCallback = cb;
   }
 
   /**
@@ -1759,6 +1805,7 @@ export class Timeline {
       const marker = document.createElement("span");
       marker.className = "message__edited-marker";
       marker.textContent = " (edited)";
+      marker.title = "Click to view edit history";
       bodyEl.appendChild(marker);
     }
   }
@@ -2116,6 +2163,7 @@ export class Timeline {
   }
 
   private _renderAll(): void {
+    revokeActiveBlobUrls();
     this._listEl.innerHTML = "";
     const groups = groupMessages(this._messages);
     const fragment = document.createDocumentFragment();

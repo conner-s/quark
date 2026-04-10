@@ -368,6 +368,16 @@ pub async fn redact_message(
     crate::matrix::timeline::redact_message(&client, &room_id, &event_id, reason.as_deref()).await
 }
 
+#[tauri::command]
+pub async fn get_message_revisions(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    event_id: String,
+) -> Result<Vec<crate::matrix::timeline::TimelineEvent>, String> {
+    let client = get_client(&state)?;
+    crate::matrix::timeline::get_message_revisions(&client, &room_id, &event_id).await
+}
+
 // ─── Reaction Commands ────────────────────────────────────────────────────────
 
 #[tauri::command]

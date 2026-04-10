@@ -138,6 +138,16 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return MOCK_ROOMS;
     case "get_timeline":
       return { events: MOCK_TIMELINE, prev_batch: null };
+    case "get_message_revisions": {
+      // Return a couple of fake revision events for mock mode
+      const origId = args?.eventId as string ?? "";
+      const orig = MOCK_TIMELINE.find((e) => e.event_id === origId);
+      if (!orig) return [];
+      return [
+        { ...orig, event_id: `${origId}:rev1`, body: `${orig.body} (first edit)`, is_edit: true, relates_to_event_id: origId, timestamp: orig.timestamp + 60_000 },
+        { ...orig, event_id: `${origId}:rev2`, body: `${orig.body} (final edit)`, is_edit: true, relates_to_event_id: origId, timestamp: orig.timestamp + 120_000 },
+      ];
+    }
     case "get_event_context": {
       const targetId = args?.eventId as string ?? "";
       const idx = MOCK_TIMELINE.findIndex((e) => e.event_id === targetId);
