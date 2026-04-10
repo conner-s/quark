@@ -216,15 +216,13 @@ function dispatchAction(action: string, components: AppComponents): void {
     }
 
     case "edit": {
-      const msgId = timeline.selectedMessageId;
-      if (msgId) {
-        const events = AppState.get("currentTimeline");
-        const evt = events.find((e) => e.event_id === msgId);
-        if (evt && evt.sender === AppState.get("ownUserId")) {
-          startEdit(msgId, evt.body);
-          modeManager.transition(Mode.Insert);
-          input.focus();
-        }
+      const msg = timeline.selectedMessage;
+      if (msg?.id && msg.isOwn) {
+        // Use body from MessageData (already has _applyEdits applied and
+        // reflects any subsequent updateMessageBody calls).
+        startEdit(msg.id, msg.body);
+        modeManager.transition(Mode.Insert);
+        input.focus();
       }
       break;
     }
