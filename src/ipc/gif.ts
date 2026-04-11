@@ -5,14 +5,14 @@ import type { GifResult } from "./types.js";
 
 export type { GifResult };
 
-export type GifProvider = "tenor" | "giphy";
+export type GifProvider = "tenor" | "giphy" | "klipy";
 
 /**
  * Search for GIFs using the specified provider.
  * Matches the Rust `search_gifs` command.
  *
  * @param query   Search query string.
- * @param provider  "tenor" | "giphy" (defaults to "tenor").
+ * @param provider  "tenor" | "giphy" | "klipy" (defaults to "tenor").
  * @param apiKey  Provider API key.
  * @param limit   Max results (defaults to 20 in Rust).
  * @param rating  Content rating filter (defaults to "pg" in Rust).

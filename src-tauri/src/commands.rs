@@ -1100,6 +1100,10 @@ pub async fn search_gifs(
             let client = crate::gif::giphy::GiphyClient::new(api_key);
             client.search(&query, limit, rating_str).await
         }
+        "klipy" => {
+            let client = crate::gif::klipy::KlipyClient::new(api_key);
+            client.search(&query, limit, rating_str).await
+        }
         other => Err(format!("Unknown GIF provider: '{}'", other)),
     }
 }

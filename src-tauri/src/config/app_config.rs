@@ -61,6 +61,7 @@ pub struct MediaConfig {
 pub enum GifProvider {
     Tenor,
     Giphy,
+    Klipy,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

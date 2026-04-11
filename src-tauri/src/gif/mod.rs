@@ -1,4 +1,5 @@
 pub mod giphy;
+pub mod klipy;
 pub mod tenor;
 
 use serde::{Deserialize, Serialize};

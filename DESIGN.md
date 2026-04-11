@@ -298,6 +298,7 @@ Discord-style integrated GIF search, accessible from insert mode or command bar.
 **Providers (configurable in quarkrc):**
 - Tenor (default) — `set gif_provider=tenor`
 - Giphy — `set gif_provider=giphy`
+- Klipy — `set gif_provider=klipy`
 - Content rating filter: `set gif_rating=pg` (g / pg / pg-13 / r)
 
 **UX flow:**
@@ -309,7 +310,7 @@ Discord-style integrated GIF search, accessible from insert mode or command bar.
 6. Selected GIF is uploaded to the homeserver as media and sent as an `m.image` event with `info.mimetype: "image/gif"` — this avoids linking to external URLs that may break or track users
 
 **Backend:**
-- Rust backend handles API calls to Tenor/Giphy (API keys stored in config)
+- Rust backend handles API calls to Tenor/Giphy/Klipy (API keys stored in config)
 - Downloads selected GIF, uploads to homeserver via media API
 - Caches recent search results and thumbnails locally
 
@@ -496,7 +497,8 @@ quark/
 │   │   ├── gif/              # GIF search integration
 │   │   │   ├── mod.rs
 │   │   │   ├── tenor.rs      # Tenor API client
-│   │   │   └── giphy.rs      # Giphy API client
+│   │   │   ├── giphy.rs      # Giphy API client
+│   │   │   └── klipy.rs      # Klipy API client
 │   │   ├── config/           # Config & theme loading
 │   │   │   ├── mod.rs
 │   │   │   ├── theme.rs      # Theme parsing, validation
@@ -575,7 +577,7 @@ quark/
 - Sending `m.sticker` events
 - Sticker rendering in timeline (larger, standalone)
 - Pack management (create, edit, import)
-- GIF search integration (Tenor + Giphy backends)
+- GIF search integration (Tenor + Giphy + Klipy backends)
 - GIF picker overlay with animated thumbnails
 - GIF upload-to-homeserver flow (no external URL leaking)
 
