@@ -16,6 +16,7 @@ export class SpaceStrip {
   private _activeId: string | null = null;
   private _onSelect: ((id: string) => void) | null = null;
   private _onSettings: (() => void) | null = null;
+  private _onContextMenu: ((spaceId: string, x: number, y: number) => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -35,6 +36,10 @@ export class SpaceStrip {
 
   onSettingsClick(handler: () => void): void {
     this._onSettings = handler;
+  }
+
+  onContextMenu(handler: (spaceId: string, x: number, y: number) => void): void {
+    this._onContextMenu = handler;
   }
 
   setSpaces(items: SpaceItem[]): void {
@@ -181,6 +186,12 @@ export class SpaceStrip {
     }
 
     el.addEventListener("click", () => this._selectId(item.id));
+    if (item.id !== "__home__" && item.id !== "__dms__") {
+      el.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        this._onContextMenu?.(item.id, e.clientX, e.clientY);
+      });
+    }
     el.addEventListener("focus", () => {
       // Dispatch a focusspace event so keyboard.ts can update activePanel
       this._el.dispatchEvent(new CustomEvent("quark:space-focused", { bubbles: true }));

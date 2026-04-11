@@ -14,6 +14,8 @@ export interface RoomSection {
   /** Section label (empty string = no label) */
   label: string;
   rooms: RoomEntry[];
+  /** Space room ID for subspace section labels (enables right-click → space settings) */
+  spaceId?: string;
 }
 
 export class RoomList {
@@ -23,6 +25,8 @@ export class RoomList {
   private _sections: RoomSection[] | null = null;
   private _activeId: string | null = null;
   private _onSelect: ((id: string) => void) | null = null;
+  private _onContextMenu: ((roomId: string, x: number, y: number) => void) | null = null;
+  private _onSectionContextMenu: ((spaceId: string, x: number, y: number) => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -51,6 +55,14 @@ export class RoomList {
 
   onSelect(handler: (id: string) => void): void {
     this._onSelect = handler;
+  }
+
+  onContextMenu(handler: (roomId: string, x: number, y: number) => void): void {
+    this._onContextMenu = handler;
+  }
+
+  onSectionContextMenu(handler: (spaceId: string, x: number, y: number) => void): void {
+    this._onSectionContextMenu = handler;
   }
 
   setRooms(rooms: RoomEntry[]): void {
@@ -118,6 +130,14 @@ export class RoomList {
           label.className = "room-list__section-label";
           label.textContent = section.label;
           label.setAttribute("aria-hidden", "true");
+          if (section.spaceId) {
+            const spaceId = section.spaceId;
+            label.style.cursor = "context-menu";
+            label.addEventListener("contextmenu", (e) => {
+              e.preventDefault();
+              this._onSectionContextMenu?.(spaceId, e.clientX, e.clientY);
+            });
+          }
           this._scrollEl.appendChild(label);
         }
         for (const room of section.rooms) {
@@ -173,6 +193,10 @@ export class RoomList {
         e.preventDefault();
         this._selectId(room.id);
       }
+    });
+    el.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      this._onContextMenu?.(room.id, e.clientX, e.clientY);
     });
 
     return el;

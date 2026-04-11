@@ -500,7 +500,8 @@ export function setupKeyboard(components: AppComponents): void {
           emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker,
           settingsDialog, roomInfoDialog, pinnedMessagesDialog, roomDirectoryDialog,
           roomSettingsDialog, spaceSettingsDialog, debugViewer, revisionHistoryDialog,
-          roomHeader, imageLightbox, quickNavPalette, contextMenu } = components;
+          roomHeader, imageLightbox, quickNavPalette, contextMenu,
+          spaceStrip, roomList } = components;
 
   registerDefaultBindings();
 
@@ -584,6 +585,54 @@ export function setupKeyboard(components: AppComponents): void {
       {
         label: "View raw event",
         action: () => void openDebugViewerForEvent(eventId),
+      },
+    ]);
+  });
+
+  // Right-click context menu for rooms in the room list
+  roomList.onContextMenu((roomId, x, y) => {
+    const rooms = AppState.get("roomListCache");
+    const room = rooms.find((r) => r.room_id === roomId);
+    contextMenu.show(x, y, [
+      {
+        label: "Open",
+        action: () => void selectRoom(roomId),
+      },
+      { separator: true },
+      {
+        label: "Room settings",
+        action: () => void selectRoom(roomId).then(() => openRoomSettings()),
+      },
+      {
+        label: "Room info",
+        action: () => void selectRoom(roomId).then(() => openRoomInfo()),
+      },
+      ...(room && room.unread_count > 0 ? [
+        { separator: true } as const,
+        {
+          label: "Mark as read",
+          action: () => void selectRoom(roomId),
+        },
+      ] : []),
+    ]);
+  });
+
+  // Right-click context menu for subspace section labels in the room list
+  roomList.onSectionContextMenu((spaceId, x, y) => {
+    contextMenu.show(x, y, [
+      {
+        label: "Space settings",
+        action: () => void openSpaceSettings(spaceId),
+      },
+    ]);
+  });
+
+  // Right-click context menu for spaces in the space strip
+  spaceStrip.onContextMenu((spaceId, x, y) => {
+    contextMenu.show(x, y, [
+      {
+        label: "Space settings",
+        action: () => void openSpaceSettings(spaceId),
       },
     ]);
   });

@@ -776,7 +776,7 @@ export async function selectSpace(spaceId: string): Promise<void> {
               const r = cacheById.get(c.room_id);
               return r ? [roomInfoToEntry(r)] : [];
             });
-          sections.push({ label: sub.name ?? sub.room_id, rooms: subRooms });
+          sections.push({ label: sub.name ?? sub.room_id, rooms: subRooms, spaceId: sub.room_id });
         } catch {
           // Skip subspace on error
         }
