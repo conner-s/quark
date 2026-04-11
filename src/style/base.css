@@ -940,6 +940,7 @@ body {
 .room-header__sep {
   color: color-mix(in srgb, var(--fg) 35%, transparent);
   flex-shrink: 0;
+  margin: 4px;
 }
 
 .room-header__topic {
