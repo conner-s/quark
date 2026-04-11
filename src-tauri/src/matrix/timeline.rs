@@ -185,6 +185,10 @@ fn convert_sync_message_event(event: AnySyncMessageLikeEvent) -> Option<Timeline
     }
 }
 
+pub fn convert_sync_sticker_event(ev: matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent<StickerEventContent>) -> TimelineEvent {
+    convert_sync_sticker(ev)
+}
+
 fn convert_sync_sticker(ev: matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent<StickerEventContent>) -> TimelineEvent {
     use matrix_sdk::ruma::events::sticker::StickerMediaSource;
     let timestamp: u64 = ev.origin_server_ts.get().into();

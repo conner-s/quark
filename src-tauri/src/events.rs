@@ -15,8 +15,10 @@ use matrix_sdk::{
             message::{OriginalSyncRoomMessageEvent, SyncRoomMessageEvent},
             redaction::OriginalSyncRoomRedactionEvent,
         },
+        sticker::StickerEventContent,
         typing::SyncTypingEvent,
-        OriginalSyncMessageLikeEvent, SyncEphemeralRoomEvent, ToDeviceEvent,
+        OriginalSyncMessageLikeEvent, SyncEphemeralRoomEvent, SyncMessageLikeEvent,
+        ToDeviceEvent,
     },
     Client, Room,
 };
@@ -217,6 +219,26 @@ pub fn setup_sync_event_handlers(client: &Client, app_handle: &tauri::AppHandle)
                     if let Err(e) = app.emit(EVENT_UNREAD_COUNT, &unread_payload) {
                         error!("Failed to emit {}: {}", EVENT_UNREAD_COUNT, e);
                     }
+                }
+            }
+        },
+    );
+
+    // ── Sticker events ────────────────────────────────────────────────────────
+    client.add_event_handler(
+        |ev: SyncMessageLikeEvent<StickerEventContent>,
+         room: Room,
+         Ctx(app): Ctx<tauri::AppHandle>| async move {
+            if let SyncMessageLikeEvent::Original(original_ev) = ev {
+                let room_id = room.room_id().to_string();
+                let timeline_event =
+                    crate::matrix::timeline::convert_sync_sticker_event(original_ev);
+                let payload = SyncNewMessage {
+                    room_id,
+                    event: timeline_event,
+                };
+                if let Err(e) = app.emit(EVENT_NEW_MESSAGE, &payload) {
+                    error!("Failed to emit {}: {}", EVENT_NEW_MESSAGE, e);
                 }
             }
         },

@@ -1509,9 +1509,48 @@ export function openEmojiPicker(initialTab: "emoji" | "sticker" = "emoji"): void
       const sepIdx = sticker.id.lastIndexOf("::");
       const packId = sepIdx >= 0 ? sticker.id.slice(0, sepIdx) : sticker.id;
       const shortcode = sepIdx >= 0 ? sticker.id.slice(sepIdx + 2) : sticker.name;
+
+      // Optimistic update — show the sticker immediately
+      const { timeline } = getComponents();
+      const ownUserId = AppState.get("ownUserId");
+      const ownSenderName = AppState.get("ownDisplayName") ?? ownUserId ?? "me";
+      const ownAvatarMxc = ownUserId ? _memberAvatarMxc.get(ownUserId) : undefined;
+      const ownAvatarUrl = (ownAvatarMxc && _avatarDataUrl.get(ownAvatarMxc)) ?? undefined;
+      const optimisticId = `optimistic-sticker-${Date.now()}`;
+      const optimisticMsg: MessageData = {
+        id: optimisticId,
+        senderId: ownUserId ?? undefined,
+        senderName: ownSenderName,
+        senderAvatarUrl: ownAvatarUrl,
+        isOwn: true,
+        timestamp: new Date().toISOString(),
+        body: sticker.name,
+        type: "sticker",
+        mediaUrl: sticker.url,
+        mediaAlt: sticker.name,
+      };
+      timeline.appendMessage(optimisticMsg);
+      // Resolve the sticker image if it's an mxc:// URL
+      if (sticker.url.startsWith("mxc://")) {
+        const cached = _emojiImageCache.get(sticker.url);
+        if (cached) {
+          timeline.updateMessageMedia(optimisticId, cached);
+        } else {
+          getThumbnail(sticker.url, 256, 256)
+            .then((dl) => {
+              const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+              _emojiImageCache.set(sticker.url, dataUrl);
+              timeline.updateMessageMedia(optimisticId, dataUrl);
+            })
+            .catch(() => { /* non-critical */ });
+        }
+      }
+
       try {
-        await ipcSendSticker(roomId, shortcode, sticker.url, sticker.name, packId, sticker.packName ?? null);
-        showSuccess("Sticker sent");
+        const eventId = await ipcSendSticker(roomId, shortcode, sticker.url, sticker.name, packId, sticker.packName ?? null);
+        // Promote optimistic message and suppress the sync echo
+        timeline.confirmMessage(optimisticId, eventId);
+        _ownSentEventIds.add(eventId);
       } catch (err) {
         showError(`Failed to send sticker: ${err instanceof Error ? err.message : String(err)}`);
       }
