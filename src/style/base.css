@@ -2701,7 +2701,6 @@ a:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 120px;
   transition: color var(--transition-speed);
 }
 
