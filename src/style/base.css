@@ -1146,6 +1146,7 @@ body {
   width: 32px;
   height: 32px;
   border-radius: var(--icon-radius);
+  cursor: pointer;
   /* Stick to the viewport top while still inside the group's column.
      top: how far down before sticking kicks in.
      margin-bottom: releases the sticky that many px before the column bottom. */

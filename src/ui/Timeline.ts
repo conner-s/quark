@@ -763,7 +763,6 @@ function buildMessageGroup(msgs: MessageData[]): HTMLElement {
   const avatarCol = document.createElement("div");
   avatarCol.className = "message-group__avatar-col";
   const avatar = buildAvatarElement(first.senderName, first.senderAvatarUrl);
-  avatar.style.cursor = "pointer";
   avatar.title = "View profile";
   // Keep listener on the col so it still fires if the img is replaced by
   // the onerror fallback, but only fire when the click is on the avatar
