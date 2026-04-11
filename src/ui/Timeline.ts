@@ -765,8 +765,14 @@ function buildMessageGroup(msgs: MessageData[]): HTMLElement {
   const avatar = buildAvatarElement(first.senderName, first.senderAvatarUrl);
   avatar.style.cursor = "pointer";
   avatar.title = "View profile";
-  avatar.addEventListener("click", () => {
-    avatar.dispatchEvent(
+  // Keep listener on the col so it still fires if the img is replaced by
+  // the onerror fallback, but only fire when the click is on the avatar
+  // element itself (not on the blank column space below it).
+  avatarCol.addEventListener("click", (e) => {
+    const t = e.target as HTMLElement;
+    if (!t.classList.contains("message-group__avatar") &&
+        !t.classList.contains("message-group__avatar-fallback")) return;
+    avatarCol.dispatchEvent(
       new CustomEvent("quark:open-profile", { bubbles: true, detail: { userId: senderId } })
     );
   });

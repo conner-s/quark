@@ -4984,7 +4984,7 @@ a:hover {
 .context-menu {
   position: fixed;
   z-index: 10000;
-  background: var(--surface);
+  background: var(--bg);
   border: var(--border-width) solid var(--border-color);
   min-width: 180px;
   padding: 3px 0;
