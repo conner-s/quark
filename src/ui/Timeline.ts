@@ -870,6 +870,8 @@ export class Timeline {
   private _unreadCount = 0;
   /** Fired when an "(edited)" marker is clicked — passes (eventId, originalBody). */
   private _onShowRevisionHistoryCallback: ((eventId: string, originalBody: string) => void) | null = null;
+  /** Fired when the user right-clicks a message — passes (eventId, x, y). */
+  private _onContextMenuCallback: ((eventId: string, x: number, y: number) => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -963,6 +965,16 @@ export class Timeline {
         if (idx >= 0) this._setSelected(idx);
       }
     });
+
+    // Right-click context menu for messages
+    this._el.addEventListener("contextmenu", (e) => {
+      const target = e.target as HTMLElement;
+      const msgEl = target.closest<HTMLElement>("[data-message-id]");
+      if (msgEl?.dataset.messageId) {
+        e.preventDefault();
+        this._onContextMenuCallback?.(msgEl.dataset.messageId, e.clientX, e.clientY);
+      }
+    });
   }
 
   getElement(): HTMLElement {
@@ -972,6 +984,11 @@ export class Timeline {
   /** Register a callback fired when the user scrolls near the top (once per approach). */
   onScrollToTop(cb: () => void): void {
     this._onScrollTopCallback = cb;
+  }
+
+  /** Register a callback fired when the user right-clicks a message — passes (eventId, x, y). */
+  onContextMenu(cb: (eventId: string, x: number, y: number) => void): void {
+    this._onContextMenuCallback = cb;
   }
 
   /**

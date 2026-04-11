@@ -15,6 +15,7 @@ import {
   openRoomSettings,
   openSpaceSettings,
   openDebugViewer,
+  openDebugViewerForEvent,
   openPinnedMessages,
   openRoomDirectory,
   executeCommand,
@@ -95,7 +96,7 @@ function registerDefaultBindings(): void {
 // ── Action dispatcher ─────────────────────────────────────────────────────────
 
 function dispatchAction(action: string, components: AppComponents): void {
-  const { input, commandBar, timeline, imageLightbox, revisionHistoryDialog } = components;
+  const { input, commandBar, timeline, imageLightbox, revisionHistoryDialog, contextMenu } = components;
 
   switch (action) {
     case "mode-insert":
@@ -499,7 +500,7 @@ export function setupKeyboard(components: AppComponents): void {
           emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker,
           settingsDialog, roomInfoDialog, pinnedMessagesDialog, roomDirectoryDialog,
           roomSettingsDialog, spaceSettingsDialog, debugViewer, revisionHistoryDialog,
-          roomHeader, imageLightbox, quickNavPalette } = components;
+          roomHeader, imageLightbox, quickNavPalette, contextMenu } = components;
 
   registerDefaultBindings();
 
@@ -549,6 +550,42 @@ export function setupKeyboard(components: AppComponents): void {
   // Revision history — wire (edited) marker clicks
   timeline.onShowRevisionHistory((eventId, originalBody) => {
     revisionHistoryDialog.show(eventId, originalBody);
+  });
+
+  // Right-click context menu for messages
+  timeline.onContextMenu((eventId, x, y) => {
+    const events = AppState.get("currentTimeline");
+    const evt = events.find((ev) => ev.event_id === eventId);
+    contextMenu.show(x, y, [
+      {
+        label: "Reply",
+        hint: "r",
+        action: () => {
+          if (evt) {
+            startReply(eventId, evt.sender, evt.body.slice(0, 80));
+            input.focus();
+          }
+        },
+      },
+      {
+        label: "React",
+        hint: "e",
+        action: () => openQuickReactPicker(eventId),
+      },
+      { separator: true },
+      {
+        label: "Copy message text",
+        hint: "y",
+        action: () => {
+          const text = evt?.body ?? "";
+          void navigator.clipboard.writeText(text);
+        },
+      },
+      {
+        label: "View raw event",
+        action: () => void openDebugViewerForEvent(eventId),
+      },
+    ]);
   });
 
   // ── User keybindings ──────────────────────────────────────────────────────
@@ -735,7 +772,8 @@ export function setupKeyboard(components: AppComponents): void {
         settingsDialog.isVisible() || roomInfoDialog.isVisible() ||
         pinnedMessagesDialog.isVisible() || roomDirectoryDialog.isVisible() ||
         roomSettingsDialog.isVisible() || spaceSettingsDialog.isVisible() ||
-        debugViewer.isVisible() || revisionHistoryDialog.isVisible()) return;
+        debugViewer.isVisible() || revisionHistoryDialog.isVisible() ||
+        contextMenu.isVisible()) return;
 
     // Quick nav palette — Ctrl+K opens from any mode (except when already open)
     if (e.ctrlKey && e.key === "k" && !quickNavPalette.isVisible()) {

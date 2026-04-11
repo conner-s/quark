@@ -4978,3 +4978,53 @@ a:hover {
   flex-shrink: 0;
   background-color: var(--surface-subtle);
 }
+
+/* ── Context Menu ───────────────────────────────────────────────────────────── */
+
+.context-menu {
+  position: fixed;
+  z-index: 10000;
+  background: var(--surface);
+  border: var(--border-width) solid var(--border-color);
+  min-width: 180px;
+  padding: 3px 0;
+  outline: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.context-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 14px;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  gap: 24px;
+  color: var(--fg);
+  font-size: var(--font-size);
+}
+
+.context-menu__item--active,
+.context-menu__item:focus {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.context-menu__item-hint {
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  flex-shrink: 0;
+}
+
+.context-menu__item--active .context-menu__item-hint,
+.context-menu__item:focus .context-menu__item-hint {
+  color: var(--surface);
+  opacity: 0.7;
+}
+
+.context-menu__separator {
+  height: var(--border-width);
+  background: var(--border-color);
+  margin: 3px 0;
+}

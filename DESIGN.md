@@ -694,7 +694,7 @@ quark/
 - [x] Unread message separator — `── new messages ──` line inserted before first unread message on room enter; timeline scrolls to separator
 - [x] Skeleton page while messages are loading — phosphor-green shimmer skeleton rows shown immediately on room select; startup overlay with QUARK logo + progress bar covers the window during session restore and fades out when ready
 - [x] Ability to disable vim mode — `vim_mode` toggle in General config + Settings UI; when off, app stays in Insert mode permanently, mode indicator is hidden, Escape only closes overlays, Normal/Visual/Command modes are bypassed
-- [ ] Override context menu, include debug/view source for relevant items
+- [x] Override context menu, include debug/view source for relevant items — `ContextMenu` component intercepts right-click on messages; items: Reply, React, Copy message text, View raw event (opens DebugViewer)
 - [x] Click room icon to open room settings — clicking the room avatar in the header calls `openRoomSettings()`; DM rooms override to open the partner's profile instead
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`

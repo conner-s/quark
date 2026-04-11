@@ -30,6 +30,7 @@ import { RoomSettingsDialog } from "./RoomSettingsDialog.js";
 import { SpaceSettingsDialog } from "./SpaceSettingsDialog.js";
 import { DebugViewer } from "./DebugViewer.js";
 import { RevisionHistoryDialog } from "./RevisionHistoryDialog.js";
+import { ContextMenu } from "./ContextMenu.js";
 
 // ── AppComponents ─────────────────────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ export interface AppComponents {
   spaceSettingsDialog: SpaceSettingsDialog;
   debugViewer: DebugViewer;
   revisionHistoryDialog: RevisionHistoryDialog;
+  contextMenu: ContextMenu;
 
   // Status
   statusBar: StatusBar;
@@ -122,6 +124,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   const spaceSettingsDialog = new SpaceSettingsDialog();
   const debugViewer = new DebugViewer();
   const revisionHistoryDialog = new RevisionHistoryDialog();
+  const contextMenu = new ContextMenu();
 
   // ── Login screen ─────────────────────────────────────────────────────────
   container.appendChild(loginScreen.getElement());
@@ -240,6 +243,7 @@ export function mountApp(container: HTMLElement): AppComponents {
     spaceSettingsDialog,
     debugViewer,
     revisionHistoryDialog,
+    contextMenu,
     typingIndicator,
     mainLayout,
   };
