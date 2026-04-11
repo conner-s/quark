@@ -42,7 +42,8 @@ import {
 import { AppState } from "./state.js";
 import { loadQuarkrc } from "../ipc/config.js";
 import type { ParsedRc } from "../ipc/types.js";
-import { getAppConfig } from "../ipc/app_config.js";
+import { getAppConfig, setAppConfig } from "../ipc/app_config.js";
+import type { AppConfig } from "../ipc/app_config.js";
 import type { KeyContext } from "../vim/keybindings.js";
 import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
 import { showToast } from "../ui/NotificationToast.js";
@@ -474,7 +475,49 @@ const MAP_TYPE_TO_CONTEXT: Readonly<Record<string, KeyContext>> = {
   visual: "visual",
 };
 
-function applyRcDirectives(rc: ParsedRc): void {
+function applySetOptions(cfg: AppConfig, sets: Array<{ name: string; value: boolean | number | string }>): AppConfig {
+  const updated: AppConfig = {
+    general: { ...cfg.general },
+    sync: { ...cfg.sync },
+    media: { ...cfg.media },
+    gif: { ...cfg.gif },
+    emoji: { ...cfg.emoji },
+  };
+
+  for (const { name, value } of sets) {
+    switch (name) {
+      // general
+      case "theme":           if (typeof value === "string")  updated.general.theme = value; break;
+      case "notifications":   if (typeof value === "boolean") updated.general.notifications = value; break;
+      case "confirm_redact":  if (typeof value === "boolean") updated.general.confirm_redact = value; break;
+      case "icon_radius":     if (typeof value === "string")  updated.general.icon_radius = value; break;
+      case "vim_mode":        if (typeof value === "boolean") updated.general.vim_mode = value; break;
+      // sync
+      case "sliding_sync":    if (typeof value === "boolean") updated.sync.sliding_sync = value; break;
+      case "timeline_limit":  if (typeof value === "number")  updated.sync.timeline_limit = value; break;
+      // media
+      case "auto_load_images":  if (typeof value === "boolean") updated.media.auto_load_images = value; break;
+      case "max_image_width":   if (typeof value === "number")  updated.media.max_image_width = value; break;
+      case "max_image_height":  if (typeof value === "number")  updated.media.max_image_height = value; break;
+      case "sticker_max_size":  if (typeof value === "number")  updated.media.sticker_max_size = value; break;
+      case "cache_size_mb":     if (typeof value === "number")  updated.media.cache_size_mb = value; break;
+      // gif
+      case "gif_provider":      if (typeof value === "string")  updated.gif.provider = value as "tenor" | "giphy"; break;
+      case "gif_rating":        if (typeof value === "string")  updated.gif.rating = value as "g" | "pg" | "pg-13" | "r"; break;
+      case "gif_api_key":       if (typeof value === "string")  updated.gif.api_key = value; break;
+      case "gif_cache_results": if (typeof value === "boolean") updated.gif.cache_results = value; break;
+      // emoji
+      case "shortcode_autocomplete": if (typeof value === "boolean") updated.emoji.shortcode_autocomplete = value; break;
+      case "autocomplete_min_chars": if (typeof value === "number")  updated.emoji.autocomplete_min_chars = value; break;
+      default:
+        console.warn(`[quarkrc] unknown set option: "${name}"`);
+    }
+  }
+
+  return updated;
+}
+
+async function applyRcDirectives(rc: ParsedRc): Promise<void> {
   for (const directive of rc.directives) {
     if (directive.type === "map") {
       const context = MAP_TYPE_TO_CONTEXT[directive.map_type];
@@ -490,6 +533,19 @@ function applyRcDirectives(rc: ParsedRc): void {
   }
   if (rc.errors.length > 0) {
     console.warn("[quarkrc] parse errors:", rc.errors);
+  }
+
+  const setDirectives = rc.directives.filter(
+    (d): d is Extract<typeof d, { type: "set" }> => d.type === "set"
+  );
+  if (setDirectives.length === 0) return;
+
+  try {
+    const cfg = await getAppConfig();
+    const updated = applySetOptions(cfg, setDirectives);
+    await setAppConfig(updated);
+  } catch (err) {
+    console.warn("[quarkrc] failed to apply set directives:", err);
   }
 }
 
