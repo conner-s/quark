@@ -24,6 +24,7 @@ export class RoomHeader {
   private _memberCountEl: HTMLElement;
   private _encEl: HTMLElement;
   private _avatarClickHandler: (() => void) | null = null;
+  private _avatarTitle = "View profile";
   private _memberCountClickHandler: (() => void) | null = null;
   private _pinnedClickHandler: (() => void) | null = null;
   private _pinnedBtnEl: HTMLButtonElement;
@@ -147,8 +148,9 @@ export class RoomHeader {
    * Register a callback to invoke when the room avatar is clicked.
    * Pass null to remove the handler (e.g. when switching to a non-DM room).
    */
-  setAvatarClickHandler(handler: (() => void) | null): void {
+  setAvatarClickHandler(handler: (() => void) | null, title = "View profile"): void {
     this._avatarClickHandler = handler;
+    this._avatarTitle = title;
     this._updateAvatarCursor();
   }
 
@@ -198,7 +200,7 @@ export class RoomHeader {
   private _updateAvatarCursor(): void {
     if (this._avatarClickHandler) {
       this._avatarEl.style.cursor = "pointer";
-      this._avatarEl.title = "View profile";
+      this._avatarEl.title = this._avatarTitle;
     } else {
       this._avatarEl.style.cursor = "";
       this._avatarEl.title = "";

@@ -427,8 +427,8 @@ export async function selectRoom(roomId: string): Promise<void> {
     ? _roomAvatarDataUrl.get(roomInfo.room_id)
     : undefined;
 
-  // Clear any DM avatar click handler from the previous room before rendering new avatar
-  roomHeader.setAvatarClickHandler(null);
+  // Default: clicking the room avatar opens room settings (DM rooms override below)
+  roomHeader.setAvatarClickHandler(() => void openRoomSettings(), "Room settings (:roomsettings)");
   roomHeader.setRoom(
     roomName,
     roomInfo?.topic ?? undefined,

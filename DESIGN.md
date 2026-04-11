@@ -694,7 +694,8 @@ quark/
 - [x] Unread message separator — `── new messages ──` line inserted before first unread message on room enter; timeline scrolls to separator
 - [x] Skeleton page while messages are loading — phosphor-green shimmer skeleton rows shown immediately on room select; startup overlay with QUARK logo + progress bar covers the window during session restore and fades out when ready
 - [x] Ability to disable vim mode — `vim_mode` toggle in General config + Settings UI; when off, app stays in Insert mode permanently, mode indicator is hidden, Escape only closes overlays, Normal/Visual/Command modes are bypassed
-- [ ] Override context menu
+- [ ] Override context menu, include debug/view source for relevant items
+- [x] Click room icon to open room settings — clicking the room avatar in the header calls `openRoomSettings()`; DM rooms override to open the partner's profile instead
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
@@ -783,5 +784,5 @@ quark/
 - [x] Icon roundness doesn't apply to profile/message avatars — replaced hardcoded border-radius on member-list, room-header, message-group, and profile-dialog avatars with var(--icon-radius)
 - [x] Video messages show no thumbnail — `media_thumbnail_url` / `media_thumbnail_encryption_info` extracted from `VideoInfo.thumbnail_source` and passed through IPC; `buildVideoAffordance` loads thumbnail async and renders 160×90 preview with ▶ overlay
 - [x] No URL preview cards for messages containing links — `get_url_preview` Tauri command calls homeserver `/_matrix/media/v3/preview_url`; frontend extracts first URL from text messages and appends a styled preview card (title, description, image, site name) async with module-level cache
-- [ ] Only allow clicking on avatar to show profile, not the whole column
+- [x] Only allow clicking on avatar to show profile, not the whole column — `quark:open-profile` click listener moved from `avatarCol` div to the avatar element itself; cursor/title only on the avatar
 
