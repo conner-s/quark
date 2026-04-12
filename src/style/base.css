@@ -4022,12 +4022,18 @@ a:hover {
 }
 
 .settings-dialog__footer {
+  display: flex;
+  justify-content: space-between;
   padding: 4px 10px;
   border-top: var(--border-width) solid var(--border-color);
   color: var(--roomlist-muted);
   font-size: calc(var(--font-size) - 2px);
   flex-shrink: 0;
   background-color: var(--surface-dim);
+}
+
+.settings-dialog__footer-version {
+  opacity: 0.6;
 }
 
 /* ── Room Info dialog ─────────────────────────────────────────────────────── */

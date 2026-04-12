@@ -11,6 +11,7 @@ import { loadTheme } from "../app/actions.js";
 import { listCustomThemes } from "../ipc/config.js";
 import type { CustomThemeEntry } from "../ipc/config.js";
 import { AppState } from "../app/state.js";
+import packageJson from "../../package.json";
 
 type SettingsTab = "general" | "media" | "gif" | "emoji" | "notifications" | "themes";
 
@@ -99,8 +100,17 @@ export class SettingsDialog {
     // Footer
     const footer = document.createElement("div");
     footer.className = "settings-dialog__footer";
-    footer.textContent = "Tab switch section · Esc close";
     footer.setAttribute("aria-hidden", "true");
+
+    const footerHint = document.createElement("span");
+    footerHint.textContent = "Tab switch section · Esc close";
+    footer.appendChild(footerHint);
+
+    const footerVersion = document.createElement("span");
+    footerVersion.className = "settings-dialog__footer-version";
+    footerVersion.textContent = `v${packageJson.version}`;
+    footer.appendChild(footerVersion);
+
     this._panelEl.appendChild(footer);
 
     // Keyboard handler
