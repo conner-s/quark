@@ -36,6 +36,7 @@ const KNOWN_COMMANDS: string[] = [
   "roomsettings",
   "spacesettings",
   "debug",
+  "version",
 ];
 
 /**

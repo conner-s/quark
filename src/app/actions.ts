@@ -67,6 +67,7 @@ import type { ParsedCommand } from "../vim/commands.js";
 
 import { showToast, showError, showSuccess } from "../ui/NotificationToast.js";
 import { showMainLayout } from "../ui/App.js";
+import packageJson from "../../package.json";
 
 // UI component types for building display data
 import type { RoomEntry, RoomSection } from "../ui/RoomList.js";
@@ -2186,6 +2187,11 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
         // :debug — show room state
         void openDebugViewer();
       }
+      break;
+    }
+
+    case "version": {
+      showToast(`Quark v${packageJson.version}`, "info");
       break;
     }
 
