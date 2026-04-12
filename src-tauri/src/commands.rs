@@ -2,7 +2,6 @@ use crate::{
     config::{
         app_config::AppConfig,
         quarkrc::ParsedRc,
-        theme::Theme,
     },
     gif::GifResult,
     matrix::{
@@ -1244,19 +1243,22 @@ pub async fn set_app_config(
 
 // ─── Config Commands ──────────────────────────────────────────────────────────
 
+/// Load a theme file and return it as a JSON value.
+///
+/// The TOML is parsed leniently — only valid TOML syntax is required; missing
+/// theme fields are fine because the TypeScript `applyTheme` already handles
+/// partial data (all fields optional).  Strict per-field color validation
+/// (validate_theme) is NOT run here: bad values just fall back to CSS defaults
+/// on the frontend, which is better UX than blocking with an error.
 #[tauri::command]
-pub async fn load_theme(theme_path: String) -> Result<Theme, String> {
+pub async fn load_theme(theme_path: String) -> Result<serde_json::Value, String> {
     let path = Path::new(&theme_path);
-    let theme = crate::config::theme::load_theme_file(path)?;
-    let errors = crate::config::theme::validate_theme(&theme);
-    if !errors.is_empty() {
-        let messages: Vec<String> = errors
-            .iter()
-            .map(|e| format!("{}: {}", e.field, e.message))
-            .collect();
-        return Err(format!("Theme validation failed:\n{}", messages.join("\n")));
-    }
-    Ok(theme)
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read theme file '{}': {e}", path.display()))?;
+    let toml_val: toml::Value = toml::from_str(&content)
+        .map_err(|e| format!("Failed to parse theme TOML: {e}"))?;
+    serde_json::to_value(&toml_val)
+        .map_err(|e| format!("Failed to convert theme to JSON: {e}"))
 }
 
 /// A custom theme entry returned by `list_custom_themes`.

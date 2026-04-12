@@ -12,7 +12,10 @@ export interface CustomThemeEntry {
 }
 
 /**
- * Load and validate a theme from a file path on disk.
+ * Load a theme from a file path on disk.
+ * The Rust backend parses the TOML leniently — only valid TOML syntax is
+ * required; any subset of Theme fields is accepted. Missing fields simply
+ * fall back to the CSS defaults in vars.css.
  * Matches the Rust `load_theme` command.
  */
 export async function loadTheme(themePath: string): Promise<Theme> {
