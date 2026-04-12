@@ -146,9 +146,12 @@ pub fn run() {
         ])
         .setup(|app| {
             eprintln!("[quark] setup callback running...");
-            let _window = app.get_webview_window("main")
+            let window = app.get_webview_window("main")
                 .expect("no main window found");
             eprintln!("[quark] main window acquired");
+            if let Some(icon) = app.default_window_icon() {
+                let _ = window.set_icon(icon.clone());
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

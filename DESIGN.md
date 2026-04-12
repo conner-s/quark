@@ -698,6 +698,13 @@ quark/
 - [x] Ability to disable vim mode — `vim_mode` toggle in General config + Settings UI; when off, app stays in Insert mode permanently, mode indicator is hidden, Escape only closes overlays, Normal/Visual/Command modes are bypassed
 - [x] Override context menu, include debug/view source for relevant items — `ContextMenu` component intercepts right-click on messages; items: Reply, React, Copy message text, View raw event (opens DebugViewer)
 - [x] Click room icon to open room settings — clicking the room avatar in the header calls `openRoomSettings()`; DM rooms override to open the partner's profile instead
+- [ ] Home UI: Friends' icons and chat bubbles float around and show either the user's status or the most recent unread DM
+  - [ ] Hides room list and member list
+  - [ ] Show user's profile fixed to the left side with the ability to update status and profile picture
+  - [ ] Click through to DMs
+  - [ ] Replaces existing list of all unparented rooms
+- [ ] Single-user DMs show in mailbox psuedo space
+- [ ] Multi-user rooms without a space show in another psuedospace (similar to mail icon) but with a group icon instead
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.
