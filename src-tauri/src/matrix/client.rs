@@ -144,6 +144,15 @@ pub async fn get_own_profile(client: &Client) -> Result<OwnProfile, String> {
     })
 }
 
+/// Set the current user's display name.
+pub async fn set_display_name(client: &Client, name: String) -> Result<(), String> {
+    client
+        .account()
+        .set_display_name(Some(&name))
+        .await
+        .map_err(|e| format!("Failed to set display name: {e}"))
+}
+
 /// Maximum backoff duration on sync errors (2 minutes).
 const MAX_BACKOFF_SECS: u64 = 120;
 

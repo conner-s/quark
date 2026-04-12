@@ -8,6 +8,10 @@ export interface RoomEntry {
   unreadCount?: number;
   mentionCount?: number;
   muted?: boolean;
+  /** For DM rooms: the partner's user ID (used to show presence indicator). */
+  dmUserId?: string;
+  /** Presence of the DM partner: "online" | "unavailable" | "offline". */
+  presence?: "online" | "unavailable" | "offline";
 }
 
 export interface RoomSection {
@@ -167,6 +171,17 @@ export class RoomList {
       el.classList.add("room-list__item--unread");
     }
 
+    if (room.dmUserId) {
+      el.dataset.dmUserId = room.dmUserId;
+    }
+
+    if (room.dmUserId && room.presence) {
+      const dot = document.createElement("span");
+      dot.className = `room-list__presence room-list__presence--${room.presence}`;
+      dot.setAttribute("aria-label", room.presence);
+      el.appendChild(dot);
+    }
+
     const nameEl = document.createElement("span");
     nameEl.className = "room-list__item-name";
     nameEl.textContent = room.name;
@@ -200,6 +215,25 @@ export class RoomList {
     });
 
     return el;
+  }
+
+  /**
+   * Update the presence indicator dot for all DM room entries whose partner
+   * matches `userId`. Called live from presence sync events.
+   */
+  updatePresenceForUser(userId: string, presence: "online" | "unavailable" | "offline"): void {
+    const items = this._scrollEl.querySelectorAll<HTMLElement>(
+      `[data-dm-user-id="${CSS.escape(userId)}"]`
+    );
+    for (const item of items) {
+      let dot = item.querySelector<HTMLElement>(".room-list__presence");
+      if (!dot) {
+        dot = document.createElement("span");
+        item.prepend(dot);
+      }
+      dot.className = `room-list__presence room-list__presence--${presence}`;
+      dot.setAttribute("aria-label", presence);
+    }
   }
 
   private _selectId(id: string): void {

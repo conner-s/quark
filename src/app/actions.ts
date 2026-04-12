@@ -47,6 +47,12 @@ import {
   getStickerPacks,
   sendSticker as ipcSendSticker,
   getEventContext,
+  inviteUser as ipcInviteUser,
+  kickUser as ipcKickUser,
+  banUser as ipcBanUser,
+  unbanUser as ipcUnbanUser,
+  setDisplayName as ipcSetDisplayName,
+  setRoomTopic,
 } from "../ipc/index.js";
 
 import { applyTheme } from "../theme/loader.js";
@@ -112,6 +118,8 @@ const _avatarDataUrl = new Map<string, string>();
 const _roomAvatarDataUrl = new Map<string, string>();
 /** userId → known DM room ID, populated when a DM room is entered */
 const _dmRoomByUser = new Map<string, string>();
+/** roomId → DM partner userId, reverse of _dmRoomByUser */
+const _dmUserByRoom = new Map<string, string>();
 
 /**
  * Convert a downloaded media blob to a Blob URL.
@@ -169,12 +177,19 @@ const THUMBNAIL_SIZE = 64;
 
 /** Convert IPC RoomInfo → RoomList RoomEntry */
 function roomInfoToEntry(r: RoomInfo): RoomEntry {
+  const dmUserId = r.is_direct ? (_dmUserByRoom.get(r.room_id) ?? undefined) : undefined;
+  const rawPresence = dmUserId ? AppState.getUserPresence(dmUserId) : null;
+  const presence = (rawPresence === "online" || rawPresence === "unavailable")
+    ? rawPresence
+    : (dmUserId ? "offline" as const : undefined);
   return {
     id: r.room_id,
     name: r.name ?? r.room_id,
     unreadCount: r.unread_count,
     mentionCount: r.notification_count,
     muted: false,
+    dmUserId,
+    presence,
   };
 }
 
@@ -505,6 +520,7 @@ export async function selectRoom(roomId: string): Promise<void> {
         if (dmPartner) {
           const dmPartnerId = dmPartner.user_id;
           _dmRoomByUser.set(dmPartnerId, roomId);
+          _dmUserByRoom.set(roomId, dmPartnerId);
           roomHeader.setAvatarClickHandler(() => void openProfileForUser(dmPartnerId));
           if (dmPartner.avatar_url) {
             const mxc = dmPartner.avatar_url;
@@ -1714,6 +1730,7 @@ export async function openOrCreateDm(userId: string): Promise<void> {
       if (members.some((m) => m.user_id === userId) &&
           members.some((m) => m.user_id === ownUserId)) {
         _dmRoomByUser.set(userId, room.room_id);
+        _dmUserByRoom.set(room.room_id, userId);
         await selectRoom(room.room_id);
         return;
       }
@@ -1732,6 +1749,7 @@ export async function openOrCreateDm(userId: string): Promise<void> {
       enable_encryption: true,
     });
     _dmRoomByUser.set(userId, roomId);
+    _dmUserByRoom.set(roomId, userId);
     await refreshRooms();
     await selectRoom(roomId);
   } catch (err) {
@@ -2194,6 +2212,123 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
     case "cross-sign":
     case "setup-cross-signing": {
       await setupCrossSigning(parsed.args[0]);
+      break;
+    }
+
+    case "invite": {
+      const userId = parsed.args[0];
+      if (!userId) {
+        showError("Usage: :invite <user-id>");
+        return;
+      }
+      const roomId = AppState.get("currentRoomId");
+      if (!roomId) {
+        showError("No room selected");
+        return;
+      }
+      try {
+        await ipcInviteUser(roomId, userId);
+        showSuccess(`Invited ${userId}`);
+      } catch (err) {
+        showError(`Failed to invite: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      break;
+    }
+
+    case "kick": {
+      const userId = parsed.args[0];
+      if (!userId) {
+        showError("Usage: :kick <user-id> [reason]");
+        return;
+      }
+      const roomId = AppState.get("currentRoomId");
+      if (!roomId) {
+        showError("No room selected");
+        return;
+      }
+      const reason = parsed.args.slice(1).join(" ") || undefined;
+      try {
+        await ipcKickUser(roomId, userId, reason);
+        showSuccess(`Kicked ${userId}`);
+      } catch (err) {
+        showError(`Failed to kick: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      break;
+    }
+
+    case "ban": {
+      const userId = parsed.args[0];
+      if (!userId) {
+        showError("Usage: :ban <user-id> [reason]");
+        return;
+      }
+      const roomId = AppState.get("currentRoomId");
+      if (!roomId) {
+        showError("No room selected");
+        return;
+      }
+      const reason = parsed.args.slice(1).join(" ") || undefined;
+      try {
+        await ipcBanUser(roomId, userId, reason);
+        showSuccess(`Banned ${userId}`);
+      } catch (err) {
+        showError(`Failed to ban: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      break;
+    }
+
+    case "unban": {
+      const userId = parsed.args[0];
+      if (!userId) {
+        showError("Usage: :unban <user-id>");
+        return;
+      }
+      const roomId = AppState.get("currentRoomId");
+      if (!roomId) {
+        showError("No room selected");
+        return;
+      }
+      try {
+        await ipcUnbanUser(roomId, userId);
+        showSuccess(`Unbanned ${userId}`);
+      } catch (err) {
+        showError(`Failed to unban: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      break;
+    }
+
+    case "nick": {
+      const newName = parsed.args.join(" ");
+      if (!newName) {
+        showError("Usage: :nick <display-name>");
+        return;
+      }
+      try {
+        await ipcSetDisplayName(newName);
+        showSuccess(`Display name set to "${newName}"`);
+      } catch (err) {
+        showError(`Failed to set display name: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      break;
+    }
+
+    case "topic": {
+      const topic = parsed.args.join(" ");
+      if (!topic) {
+        showError("Usage: :topic <text>");
+        return;
+      }
+      const roomId = AppState.get("currentRoomId");
+      if (!roomId) {
+        showError("No room selected");
+        return;
+      }
+      try {
+        await setRoomTopic(roomId, topic);
+        showSuccess("Topic updated");
+      } catch (err) {
+        showError(`Failed to set topic: ${err instanceof Error ? err.message : String(err)}`);
+      }
       break;
     }
 

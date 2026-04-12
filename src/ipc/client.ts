@@ -56,3 +56,11 @@ export async function getOwnProfile(): Promise<OwnProfile> {
 export async function setPresenceStatus(statusMsg: string): Promise<void> {
   return invoke<void>("set_presence_status", { statusMsg });
 }
+
+/**
+ * Set the current user's display name.
+ * Matches the Rust `set_display_name` command.
+ */
+export async function setDisplayName(name: string): Promise<void> {
+  return invoke<void>("set_display_name", { name });
+}

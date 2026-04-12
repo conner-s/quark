@@ -293,6 +293,27 @@ body {
   flex-shrink: 0;
 }
 
+.room-list__presence {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-right: 5px;
+}
+
+.room-list__presence--online {
+  background-color: var(--presence-online, #4caf50);
+  box-shadow: 0 0 4px var(--presence-online, #4caf50);
+}
+
+.room-list__presence--unavailable {
+  background-color: var(--presence-unavailable, #ff9800);
+}
+
+.room-list__presence--offline {
+  background-color: var(--presence-offline, #555);
+}
+
 /* ── Thread view sidebar (column 4, toggled via .quark-layout--thread-open) ── */
 
 .thread-view {

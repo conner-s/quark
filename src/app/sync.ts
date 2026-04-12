@@ -258,6 +258,7 @@ export async function startSync(components: AppComponents): Promise<() => void> 
           ? payload.presence
           : "offline" as const;
         components.memberList.updateMemberPresence(payload.user_id, validPresence);
+        components.roomList.updatePresenceForUser(payload.user_id, validPresence);
       }
     }
   );

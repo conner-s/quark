@@ -115,7 +115,13 @@ pub fn run() {
             commands::get_user_spaces,
             // Profile
             commands::get_own_profile,
+            commands::set_display_name,
             commands::set_presence_status,
+            // Member management
+            commands::invite_user,
+            commands::kick_user,
+            commands::ban_user,
+            commands::unban_user,
             // Threads
             commands::get_thread_roots,
             commands::get_thread_timeline,

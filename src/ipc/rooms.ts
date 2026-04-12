@@ -71,3 +71,35 @@ export async function searchRoomDirectory(filter?: string, limit?: number): Prom
     limit: limit ?? null,
   });
 }
+
+/**
+ * Invite a user to the given room.
+ * Matches the Rust `invite_user` command.
+ */
+export async function inviteUser(roomId: string, userId: string): Promise<void> {
+  return invoke<void>("invite_user", { roomId, userId });
+}
+
+/**
+ * Kick a user from the given room with an optional reason.
+ * Matches the Rust `kick_user` command.
+ */
+export async function kickUser(roomId: string, userId: string, reason?: string): Promise<void> {
+  return invoke<void>("kick_user", { roomId, userId, reason: reason ?? null });
+}
+
+/**
+ * Ban a user from the given room with an optional reason.
+ * Matches the Rust `ban_user` command.
+ */
+export async function banUser(roomId: string, userId: string, reason?: string): Promise<void> {
+  return invoke<void>("ban_user", { roomId, userId, reason: reason ?? null });
+}
+
+/**
+ * Unban a user from the given room.
+ * Matches the Rust `unban_user` command.
+ */
+export async function unbanUser(roomId: string, userId: string): Promise<void> {
+  return invoke<void>("unban_user", { roomId, userId });
+}

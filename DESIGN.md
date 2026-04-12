@@ -610,7 +610,7 @@ quark/
 
 ### In Progress / Partially Implemented
 - [ ] **Sliding Sync (MSC4186)** — backend uses matrix-sdk default sync; Sliding Sync not explicitly configured
-- [ ] **Presence display** — `quark:presence` events are handled in `sync.ts` but no dedicated presence UI in the room list or member list
+- [x] **Presence display** — DM room list entries show a colored presence dot (online/unavailable/offline) populated from `AppState.getUserPresence()`; dots update live via `roomList.updatePresenceForUser()` called from the presence sync handler
 - [x] **GIF upload-to-homeserver** — `send_gif` command downloads GIF from external URL, uploads to homeserver, sends as `m.image`
 - [x] **Custom emoji in reply previews** — `ReplyPreview.ts` exists; verify `:shortcode:` resolves to images inline
 
@@ -711,7 +711,7 @@ quark/
 #### Hardening
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
 - [ ] Performance profiling — large rooms (1000+ messages), many emoji packs
-- [ ] Command audit - make sure all commands are fully implemented
+- [x] Command audit — `:invite`, `:kick`, `:ban`, `:unban`, `:nick`, `:topic` now implemented; all 18 KNOWN_COMMANDS have working handlers (`:upload` still shows "not yet implemented" toast)
 - [x] Use blobs rather than data URLs — Timeline now uses `URL.createObjectURL()` for media thumbnails and URL-preview images; blob URLs are revoked before each re-render to avoid memory leaks.
 - [ ] Unload messages far out of view in timeline when adding new messages to prevent overloading the timeline
 

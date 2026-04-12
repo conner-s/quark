@@ -1014,6 +1014,57 @@ pub async fn get_own_profile(
 }
 
 #[tauri::command]
+pub async fn set_display_name(
+    state: State<'_, MatrixState>,
+    name: String,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::client::set_display_name(&client, name).await
+}
+
+#[tauri::command]
+pub async fn invite_user(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    user_id: String,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::invite_user(&client, &room_id, &user_id).await
+}
+
+#[tauri::command]
+pub async fn kick_user(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    user_id: String,
+    reason: Option<String>,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::kick_user(&client, &room_id, &user_id, reason.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn ban_user(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    user_id: String,
+    reason: Option<String>,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::ban_user(&client, &room_id, &user_id, reason.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn unban_user(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    user_id: String,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::unban_user(&client, &room_id, &user_id).await
+}
+
+#[tauri::command]
 pub async fn set_presence_status(
     state: State<'_, MatrixState>,
     status_msg: String,

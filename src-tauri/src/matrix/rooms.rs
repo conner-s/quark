@@ -122,6 +122,70 @@ pub async fn leave_room(client: &Client, room_id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Invite a user to a room.
+pub async fn invite_user(client: &Client, room_id: &str, user_id: &str) -> Result<(), String> {
+    use matrix_sdk::ruma::UserId;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let user_id = UserId::parse(user_id).map_err(|e| format!("Invalid user ID: {e}"))?;
+
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    room.invite_user_by_id(&user_id)
+        .await
+        .map_err(|e| format!("Failed to invite user: {e}"))
+}
+
+/// Kick a user from a room with an optional reason.
+pub async fn kick_user(client: &Client, room_id: &str, user_id: &str, reason: Option<&str>) -> Result<(), String> {
+    use matrix_sdk::ruma::UserId;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let user_id = UserId::parse(user_id).map_err(|e| format!("Invalid user ID: {e}"))?;
+
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    room.kick_user(&user_id, reason)
+        .await
+        .map_err(|e| format!("Failed to kick user: {e}"))
+}
+
+/// Ban a user from a room with an optional reason.
+pub async fn ban_user(client: &Client, room_id: &str, user_id: &str, reason: Option<&str>) -> Result<(), String> {
+    use matrix_sdk::ruma::UserId;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let user_id = UserId::parse(user_id).map_err(|e| format!("Invalid user ID: {e}"))?;
+
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    room.ban_user(&user_id, reason)
+        .await
+        .map_err(|e| format!("Failed to ban user: {e}"))
+}
+
+/// Unban a user from a room.
+pub async fn unban_user(client: &Client, room_id: &str, user_id: &str) -> Result<(), String> {
+    use matrix_sdk::ruma::UserId;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let user_id = UserId::parse(user_id).map_err(|e| format!("Invalid user ID: {e}"))?;
+
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    room.unban_user(&user_id, None)
+        .await
+        .map_err(|e| format!("Failed to unban user: {e}"))
+}
+
 /// Serializable room member for IPC.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoomMemberInfo {

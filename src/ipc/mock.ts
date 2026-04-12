@@ -201,6 +201,11 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     case "edit_message":
     case "redact_message":
     case "start_sync":
+    case "invite_user":
+    case "kick_user":
+    case "ban_user":
+    case "unban_user":
+    case "set_display_name":
       return null;
     case "get_user_spaces":
       return [
