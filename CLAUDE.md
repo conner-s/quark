@@ -13,6 +13,17 @@ adding a panel to the UI and modifying the input manager. You notice that the in
 switchyard for each navigation key. This worked fine for one or two panels but will grow cumbersome to
 maintain as complexity grows. You should propose to add a layer of abstraction to avoid repeated switchyards.
 
+## Versioning
+
+Bump the version in all three files together whenever shipping a feature or fix:
+- `package.json` — `version` field
+- `src-tauri/Cargo.toml` — `version` field (first occurrence, the package version)
+- `src-tauri/tauri.conf.json` — `version` field
+
+Rules:
+- **Feature** (new user-visible behaviour) → bump **minor** version (e.g. `0.1.0` → `0.2.0`)
+- **Bug fix** (corrects existing behaviour without adding features) → bump **patch** version (e.g. `0.1.0` → `0.1.1`)
+
 ## Commands
 
 ```bash
