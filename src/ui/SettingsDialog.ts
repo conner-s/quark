@@ -468,8 +468,8 @@ export class SettingsDialog {
     section.appendChild(this._makeSelectRow(
       "Provider",
       draft.gif.provider,
-      [["tenor", "Tenor"], ["giphy", "Giphy"]],
-      (v) => { draft = { ...draft, gif: { ...draft.gif, provider: v as "tenor" | "giphy" } }; },
+      [["tenor", "Tenor"], ["giphy", "Giphy"], ["klipy", "Klipy"]],
+      (v) => { draft = { ...draft, gif: { ...draft.gif, provider: v as "tenor" | "giphy" | "klipy" } }; },
     ));
 
     section.appendChild(this._makeTextRow(
