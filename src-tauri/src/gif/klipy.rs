@@ -138,11 +138,9 @@ impl GifProvider for KlipyClient {
                     })
                     .unwrap_or((0, 0));
 
-                let preview_url = gif
-                    .file
-                    .xs
-                    .map(|xs| xs.jpg.url)
-                    .unwrap_or_else(|| full_url.clone());
+                // Klipy's `xs` format is a static JPEG thumbnail — not animated.
+                // Use the full GIF URL for preview so the grid shows live animation.
+                let preview_url = full_url.clone();
 
                 let id = match &gif.id {
                     serde_json::Value::String(s) => s.clone(),
