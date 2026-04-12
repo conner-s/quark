@@ -8,6 +8,8 @@ import type { CacheStats } from "../ipc/media.js";
 import { getAppConfig, setAppConfig } from "../ipc/app_config.js";
 import type { AppConfig } from "../ipc/app_config.js";
 import { loadTheme } from "../app/actions.js";
+import { listCustomThemes } from "../ipc/config.js";
+import type { CustomThemeEntry } from "../ipc/config.js";
 import { AppState } from "../app/state.js";
 
 type SettingsTab = "general" | "media" | "gif" | "emoji" | "notifications" | "themes";
@@ -617,50 +619,82 @@ export class SettingsDialog {
   // ── Themes tab ────────────────────────────────────────────────────────────────
 
   private _buildThemesTab(): void {
-    const section = document.createElement("div");
-    section.className = "settings-dialog__section";
-    section.appendChild(this._makeSectionTitle("Built-in themes — click to apply"));
+    const builtinSection = document.createElement("div");
+    builtinSection.className = "settings-dialog__section";
+    builtinSection.appendChild(this._makeSectionTitle("Built-in themes — click to apply"));
 
-    for (const name of BUILTIN_THEMES) {
+    const addThemeRow = (container: HTMLElement, label: string, id: string) => {
       const row = document.createElement("div");
       row.className = "settings-dialog__row settings-dialog__row--theme";
 
-      const nameEl = document.createElement("button");
-      nameEl.type = "button";
-      nameEl.className = "settings-dialog__theme-btn";
-      nameEl.textContent = name;
-      nameEl.addEventListener("click", () => {
-        void loadTheme(name);
-        _currentTheme = name;
-        for (const el of section.querySelectorAll(".settings-dialog__current")) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "settings-dialog__theme-btn";
+      btn.textContent = label;
+      btn.addEventListener("click", () => {
+        void loadTheme(id);
+        _currentTheme = id;
+        for (const el of this._contentEl.querySelectorAll(".settings-dialog__current")) {
           el.remove();
         }
         const cur = document.createElement("span");
         cur.className = "settings-dialog__current";
         cur.textContent = "(current)";
         row.appendChild(cur);
-        // Persist the selected theme to config.toml so it survives relaunch.
         void getAppConfig().then((cfg) => {
-          const updated = { ...cfg, general: { ...cfg.general, theme: name } };
+          const updated = { ...cfg, general: { ...cfg.general, theme: id } };
           return setAppConfig(updated);
         }).catch((err) => {
           console.error("Failed to save theme to config:", err);
         });
       });
 
-      row.appendChild(nameEl);
+      row.appendChild(btn);
 
-      if (name === _currentTheme) {
+      if (id === _currentTheme) {
         const cur = document.createElement("span");
         cur.className = "settings-dialog__current";
         cur.textContent = "(current)";
         row.appendChild(cur);
       }
 
-      section.appendChild(row);
+      container.appendChild(row);
+    };
+
+    for (const name of BUILTIN_THEMES) {
+      addThemeRow(builtinSection, name, name);
     }
 
-    this._contentEl.appendChild(section);
+    this._contentEl.appendChild(builtinSection);
+
+    // Custom themes from ~/.config/quark/themes/ — loaded asynchronously.
+    const customSection = document.createElement("div");
+    customSection.className = "settings-dialog__section";
+    const customTitle = this._makeSectionTitle("Custom themes (~/.config/quark/themes/)");
+    customSection.appendChild(customTitle);
+
+    const loadingEl = document.createElement("div");
+    loadingEl.className = "settings-dialog__hint";
+    loadingEl.textContent = "Scanning…";
+    customSection.appendChild(loadingEl);
+
+    this._contentEl.appendChild(customSection);
+
+    void listCustomThemes().then((entries: CustomThemeEntry[]) => {
+      loadingEl.remove();
+      if (entries.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "settings-dialog__hint";
+        empty.textContent = "No custom themes found. Place .toml files in ~/.config/quark/themes/.";
+        customSection.appendChild(empty);
+        return;
+      }
+      for (const entry of entries) {
+        addThemeRow(customSection, entry.name, entry.path);
+      }
+    }).catch(() => {
+      loadingEl.textContent = "Failed to load custom themes.";
+    });
   }
 
   // ── Keyboard handler ──────────────────────────────────────────────────────────

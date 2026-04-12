@@ -228,6 +228,9 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
         name: (args?.name as string) ?? "mock",
         colors: {},
       };
+    case "list_custom_themes":
+      // No custom themes in mock/dev mode
+      return [];
     case "get_cache_stats":
       return { total_size_bytes: 15728640, entry_count: 42, max_size_bytes: 209715200, usage_percent: 7.5 } as CacheStats;
     case "get_emoji_packs":

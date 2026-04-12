@@ -6,12 +6,25 @@ import type { ParsedRc } from "./types.js";
 
 export type { ParsedRc };
 
+export interface CustomThemeEntry {
+  name: string;
+  path: string;
+}
+
 /**
  * Load and validate a theme from a file path on disk.
  * Matches the Rust `load_theme` command.
  */
 export async function loadTheme(themePath: string): Promise<Theme> {
   return invoke<Theme>("load_theme", { themePath });
+}
+
+/**
+ * Scan ~/.config/quark/themes/ for *.toml files and return name/path pairs.
+ * Matches the Rust `list_custom_themes` command.
+ */
+export async function listCustomThemes(): Promise<CustomThemeEntry[]> {
+  return invoke<CustomThemeEntry[]>("list_custom_themes");
 }
 
 /**

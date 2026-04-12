@@ -113,6 +113,7 @@ export {
 } from "./room_settings.js";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-export { loadTheme, parseQuarkrc } from "./config.js";
+export { loadTheme, listCustomThemes, parseQuarkrc } from "./config.js";
+export type { CustomThemeEntry } from "./config.js";
 export { getAppConfig, setAppConfig, DEFAULT_APP_CONFIG } from "./app_config.js";
 export type { AppConfig, GeneralConfig, SyncConfig, MediaConfig, GifConfig, GifRating, EmojiConfig } from "./app_config.js";

@@ -134,6 +134,7 @@ pub fn run() {
             commands::set_app_config,
             // Config
             commands::load_theme,
+            commands::list_custom_themes,
             commands::parse_quarkrc,
             commands::load_quarkrc,
             // Notifications

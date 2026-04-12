@@ -21,6 +21,7 @@ use crate::{
     CacheState,
 };
 use matrix_sdk::Client;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
@@ -1256,6 +1257,49 @@ pub async fn load_theme(theme_path: String) -> Result<Theme, String> {
         return Err(format!("Theme validation failed:\n{}", messages.join("\n")));
     }
     Ok(theme)
+}
+
+/// A custom theme entry returned by `list_custom_themes`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomThemeEntry {
+    /// Display name from the [meta] section of the TOML file.
+    pub name: String,
+    /// Absolute path to the .toml file on disk.
+    pub path: String,
+}
+
+/// Scan `~/.config/quark/themes/` for *.toml files and return their names and
+/// paths. Files that fail to parse are silently skipped so one bad file can't
+/// break the whole list.
+#[tauri::command]
+pub async fn list_custom_themes() -> Result<Vec<CustomThemeEntry>, String> {
+    let dirs = directories::ProjectDirs::from("", "", "quark")
+        .ok_or_else(|| "Could not determine config directory".to_string())?;
+    let themes_dir = dirs.config_dir().join("themes");
+
+    if !themes_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut entries = Vec::new();
+    let read = std::fs::read_dir(&themes_dir)
+        .map_err(|e| format!("Failed to read themes directory: {e}"))?;
+
+    for entry in read.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+            continue;
+        }
+        if let Ok(theme) = crate::config::theme::load_theme_file(&path) {
+            entries.push(CustomThemeEntry {
+                name: theme.meta.name,
+                path: path.to_string_lossy().into_owned(),
+            });
+        }
+    }
+
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(entries)
 }
 
 #[tauri::command]
