@@ -1268,9 +1268,21 @@ pub struct CustomThemeEntry {
     pub path: String,
 }
 
+/// Lenient TOML shape used only for extracting a display name from a theme
+/// file without requiring every field to be present.
+#[derive(Deserialize)]
+struct PartialThemeMeta {
+    name: Option<String>,
+}
+#[derive(Deserialize)]
+struct PartialTheme {
+    meta: Option<PartialThemeMeta>,
+}
+
 /// Scan `~/.config/quark/themes/` for *.toml files and return their names and
-/// paths. Files that fail to parse are silently skipped so one bad file can't
-/// break the whole list.
+/// paths.  Every .toml file is included regardless of whether it is a complete
+/// valid theme — display name falls back to the filename stem when the [meta]
+/// table is absent.  Full validation happens later when the user clicks Apply.
 #[tauri::command]
 pub async fn list_custom_themes() -> Result<Vec<CustomThemeEntry>, String> {
     let dirs = directories::ProjectDirs::from("", "", "quark")
@@ -1290,12 +1302,25 @@ pub async fn list_custom_themes() -> Result<Vec<CustomThemeEntry>, String> {
         if path.extension().and_then(|e| e.to_str()) != Some("toml") {
             continue;
         }
-        if let Ok(theme) = crate::config::theme::load_theme_file(&path) {
-            entries.push(CustomThemeEntry {
-                name: theme.meta.name,
-                path: path.to_string_lossy().into_owned(),
+
+        // Try a lenient parse just to get the display name; fall back to the
+        // filename stem so even incomplete themes appear in the list.
+        let display_name = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|content| toml::from_str::<PartialTheme>(&content).ok())
+            .and_then(|t| t.meta)
+            .and_then(|m| m.name)
+            .unwrap_or_else(|| {
+                path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("unknown")
+                    .to_string()
             });
-        }
+
+        entries.push(CustomThemeEntry {
+            name: display_name,
+            path: path.to_string_lossy().into_owned(),
+        });
     }
 
     entries.sort_by(|a, b| a.name.cmp(&b.name));
