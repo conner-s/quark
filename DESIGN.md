@@ -615,6 +615,35 @@ quark/
 - [x] **GIF upload-to-homeserver** — `send_gif` command downloads GIF from external URL, uploads to homeserver, sends as `m.image`
 - [x] **Custom emoji in reply previews** — `ReplyPreview.ts` exists; verify `:shortcode:` resolves to images inline
 
+### Production
+
+- [ ] **Website** — Static marketing/download page hosted on GitHub Pages (requires public repo).
+  - Terminal-aesthetic design matching Quark's look (monospace, dark, green accents).
+  - Sections: hero/tagline, feature highlights, screenshots, platform download links (pointing to GitHub Releases assets), and a brief install guide.
+  - Source lives in a `docs/` folder on `main` (or a dedicated `gh-pages` branch); GitHub Pages serves it automatically.
+  - No framework required — vanilla HTML/CSS. Keep it small and fast.
+
+- [ ] **Auto-update** — `tauri-plugin-updater` against GitHub Releases (requires public repo for free Actions minutes).
+  - On each tagged release, the GitHub Actions release workflow produces a `latest.json` update manifest alongside the platform installers and attaches all as release assets.
+  - `tauri-plugin-updater` is configured in `tauri.conf.json` to fetch `latest.json` from the GitHub Releases CDN URL on launch.
+  - The frontend shows a dismissible in-app dialog when a new version is detected ("Version X.Y.Z is available — update now / later").
+  - macOS builds must be code-signed for Gatekeeper to allow the update; Linux and Windows updates work without signing but signing is recommended.
+  - Add `:checkupdate` command to trigger a manual check.
+
+- [ ] **Windows and macOS builds** — GitHub Actions matrix CI (free on public repo).
+  - Single workflow file (`.github/workflows/release.yml`) triggered on `v*` tags.
+  - Three jobs in a matrix: `ubuntu-latest` (`.deb` + `.AppImage`), `macos-latest` (`.dmg`, universal binary targeting both Apple Silicon and Intel via `--target universal-apple-darwin`), `windows-latest` (`.msi` + NSIS `.exe`).
+  - Each job runs `pnpm tauri build` with the appropriate targets, then uploads artifacts to the GitHub Release via `softprops/action-gh-release`.
+  - Secrets needed: `TAURI_SIGNING_PRIVATE_KEY` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for the updater signature; macOS additionally needs `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` for notarization.
+  - Until Apple credentials are available, macOS builds can be produced unsigned (users must right-click → Open to bypass Gatekeeper).
+
+- [ ] **Mobile (Tauri v2)** — iOS and Android targets using the existing Tauri/Rust codebase.
+  - Phase 1: get a working build on Android first (easier toolchain setup than iOS) as a proof of concept.
+  - UI adaptations needed: responsive layout that collapses the space strip + room list into a bottom tab bar or slide-in drawer; virtual keyboard handling (ensure compose box stays above keyboard); replace vim-mode defaults with touch-friendly gesture equivalents (swipe to switch rooms, tap to select, long-press for context menu); vim mode remains available as a power-user toggle.
+  - The Rust backend requires no changes — matrix-sdk supports mobile targets.
+  - iOS requires a paid Apple Developer account ($99/yr) for device builds and App Store distribution; Android requires a Google Play account ($25 one-time) for Play Store distribution.
+  - Track as a separate milestone after the desktop release is stable.
+
 ### Not Yet Implemented
 
 #### Authentication -- low priority
