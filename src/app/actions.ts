@@ -654,9 +654,13 @@ export async function jumpToMessage(eventId: string): Promise<void> {
     const threadRootCounts = _buildThreadRootCounts(ctx.events);
     const mainEvents = _applyEdits(ctx.events).filter((e) => !e.thread_root);
     const messages = mainEvents.map((e) => timelineEventToMessage(e, ctx.events, threadRootCounts));
-    timeline.setMessages(messages);
+    // skipAutoScroll prevents setMessages from scheduling _scrollToBottom calls
+    // that would override the jumpToMessage scroll that follows.
+    timeline.setMessages(messages, { skipAutoScroll: true });
     timeline.setContextView(_inContextView);
-    timeline.scrollToMessage(eventId);
+    requestAnimationFrame(() => {
+      timeline.scrollToMessage(eventId);
+    });
 
     _downloadMessageImages(ctx.events, timeline);
     _downloadInlineEmoji(timeline);

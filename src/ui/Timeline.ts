@@ -1239,7 +1239,7 @@ export class Timeline {
    * re-renders (e.g. member-data refresh) so that a user who has already
    * scrolled up to read history keeps their position.
    */
-  setMessages(msgs: MessageData[], opts?: { preserveScroll?: boolean }): void {
+  setMessages(msgs: MessageData[], opts?: { preserveScroll?: boolean; skipAutoScroll?: boolean }): void {
     // Cancel any in-progress scroll animation to prevent stuck transforms
     if (this._scrollAnimCleanupTimer !== null) {
       clearTimeout(this._scrollAnimCleanupTimer);
@@ -1260,6 +1260,7 @@ export class Timeline {
     this._selectedIndex = -1;
 
     const preserveScroll = opts?.preserveScroll ?? false;
+    const skipAutoScroll = opts?.skipAutoScroll ?? false;
     // Capture scroll state before re-render so we can restore it
     const wasScrolledUp = this._scrolledUp;
     const savedScrollTop = this._el.scrollTop;
@@ -1287,7 +1288,7 @@ export class Timeline {
         this._scrolledUp = true;
         this._updateJumpToLatestVisibility();
       });
-    } else {
+    } else if (!skipAutoScroll) {
       this._scrolledUp = false;
       this._scrollTopFired = false;
       // Scroll immediately (for text content), then again after images may have loaded
@@ -1302,6 +1303,10 @@ export class Timeline {
           this._scrollToBottom();
         }, 150);
       });
+    } else {
+      // skipAutoScroll: caller will handle scrolling (e.g. jumpToMessage)
+      this._scrolledUp = true;
+      this._scrollTopFired = false;
     }
     this._updateJumpToLatestVisibility();
     this._fadeOutSkeletonAfterImages();
@@ -2035,7 +2040,16 @@ export class Timeline {
   scrollToMessage(eventId: string): boolean {
     const el = this.getMessageElementById(eventId);
     if (!el) return false;
-    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.scrollIntoView({ block: "center" });
+    // Synchronously update _scrolledUp from the new scrollTop. WebKit fires the
+    // scroll event asynchronously, so if we leave _scrolledUp stale, image load
+    // handlers or appendMessage will see the old value and call _scrollToBottom(),
+    // overriding the position we just set.
+    this._scrolledUp = this._el.scrollHeight - this._el.scrollTop - this._el.clientHeight > 40;
+    this._updateJumpToLatestVisibility();
+    // Select the message so keyboard navigation (j/k, r, e, etc.) targets it.
+    const idx = this._messages.findIndex((m) => m.id === eventId);
+    if (idx >= 0) this._setSelected(idx);
     el.classList.remove("message--highlight"); // reset if re-triggered
     // Force reflow so re-adding the class actually restarts the animation
     void el.offsetWidth;
