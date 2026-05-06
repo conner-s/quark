@@ -1274,10 +1274,10 @@ export class Timeline {
 
   /** Append newer messages below the current list. Used by forward pagination
    *  when the timeline is showing a context window in the middle of history.
-   *  Preserves scroll position. */
+   *  Leaves scrollTop alone so the new content appears below the user's
+   *  viewport — they keep scrolling down to reach it. */
   appendMessages(msgs: MessageData[]): void {
     if (msgs.length === 0) return;
-    const wasAtBottom = !this._scrolledUp;
     this._messages = [...this._messages, ...msgs];
     this._renderEnd = this._messages.length;
 
@@ -1296,11 +1296,13 @@ export class Timeline {
     }
     this._listEl.appendChild(fragment);
 
+    // Don't touch scrollTop — the new content sits below the viewport so the
+    // user's reading position stays stable. They'll scroll into the new
+    // content naturally. Re-arm the bottom-edge trigger so the next approach
+    // can fire (the previous fire reached this code path; the browser may
+    // not emit a fresh scroll event from the height change alone).
     this._scrollBottomFired = false;
-    // Bound DOM size by dropping the oldest rendered messages if needed.
     this._cullTopIfNeeded();
-    // If the user was sitting at the bottom before the load, keep them there.
-    if (wasAtBottom) this._scrollToBottom();
   }
 
   /** Replace the entire message list.
