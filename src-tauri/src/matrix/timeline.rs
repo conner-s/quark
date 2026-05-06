@@ -62,6 +62,15 @@ pub struct TimelinePage {
     pub prev_batch: Option<String>,
 }
 
+/// A page of newer events fetched via forward pagination.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimelineForwardPage {
+    pub events: Vec<TimelineEvent>,
+    /// Token to pass as `after` to fetch the next (newer) page.
+    /// `None` means the live tail of the timeline has been reached.
+    pub next_batch: Option<String>,
+}
+
 /// Events surrounding a specific event, returned by `get_event_context`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventContextPage {
@@ -164,6 +173,94 @@ pub async fn get_timeline(
     // Reverse so oldest messages come first
     events.reverse();
     Ok(TimelinePage { events, prev_batch })
+}
+
+/// Fetch newer events from a forward-pagination token.
+/// `after` should be a `next_batch` token from a prior `get_event_context` or
+/// `paginate_forward` response. Returns events strictly newer than the token.
+/// When the returned `next_batch` is `None`, the live tail has been reached.
+pub async fn paginate_forward(
+    client: &Client,
+    room_id: &str,
+    after: String,
+    limit: usize,
+) -> Result<TimelineForwardPage, String> {
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {} not found", room_id))?;
+
+    let mut opts = MessagesOptions::forward();
+    opts.limit = UInt::try_from(limit as u64).unwrap_or(UInt::from(50u32));
+    opts.from = Some(after);
+
+    let messages = room
+        .messages(opts)
+        .await
+        .map_err(|e| format!("Failed to paginate forward: {e}"))?;
+    let next_batch = messages.end.clone();
+
+    let own_user_id = client.user_id().map(|u| u.to_string()).unwrap_or_default();
+
+    let mut events: Vec<TimelineEvent> = Vec::new();
+    let mut reaction_raw: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
+
+    for timeline_event in messages.chunk {
+        if let Ok(deserialized) = timeline_event.raw().deserialize() {
+            match deserialized {
+                AnySyncTimelineEvent::MessageLike(
+                    AnySyncMessageLikeEvent::RoomMessage(SyncMessageLikeEvent::Original(ev)),
+                ) => {
+                    events.push(convert_sync_room_message(ev));
+                }
+                AnySyncTimelineEvent::MessageLike(
+                    AnySyncMessageLikeEvent::Sticker(SyncMessageLikeEvent::Original(ev)),
+                ) => {
+                    events.push(convert_sync_sticker(ev));
+                }
+                AnySyncTimelineEvent::MessageLike(
+                    AnySyncMessageLikeEvent::Reaction(SyncMessageLikeEvent::Original(ev)),
+                ) => {
+                    let target = ev.content.relates_to.event_id.to_string();
+                    let key = ev.content.relates_to.key.clone();
+                    let sender = ev.sender.to_string();
+                    let rev_id = ev.event_id.to_string();
+                    reaction_raw.entry(target).or_default().push((key, sender, rev_id));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    for ev in &mut events {
+        if let Some(rxns) = reaction_raw.get(&ev.event_id) {
+            let mut agg: HashMap<String, (u64, Vec<String>, bool, Option<String>)> =
+                HashMap::new();
+            for (key, sender, rev_id) in rxns {
+                let e = agg.entry(key.clone()).or_insert((0, Vec::new(), false, None));
+                e.0 += 1;
+                e.1.push(sender.clone());
+                if sender == &own_user_id {
+                    e.2 = true;
+                    e.3 = Some(rev_id.clone());
+                }
+            }
+            ev.reactions = agg
+                .into_iter()
+                .map(|(key, (count, senders, own_reaction, own_event_id))| ReactionGroup {
+                    key,
+                    count,
+                    senders,
+                    own_reaction,
+                    own_event_id,
+                })
+                .collect();
+        }
+    }
+
+    // Forward fetch returns events oldest-first already.
+    Ok(TimelineForwardPage { events, next_batch })
 }
 
 fn convert_sync_timeline_event(event: AnySyncTimelineEvent) -> Option<TimelineEvent> {

@@ -838,6 +838,12 @@ function groupMessages(msgs: MessageData[]): (MessageData | MessageData[] | Time
 }
 
 export class Timeline {
+  /** Maximum number of messages rendered into the DOM at once. The buffer
+   *  (`_messages`) can hold more — windowing keeps DOM bounded. */
+  private static readonly MAX_RENDERED = 250;
+  /** How many messages to render or cull when extending/shrinking the window. */
+  private static readonly RENDER_CHUNK = 50;
+
   private _el: HTMLElement;
   private _listEl: HTMLElement;
   private _loadingEl: HTMLElement;
@@ -847,13 +853,21 @@ export class Timeline {
   private _skeletonShownAt = 0;
   /** Whether the user has scrolled up away from the bottom */
   private _scrolledUp = false;
-  /** Track messages for grouping on append */
+  /** Full known buffer of messages for the current room, oldest first.
+   *  Only a window — `_messages[_renderStart..._renderEnd]` — is in the DOM.
+   *  Extending the rendered window from the buffer is cheap; reaching the
+   *  buffer edges fires server-fetch callbacks. */
   private _messages: MessageData[] = [];
-  /** Index of the currently selected (highlighted) message, or -1 for none */
+  /** Inclusive start of the rendered window into `_messages`. */
+  private _renderStart = 0;
+  /** Exclusive end of the rendered window into `_messages`. */
+  private _renderEnd = 0;
+  /** Index of the currently selected (highlighted) message in `_messages`, or -1 for none */
   private _selectedIndex = -1;
   /** The last element appended via appendMessageHidden, pending reveal */
   private _lastHiddenEl: HTMLElement | null = null;
   private _onScrollTopCallback: (() => void) | null = null;
+  private _onScrollBottomCallback: (() => void) | null = null;
   /** Fired when the user clicks inside the timeline area (used to update activePanel). */
   private _onFocusCallback: (() => void) | null = null;
   /** Fired when an image message is clicked — passes (src, alt). */
@@ -867,6 +881,7 @@ export class Timeline {
   /** True when the timeline is showing a context window, not the live end. */
   private _inContextView = false;
   private _scrollTopFired = false;
+  private _scrollBottomFired = false;
   /** Handle for the cleanup timeout of the scroll animation, so we can cancel it */
   private _scrollAnimCleanupTimer: ReturnType<typeof setTimeout> | null = null;
   /** Handle for the post-render scroll-to-bottom timer started in setMessages, so it can be cancelled on re-render */
@@ -902,8 +917,10 @@ export class Timeline {
     this._jumpToLatestBtn.addEventListener("click", () => this._onJumpToLatestCallback?.());
     this._el.appendChild(this._jumpToLatestBtn);
 
-    // Track whether the user has scrolled away from the bottom,
-    // and fire the scroll-to-top callback when near the top.
+    // Track whether the user has scrolled away from the bottom, and fire
+    // pagination callbacks when near either edge. Extending the rendered
+    // window from the in-memory buffer happens first — only when the buffer
+    // edge is reached does a server fetch get requested.
     this._el.addEventListener("scroll", () => {
       const { scrollTop, scrollHeight, clientHeight } = this._el;
       this._scrolledUp = scrollHeight - scrollTop - clientHeight > 40;
@@ -911,9 +928,17 @@ export class Timeline {
 
       if (scrollTop < 80 && !this._scrollTopFired) {
         this._scrollTopFired = true;
-        this._onScrollTopCallback?.();
+        this._handleScrollNearTop();
       } else if (scrollTop >= 80) {
         this._scrollTopFired = false;
+      }
+
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      if (distanceFromBottom < 80 && !this._scrollBottomFired) {
+        this._scrollBottomFired = true;
+        this._handleScrollNearBottom();
+      } else if (distanceFromBottom >= 80) {
+        this._scrollBottomFired = false;
       }
     });
 
@@ -986,9 +1011,16 @@ export class Timeline {
     return this._el;
   }
 
-  /** Register a callback fired when the user scrolls near the top (once per approach). */
+  /** Register a callback fired when the user scrolls near the top and the
+   *  in-memory buffer has been exhausted (i.e. server fetch is needed). */
   onScrollToTop(cb: () => void): void {
     this._onScrollTopCallback = cb;
+  }
+
+  /** Register a callback fired when the user scrolls near the bottom and the
+   *  in-memory buffer has been exhausted (i.e. forward server fetch needed). */
+  onScrollToBottom(cb: () => void): void {
+    this._onScrollBottomCallback = cb;
   }
 
   /** Register a callback fired when the user right-clicks a message — passes (eventId, x, y). */
@@ -1190,10 +1222,15 @@ export class Timeline {
     const oldScrollHeight = this._el.scrollHeight;
     const oldScrollTop = this._el.scrollTop;
     this._messages = [...msgs, ...this._messages];
-    // Shift selection forward so it still points at the same message after prepend.
+    // Shift selection and render-window indices forward so they still point at
+    // the same content after prepending.
     if (this._selectedIndex >= 0) {
       this._selectedIndex += msgs.length;
     }
+    this._renderStart += msgs.length;
+    this._renderEnd += msgs.length;
+    // Extend the window backward so the freshly-prepended messages are visible.
+    this._renderStart = Math.max(0, this._renderStart - msgs.length);
 
     // Insert new DOM nodes at the top without clearing existing content.
     // This avoids blanking the visible timeline while the DOM rebuilds.
@@ -1230,6 +1267,40 @@ export class Timeline {
     // when prependMessages runs). Without this reset, _scrollTopFired can stay
     // true after restoration and block subsequent loads via keyboard nav.
     this._scrollTopFired = false;
+    // Drop the bottom of the window if it now exceeds MAX_RENDERED — keeps
+    // the DOM bounded as history is paged in.
+    this._cullBottomIfNeeded();
+  }
+
+  /** Append newer messages below the current list. Used by forward pagination
+   *  when the timeline is showing a context window in the middle of history.
+   *  Preserves scroll position. */
+  appendMessages(msgs: MessageData[]): void {
+    if (msgs.length === 0) return;
+    const wasAtBottom = !this._scrolledUp;
+    this._messages = [...this._messages, ...msgs];
+    this._renderEnd = this._messages.length;
+
+    const groups = groupMessages(msgs);
+    const fragment = document.createDocumentFragment();
+    for (const entry of groups) {
+      if (Array.isArray(entry)) {
+        fragment.appendChild(buildMessageGroup(entry));
+      } else if ("type" in entry && entry.type === "time-separator") {
+        fragment.appendChild(buildTimeSeparator(entry.timestamp));
+      } else {
+        const el = buildMessageElement(entry as MessageData);
+        el.classList.add("message--ungrouped");
+        fragment.appendChild(el);
+      }
+    }
+    this._listEl.appendChild(fragment);
+
+    this._scrollBottomFired = false;
+    // Bound DOM size by dropping the oldest rendered messages if needed.
+    this._cullTopIfNeeded();
+    // If the user was sitting at the bottom before the load, keep them there.
+    if (wasAtBottom) this._scrollToBottom();
   }
 
   /** Replace the entire message list.
@@ -1267,6 +1338,10 @@ export class Timeline {
     const savedScrollHeight = this._el.scrollHeight;
 
     this._messages = [...msgs];
+    // Render only the most recent window. Older messages remain in the buffer
+    // and become visible when the user scrolls up.
+    this._renderEnd = this._messages.length;
+    this._renderStart = Math.max(0, this._renderEnd - Timeline.MAX_RENDERED);
     this._renderAll();
 
     if (preserveScroll && wasScrolledUp) {
@@ -1312,9 +1387,19 @@ export class Timeline {
     this._fadeOutSkeletonAfterImages();
   }
 
-  /** Append a single message, scrolling to bottom if not scrolled up */
+  /** Append a single message, scrolling to bottom if not scrolled up.
+   *  If the rendered window does not currently include the buffer end, the
+   *  message is added to the buffer only — the user will see it when they
+   *  scroll back to the live tail. */
   appendMessage(msg: MessageData, opts?: { animate?: boolean }): void {
+    const wasAtBufferEnd = this._renderEnd === this._messages.length;
     this._messages.push(msg);
+    if (!wasAtBufferEnd) {
+      // The DOM window doesn't extend to the live tail — leave DOM untouched.
+      // (User has scrolled away into older history; their viewport stays put.)
+      return;
+    }
+    this._renderEnd = this._messages.length;
     const animate = opts?.animate ?? false;
 
     // Check 30-minute time gap from the previous message
@@ -1347,6 +1432,7 @@ export class Timeline {
           if (msgHeader) (msgHeader as HTMLElement).style.display = "none";
           if (animate) el.classList.add("message--entering");
           innerGroup.appendChild(el);
+          this._cullTopIfNeeded();
           if (!this._scrolledUp) this._scrollToBottom();
           return;
         }
@@ -1363,6 +1449,8 @@ export class Timeline {
       el.classList.add("message--ungrouped");
       this._listEl.appendChild(el);
     }
+
+    this._cullTopIfNeeded();
 
     if (!this._scrolledUp) {
       this._scrollToBottom();
@@ -1717,6 +1805,10 @@ export class Timeline {
    */
   appendMessageHidden(msg: MessageData): void {
     this._messages.push(msg);
+    // Send-time append always extends the rendered window to include the new
+    // message — the user is presumably looking at the compose box, which is
+    // anchored to the live tail.
+    this._renderEnd = this._messages.length;
 
     // Check 30-minute time gap from the previous message
     const prevMsg = this._messages[this._messages.length - 2];
@@ -1945,6 +2037,7 @@ export class Timeline {
     if (idx < 0) return;
 
     const wasSelected = this._selectedIndex === idx;
+    const wasInWindow = idx >= this._renderStart && idx < this._renderEnd;
 
     // Adjust selection index accounting for the removal
     if (this._selectedIndex > idx) {
@@ -1953,7 +2046,24 @@ export class Timeline {
       this._selectedIndex = -1;
     }
 
+    // Adjust render window indices for the removal so they keep pointing at
+    // the same content.
+    if (idx < this._renderStart) {
+      this._renderStart--;
+      this._renderEnd--;
+    } else if (idx < this._renderEnd) {
+      this._renderEnd--;
+    }
+
     this._messages.splice(idx, 1);
+
+    if (!wasInWindow) {
+      // Nothing to update in the DOM.
+      if (wasSelected && this._messages.length > 0) {
+        this._setSelected(Math.min(idx, this._messages.length - 1));
+      }
+      return;
+    }
 
     const el = this.getMessageElementById(eventId);
     if (!el) return;
@@ -2038,6 +2148,12 @@ export class Timeline {
    * No-ops silently if the event ID is not in the rendered timeline.
    */
   scrollToMessage(eventId: string): boolean {
+    // Look up first in the buffer — extend the rendered window if the message
+    // is in `_messages` but outside `[_renderStart, _renderEnd)`.
+    const idx = this._messages.findIndex((m) => m.id === eventId);
+    if (idx < 0) return false;
+    this._ensureInWindow(idx);
+
     const el = this.getMessageElementById(eventId);
     if (!el) return false;
     el.scrollIntoView({ block: "center" });
@@ -2048,8 +2164,7 @@ export class Timeline {
     this._scrolledUp = this._el.scrollHeight - this._el.scrollTop - this._el.clientHeight > 40;
     this._updateJumpToLatestVisibility();
     // Select the message so keyboard navigation (j/k, r, e, etc.) targets it.
-    const idx = this._messages.findIndex((m) => m.id === eventId);
-    if (idx >= 0) this._setSelected(idx);
+    this._setSelected(idx);
     el.classList.remove("message--highlight"); // reset if re-triggered
     // Force reflow so re-adding the class actually restarts the animation
     void el.offsetWidth;
@@ -2132,15 +2247,18 @@ export class Timeline {
 
     this._selectedIndex = index;
 
-    // Apply new highlight
-    if (index >= 0) {
-      const el = this._getMessageElement(index);
-      if (el) {
-        el.classList.add("message--selected");
-        const group = el.closest<HTMLElement>(".message-group");
-        if (group) group.classList.add("message-group--selected");
-        this._scrollIntoViewWithScrolloff(el);
-      }
+    if (index < 0) return;
+
+    // Ensure the target index is in the rendered window — extend if needed.
+    // This lets keyboard navigation (j/k) cross window boundaries naturally.
+    this._ensureInWindow(index);
+
+    const el = this._getMessageElement(index);
+    if (el) {
+      el.classList.add("message--selected");
+      const group = el.closest<HTMLElement>(".message-group");
+      if (group) group.classList.add("message-group--selected");
+      this._scrollIntoViewWithScrolloff(el);
     }
   }
 
@@ -2187,6 +2305,12 @@ export class Timeline {
     this._listEl.querySelector(".unread-separator")?.remove();
 
     const firstUnreadIndex = Math.max(0, this._messages.length - this._unreadCount);
+    // If the unread region falls entirely outside the rendered window, extend
+    // the window backward so the separator can be anchored to a real DOM node.
+    if (firstUnreadIndex < this._renderStart) {
+      this._renderStart = Math.max(0, firstUnreadIndex - Timeline.RENDER_CHUNK);
+      this._renderAll();
+    }
     const firstUnreadMsg = this._messages[firstUnreadIndex];
     if (!firstUnreadMsg) return;
 
@@ -2212,8 +2336,15 @@ export class Timeline {
 
   private _renderAll(): void {
     revokeActiveBlobUrls();
+    // Detach the inline thread panel before rebuilding so it can survive the
+    // re-render and be re-anchored if its root is still in the rendered window.
+    const savedThread = this._inlineThreadEl;
+    if (savedThread && savedThread.parentElement === this._listEl) {
+      savedThread.remove();
+    }
     this._listEl.innerHTML = "";
-    const groups = groupMessages(this._messages);
+    const slice = this._messages.slice(this._renderStart, this._renderEnd);
+    const groups = groupMessages(slice);
     const fragment = document.createDocumentFragment();
     for (const entry of groups) {
       if (Array.isArray(entry)) {
@@ -2228,12 +2359,130 @@ export class Timeline {
       }
     }
     this._listEl.appendChild(fragment);
+
+    // Re-anchor the inline thread panel if its root is still in the window.
+    if (savedThread && this._inlineThreadRootId) {
+      const rootEl = this.getMessageElementById(this._inlineThreadRootId);
+      const anchor =
+        rootEl?.closest<HTMLElement>(".message-group-wrapper") ??
+        rootEl?.closest<HTMLElement>(".message--ungrouped");
+      if (anchor) {
+        anchor.insertAdjacentElement("afterend", savedThread);
+      }
+      // If the root is no longer in the rendered window, leave the panel
+      // detached — it stays in memory and reattaches when the window is
+      // extended back over the root.
+    }
+
+    // Restore selected highlight on the rendered element if still in window.
+    if (this._selectedIndex >= this._renderStart && this._selectedIndex < this._renderEnd) {
+      const el = this._getMessageElement(this._selectedIndex);
+      if (el) {
+        el.classList.add("message--selected");
+        const group = el.closest<HTMLElement>(".message-group");
+        if (group) group.classList.add("message-group--selected");
+      }
+    }
   }
 
   private _scrollToBottom(): void {
     this._el.scrollTop = this._el.scrollHeight;
     this._scrolledUp = false;
     this._updateJumpToLatestVisibility();
+  }
+
+  // ── Windowed rendering ───────────────────────────────────────────────────
+
+  /** Re-render the current window, preserving the user's apparent scroll
+   *  position. `anchor` controls how scrollTop is adjusted:
+   *  - "top": content was added/removed above the viewport — compensate scrollTop
+   *           by the height delta so the visible content stays put.
+   *  - "bottom": content was added/removed below the viewport — leave scrollTop
+   *           alone so the top of the viewport is unchanged. */
+  private _rebuildWindow(anchor: "top" | "bottom"): void {
+    const oldScrollHeight = this._el.scrollHeight;
+    const oldScrollTop = this._el.scrollTop;
+    this._renderAll();
+    if (anchor === "top") {
+      this._el.scrollTop = oldScrollTop + (this._el.scrollHeight - oldScrollHeight);
+    } else {
+      this._el.scrollTop = oldScrollTop;
+    }
+  }
+
+  private _handleScrollNearTop(): void {
+    if (this._renderStart > 0) {
+      this._extendWindowUp();
+    } else {
+      this._onScrollTopCallback?.();
+    }
+  }
+
+  private _handleScrollNearBottom(): void {
+    if (this._renderEnd < this._messages.length) {
+      this._extendWindowDown();
+    } else if (this._inContextView) {
+      this._onScrollBottomCallback?.();
+    }
+  }
+
+  /** Render an additional chunk of older messages from the buffer into the DOM,
+   *  preserving scroll position. Culls the bottom of the window if it exceeds
+   *  MAX_RENDERED. */
+  private _extendWindowUp(): void {
+    const newStart = Math.max(0, this._renderStart - Timeline.RENDER_CHUNK);
+    if (newStart === this._renderStart) return;
+    this._renderStart = newStart;
+    this._rebuildWindow("top");
+    this._cullBottomIfNeeded();
+  }
+
+  /** Render an additional chunk of newer messages from the buffer into the DOM.
+   *  Culls the top of the window if it exceeds MAX_RENDERED. */
+  private _extendWindowDown(): void {
+    const newEnd = Math.min(this._messages.length, this._renderEnd + Timeline.RENDER_CHUNK);
+    if (newEnd === this._renderEnd) return;
+    this._renderEnd = newEnd;
+    this._rebuildWindow("bottom");
+    this._cullTopIfNeeded();
+  }
+
+  /** Drop oldest rendered messages if window exceeds MAX_RENDERED, adjusting
+   *  scrollTop so the visible content stays put. */
+  private _cullTopIfNeeded(): void {
+    const overflow = this._renderEnd - this._renderStart - Timeline.MAX_RENDERED;
+    if (overflow <= 0) return;
+    this._renderStart += overflow;
+    this._rebuildWindow("top");
+  }
+
+  /** Drop newest rendered messages if window exceeds MAX_RENDERED. ScrollTop
+   *  is unchanged since the dropped content was below the viewport. */
+  private _cullBottomIfNeeded(): void {
+    const overflow = this._renderEnd - this._renderStart - Timeline.MAX_RENDERED;
+    if (overflow <= 0) return;
+    this._renderEnd -= overflow;
+    this._rebuildWindow("bottom");
+  }
+
+  /** Ensure `idx` (a position in the full buffer) is within the rendered window.
+   *  If not, extend the window in that direction far enough to include it
+   *  (plus a margin), and re-render. Returns true if the window changed. */
+  private _ensureInWindow(idx: number): boolean {
+    if (idx < 0 || idx >= this._messages.length) return false;
+    if (idx >= this._renderStart && idx < this._renderEnd) return false;
+
+    const margin = Timeline.RENDER_CHUNK;
+    if (idx < this._renderStart) {
+      this._renderStart = Math.max(0, idx - margin);
+      this._rebuildWindow("top");
+      this._cullBottomIfNeeded();
+    } else {
+      this._renderEnd = Math.min(this._messages.length, idx + 1 + margin);
+      this._rebuildWindow("bottom");
+      this._cullTopIfNeeded();
+    }
+    return true;
   }
 
   /**

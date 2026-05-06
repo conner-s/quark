@@ -334,6 +334,17 @@ pub async fn get_event_context(
 }
 
 #[tauri::command]
+pub async fn paginate_forward(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    after: String,
+    limit: Option<usize>,
+) -> Result<crate::matrix::timeline::TimelineForwardPage, String> {
+    let client = get_client(&state)?;
+    crate::matrix::timeline::paginate_forward(&client, &room_id, after, limit.unwrap_or(50)).await
+}
+
+#[tauri::command]
 pub async fn send_message(
     state: State<'_, MatrixState>,
     room_id: String,

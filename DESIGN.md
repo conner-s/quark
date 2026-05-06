@@ -750,7 +750,7 @@ quark/
 - [ ] Performance profiling — large rooms (1000+ messages), many emoji packs
 - [x] Command audit — `:invite`, `:kick`, `:ban`, `:unban`, `:nick`, `:topic` now implemented; all 18 KNOWN_COMMANDS have working handlers (`:upload` still shows "not yet implemented" toast)
 - [x] Use blobs rather than data URLs — Timeline now uses `URL.createObjectURL()` for media thumbnails and URL-preview images; blob URLs are revoked before each re-render to avoid memory leaks.
-- [ ] Unload messages far out of view in timeline when adding new messages to prevent overloading the timeline
+- [x] Unload messages far out of view in timeline when adding new messages to prevent overloading the timeline, reload messages when scrolling down — `Timeline` now keeps a full in-memory buffer (`_messages`) and only renders a window (`_messages[_renderStart.._renderEnd]`, capped at `MAX_RENDERED = 250`) into the DOM. Scrolling near an edge first extends the window from the buffer (no fetch); only when the buffer edge is reached does a server fetch fire (`onScrollToTop` for older, `onScrollToBottom` for newer). Forward pagination uses a new `paginate_forward` Rust command and `_nextBatch` token; reaching `next_batch=null` exits context view so live messages append normally again. Sync events arriving during context view are deferred — they’ll show up when the user paginates forward to the live tail.
 
 #### Bugs
 - [x] rooms don't always load. (scroll getting stuck fixed — cancelled scroll animation on room switch)

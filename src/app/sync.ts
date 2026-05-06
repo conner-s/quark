@@ -3,7 +3,7 @@
 import { AppState } from "./state.js";
 import type { AppComponents } from "../ui/App.js";
 import type { TimelineEvent, RoomInfo } from "../ipc/types.js";
-import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage, resolveSenderAvatarUrl, ensureSenderAvatarDownloaded, applyIncomingRedaction, stripReplyFallback } from "./actions.js";
+import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage, resolveSenderAvatarUrl, ensureSenderAvatarDownloaded, applyIncomingRedaction, stripReplyFallback, isInContextView } from "./actions.js";
 import { showToast } from "../ui/NotificationToast.js";
 import { handleIncomingMessage } from "./notifications.js";
 
@@ -133,7 +133,14 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     (payload) => {
       const currentRoom = AppState.get("currentRoomId");
 
-      if (payload.room_id === currentRoom) {
+      const isCurrentRoomLive = payload.room_id === currentRoom && !isInContextView();
+      // In context view we keep the room in focus but skip applying live-tail
+      // events to the timeline — they'd render with a hidden gap before them.
+      // They show up properly when the user paginates forward to the live tail.
+      // The toast still fires below.
+      const skipForContextView = payload.room_id === currentRoom && isInContextView();
+
+      if (isCurrentRoomLive) {
         // Deduplicate: skip events already in the state cache (e.g. initial sync
         // replay of messages already loaded via getTimeline, or a second client
         // emitting the same event in dev hot-reload scenarios).
@@ -178,8 +185,11 @@ export async function startSync(components: AppComponents): Promise<() => void> 
             resolveInlineEmojiForTimeline(timeline);
           }
         }
-      } else {
-        // Update unread count on room list item
+      } else if (!skipForContextView) {
+        // Update unread count on room list item. Skip this for the current
+        // room when we're in context view — the user is still focused on it,
+        // and the badge would otherwise count messages they haven't acted on
+        // because they're still scrolled into the past.
         const cached = AppState.get("roomListCache");
         const updated = cached.map((r) => {
           if (r.room_id === payload.room_id) {

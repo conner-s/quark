@@ -156,8 +156,19 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return {
         events: MOCK_TIMELINE.slice(start, end),
         target_event_id: targetId,
-        prev_batch: start > 0 ? "mock-prev" : null,
-        next_batch: end < MOCK_TIMELINE.length ? "mock-next" : null,
+        prev_batch: start > 0 ? `mock-prev-${start}` : null,
+        next_batch: end < MOCK_TIMELINE.length ? `mock-next-${end}` : null,
+      };
+    }
+    case "paginate_forward": {
+      // Mock token format: "mock-next-<index>" — index is the next event to return
+      const after = args?.after as string ?? "";
+      const m = /^mock-next-(\d+)$/.exec(after);
+      const startIdx = m ? parseInt(m[1], 10) : MOCK_TIMELINE.length;
+      const endIdx = Math.min(MOCK_TIMELINE.length, startIdx + 10);
+      return {
+        events: MOCK_TIMELINE.slice(startIdx, endIdx),
+        next_batch: endIdx < MOCK_TIMELINE.length ? `mock-next-${endIdx}` : null,
       };
     }
     case "get_room_members":

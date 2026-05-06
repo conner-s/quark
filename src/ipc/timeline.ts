@@ -1,9 +1,9 @@
 // Timeline IPC calls
 
 import { invoke } from "./invoke.js";
-import type { TimelineEvent, TimelinePage, EventContextPage } from "./types.js";
+import type { TimelineEvent, TimelinePage, EventContextPage, TimelineForwardPage } from "./types.js";
 
-export type { TimelineEvent, TimelinePage, EventContextPage };
+export type { TimelineEvent, TimelinePage, EventContextPage, TimelineForwardPage };
 
 /**
  * Fetch a page of timeline events for a room.
@@ -32,6 +32,20 @@ export async function getEventContext(
   contextSize?: number,
 ): Promise<EventContextPage> {
   return invoke<EventContextPage>("get_event_context", { roomId, eventId, contextSize });
+}
+
+/**
+ * Fetch newer events using a forward-pagination token from a prior
+ * `get_event_context` or `paginate_forward` response.
+ * Returns events in chronological order. `next_batch === null` means the live
+ * tail has been reached. Matches the Rust `paginate_forward` command.
+ */
+export async function paginateForward(
+  roomId: string,
+  after: string,
+  limit?: number,
+): Promise<TimelineForwardPage> {
+  return invoke<TimelineForwardPage>("paginate_forward", { roomId, after, limit });
 }
 
 /**

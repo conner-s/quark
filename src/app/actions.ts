@@ -47,6 +47,7 @@ import {
   getStickerPacks,
   sendSticker as ipcSendSticker,
   getEventContext,
+  paginateForward,
   inviteUser as ipcInviteUser,
   kickUser as ipcKickUser,
   banUser as ipcBanUser,
@@ -104,8 +105,20 @@ let _prevBatch: string | null = null;
 let _nextBatch: string | null = null;
 /** True when the timeline is showing a context window around a jumped-to message, not the live end. */
 let _inContextView = false;
-/** Prevents concurrent "load more" fetches. */
+
+/** True when the timeline is showing a window in the middle of history rather
+ *  than at the live tail. Used by the sync handler to suppress appending new
+ *  live messages while the user is reading older context — the user would
+ *  otherwise see incorrectly-ordered messages between the context window and
+ *  the live tail. The skipped messages will arrive when the user paginates
+ *  forward to them or clicks "jump to latest". */
+export function isInContextView(): boolean {
+  return _inContextView;
+}
+/** Prevents concurrent backward "load more" fetches. */
 let _paginationLoading = false;
+/** Prevents concurrent forward "load more" fetches. */
+let _paginationLoadingForward = false;
 
 // ── Member caches ─────────────────────────────────────────────────────────────
 
@@ -408,6 +421,7 @@ export async function selectRoom(roomId: string): Promise<void> {
   _nextBatch = null;
   _inContextView = false;
   _paginationLoading = false;
+  _paginationLoadingForward = false;
   roomList.setActiveRoom(roomId);
 
   // Show skeleton immediately before the async IPC fetch so the timeline doesn't
@@ -490,8 +504,11 @@ export async function selectRoom(roomId: string): Promise<void> {
     }
     timeline.setMessages(messages);
 
-    // Register scroll-to-top for pagination (re-registers on each room change)
+    // Register pagination callbacks (re-registers on each room change). The
+    // top callback fires only when the in-memory buffer is exhausted; the
+    // bottom callback fires only while in context view (forward fetches).
     timeline.onScrollToTop(() => void loadMoreMessages());
+    timeline.onScrollToBottom(() => void loadMoreMessagesForward());
 
     // Members arrive asynchronously — update display names and avatars when ready
     const members = await membersPromise;
@@ -625,6 +642,71 @@ async function loadMoreMessages(): Promise<void> {
     showError(`Failed to load more messages: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     _paginationLoading = false;
+    timeline.hideLoadingMore();
+  }
+}
+
+/**
+ * Load the next page of newer messages for the current room and append them.
+ * Only meaningful in context view (when the timeline is showing a window in
+ * the middle of history rather than the live tail). When the forward fetch
+ * returns no `next_batch`, the live tail has been reached and we exit context
+ * view so subsequent sync messages append normally.
+ */
+async function loadMoreMessagesForward(): Promise<void> {
+  if (_paginationLoadingForward || !_inContextView || !_nextBatch) return;
+  const roomId = AppState.get("currentRoomId");
+  if (!roomId) return;
+
+  const { timeline } = getComponents();
+  _paginationLoadingForward = true;
+  timeline.showLoadingMore();
+
+  try {
+    const MAX_EMPTY_PAGES = 10;
+    let emptyPages = 0;
+
+    while (_nextBatch && roomId === AppState.get("currentRoomId")) {
+      const page = await paginateForward(roomId, _nextBatch, 50);
+      _nextBatch = page.next_batch;
+
+      if (page.events.length === 0) {
+        emptyPages++;
+        if (!_nextBatch || emptyPages >= MAX_EMPTY_PAGES) break;
+        continue;
+      }
+
+      const existingEvents = AppState.get("currentTimeline");
+      AppState.set("currentTimeline", [...existingEvents, ...page.events]);
+
+      const threadRootCounts = _buildThreadRootCounts(page.events);
+      const mainEvents = _applyEdits(page.events).filter((e) => !e.thread_root);
+      const messages = mainEvents.map((e) => timelineEventToMessage(e, page.events, threadRootCounts));
+      timeline.appendMessages(messages);
+
+      _downloadMessageImages(page.events, timeline);
+      _downloadInlineEmoji(timeline);
+      void _downloadReactionEmoji(page.events, timeline);
+      const seenSenders = new Set<string>();
+      for (const e of page.events) {
+        if (!seenSenders.has(e.sender)) {
+          seenSenders.add(e.sender);
+          ensureSenderAvatarDownloaded(e.sender, timeline);
+        }
+      }
+      break;
+    }
+
+    // Reaching `next_batch === null` means the live tail has been reached.
+    // Drop out of context view so future sync messages append at the bottom.
+    if (_nextBatch === null) {
+      _inContextView = false;
+      timeline.setContextView(false);
+    }
+  } catch (err) {
+    showError(`Failed to load more messages: ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    _paginationLoadingForward = false;
     timeline.hideLoadingMore();
   }
 }

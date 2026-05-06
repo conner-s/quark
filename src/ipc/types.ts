@@ -78,6 +78,13 @@ export interface EventContextPage {
   next_batch: string | null;
 }
 
+/** A page of newer events from forward pagination — matches matrix::timeline::TimelineForwardPage */
+export interface TimelineForwardPage {
+  events: TimelineEvent[];
+  /** Token to pass as `after` to fetch the next (newer) page. Null at the live tail. */
+  next_batch: string | null;
+}
+
 /** Serializable timeline event — matches matrix::timeline::TimelineEvent */
 export interface TimelineEvent {
   event_id: string;
