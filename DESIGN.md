@@ -824,4 +824,5 @@ quark/
 - [x] Video messages show no thumbnail — `media_thumbnail_url` / `media_thumbnail_encryption_info` extracted from `VideoInfo.thumbnail_source` and passed through IPC; `buildVideoAffordance` loads thumbnail async and renders 160×90 preview with ▶ overlay
 - [x] No URL preview cards for messages containing links — `get_url_preview` Tauri command calls homeserver `/_matrix/media/v3/preview_url`; frontend extracts first URL from text messages and appends a styled preview card (title, description, image, site name) async with module-level cache
 - [x] Only allow clicking on avatar to show profile, not the whole column — `quark:open-profile` click listener moved from `avatarCol` div to the avatar element itself; cursor/title only on the avatar
+- [ ] Forward-paging messages continues scrolling infinitely, seemingly due to anchoring issue
 
