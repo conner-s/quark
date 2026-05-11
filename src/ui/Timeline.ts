@@ -1260,6 +1260,10 @@ export class Timeline {
 
     // Restore position so the previously-visible messages stay in view
     this._el.scrollTop = oldScrollTop + (this._el.scrollHeight - oldScrollHeight);
+    // Synchronously refresh _scrolledUp; the scroll event from the scrollTop
+    // set fires asynchronously, and image-load handlers on freshly prepended
+    // cached images could otherwise read a stale value.
+    this._scrolledUp = this._el.scrollHeight - this._el.scrollTop - this._el.clientHeight > 40;
 
     // Reset _scrollTopFired so future keyboard navigation or scrolling can
     // trigger another page load. The _paginationLoading guard in loadMoreMessages
@@ -1302,6 +1306,10 @@ export class Timeline {
     // can fire (the previous fire reached this code path; the browser may
     // not emit a fresh scroll event from the height change alone).
     this._scrollBottomFired = false;
+    // scrollHeight just grew but scrollTop didn't — the user is no longer at
+    // the tail. Refresh synchronously so the image-load handler doesn't fire
+    // _scrollToBottom() on freshly appended cached images.
+    this._scrolledUp = this._el.scrollHeight - this._el.scrollTop - this._el.clientHeight > 40;
     this._cullTopIfNeeded();
   }
 
@@ -2410,6 +2418,11 @@ export class Timeline {
     } else {
       this._el.scrollTop = oldScrollTop;
     }
+    // Synchronously refresh _scrolledUp so the image-load handler (which fires
+    // when cached images in the freshly rendered DOM resolve in the same tick)
+    // doesn't read a stale value and snap the viewport to the bottom — that
+    // race would re-trigger _handleScrollNearBottom in a loop.
+    this._scrolledUp = this._el.scrollHeight - this._el.scrollTop - this._el.clientHeight > 40;
   }
 
   private _handleScrollNearTop(): void {
