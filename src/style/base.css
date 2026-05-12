@@ -1344,11 +1344,12 @@ body {
   outline-color: var(--accent-primary);
 }
 
-/* Visual sub-mode: hide the I-beam so the selection highlight reads as a
-   vim-style block cursor. The keymap layer keeps the selection at least one
-   character wide while in Visual, so there's always a visible block. */
-.message__body--text-select-visual,
-.input-bar__field--text-select-visual {
+/* Block-cursor styling: in text-select Normal mode the keymap layer keeps a
+   1-character-wide selection at the caret position so the selection highlight
+   reads as a vim-style block. Hide the native I-beam to complete the effect.
+   Stays on in Visual too — the selection-as-cursor model is consistent. */
+.message__body--text-select-block,
+.input-bar__field--text-select-block {
   caret-color: transparent;
 }
 

@@ -56,13 +56,10 @@ export function enterMessageTextSelect(bodyEl: HTMLElement): void {
 
   AppState.set("textSelectMode", "message");
 
-  // If the user was already in Visual when they entered text-select, apply
-  // the block-cursor styling immediately rather than waiting for a Normal↔Visual
-  // transition that may never come.
-  if (modeManager.current === Mode.Visual) {
-    primeVisualSelection();
-    setVisualBlockCursor(true);
-  }
+  // Block-cursor styling stays on for the duration of text-select. Prime the
+  // selection to 1 char so the block has something to highlight immediately.
+  setBlockCursor(true);
+  primeBlockSelection();
 }
 
 /**
@@ -70,10 +67,17 @@ export function enterMessageTextSelect(bodyEl: HTMLElement): void {
  * already focused the field — this just records the submode and ensures the
  * vim mode is Normal (so j/k etc. don't get typed into the input).
  */
-export function enterComposeTextSelect(): void {
+export function enterComposeTextSelect(composeField?: HTMLInputElement): void {
   // Don't blow away an active message-target selection silently.
   if (AppState.get("textSelectMode") === "message") exitTextSelect();
   AppState.set("textSelectMode", "compose");
+
+  // Apply the block-cursor styling and ensure a visible 1-char block at the
+  // caret. Caller passes the field so we can target it without component refs.
+  if (composeField) {
+    setBlockCursor(true, composeField);
+    primeBlockSelection(composeField);
+  }
 }
 
 /**
@@ -84,7 +88,7 @@ export function exitTextSelect(): void {
   if (AppState.get("textSelectMode") === null) return;
 
   // Drop the block-cursor class from whichever target was active.
-  setVisualBlockCursor(false);
+  setBlockCursor(false);
 
   if (_messageBodyEl) {
     _messageBodyEl.classList.remove("message__body--text-select");
@@ -120,18 +124,18 @@ export function exitTextSelect(): void {
  * selection highlight (kept at least one character wide by the keymap layer)
  * reads as a vim-style block.
  */
-export function setVisualBlockCursor(on: boolean, composeField?: HTMLInputElement): void {
+export function setBlockCursor(on: boolean, composeField?: HTMLInputElement): void {
   const target = AppState.get("textSelectMode");
   if (target === "message" && _messageBodyEl) {
-    _messageBodyEl.classList.toggle("message__body--text-select-visual", on);
+    _messageBodyEl.classList.toggle("message__body--text-select-block", on);
   } else if (target === "compose" && composeField) {
-    composeField.classList.toggle("input-bar__field--text-select-visual", on);
+    composeField.classList.toggle("input-bar__field--text-select-block", on);
   }
 }
 
 /**
  * Ensure the active selection covers at least one character so the block
- * cursor has something to highlight. Called when entering Visual mode.
+ * cursor has something to highlight.
  *
  * For "message" target, extends `window.getSelection()` forward by a
  * character if it's currently collapsed. For "compose", expands the input's
@@ -139,13 +143,18 @@ export function setVisualBlockCursor(on: boolean, composeField?: HTMLInputElemen
  * back to extending backward so the block lands on the previous character
  * rather than disappearing past the end.
  */
-export function primeVisualSelection(composeField?: HTMLInputElement): void {
+export function primeBlockSelection(composeField?: HTMLInputElement): void {
   const target = AppState.get("textSelectMode");
 
   if (target === "message" && _messageBodyEl) {
     const sel = window.getSelection();
     if (!sel) return;
     if (!sel.isCollapsed) return;
+    // Selection.modify is non-standard (Webkit/Blink/Gecko all implement it,
+    // but JSDOM doesn't). Skip the prime in environments without it — the
+    // rest of text-select still works; we just don't get the visible 1-char
+    // block until the user moves.
+    if (typeof sel.modify !== "function") return;
     // Try extending forward; if the caret is at the very end, try backward.
     const before = sel.toString();
     sel.modify("extend", "forward", "character");
@@ -165,6 +174,51 @@ export function primeVisualSelection(composeField?: HTMLInputElement): void {
     } else if (start > 0) {
       composeField.setSelectionRange(start - 1, end, "backward");
     }
+  }
+}
+
+/**
+ * Collapse the message body's selection to its "start" (the lower offset)
+ * end. Used in Normal mode before each move so the 1-char block follows
+ * the cursor cleanly instead of jumping two characters per keystroke.
+ */
+export function collapseMessageSelectionToStart(): void {
+  if (!_messageBodyEl) return;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  const collapsed = range.cloneRange();
+  collapsed.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(collapsed);
+}
+
+/**
+ * Collapse the selection to the "focus" end — the side the user was
+ * moving towards in Visual mode. Used on Visual → Normal so the resulting
+ * block cursor lands where vim would put it.
+ */
+export function collapseToFocus(composeField?: HTMLInputElement): void {
+  const target = AppState.get("textSelectMode");
+
+  if (target === "message") {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || !_messageBodyEl) return;
+    // Selection has anchor/focus; collapsing to focus keeps the cursor where
+    // the user last moved towards. There's no direct API, so use the focus
+    // node/offset on the existing range.
+    if (sel.focusNode) {
+      sel.collapse(sel.focusNode, sel.focusOffset);
+    }
+    return;
+  }
+
+  if (target === "compose" && composeField) {
+    const dir = composeField.selectionDirection === "backward" ? "backward" : "forward";
+    const start = composeField.selectionStart ?? 0;
+    const end = composeField.selectionEnd ?? 0;
+    const focus = dir === "forward" ? end : start;
+    composeField.setSelectionRange(focus, focus);
   }
 }
 
@@ -255,6 +309,7 @@ export function modifyMessageSelection(
     sel.removeAllRanges();
     sel.addRange(range);
   }
+  if (typeof sel.modify !== "function") return; // not in JSDOM
   sel.modify(alter, direction, granularity);
 }
 

@@ -48,8 +48,9 @@ import {
   quoteTextSelectionIntoCompose,
   modifyMessageSelection,
   modifyComposeSelection,
-  setVisualBlockCursor,
-  primeVisualSelection,
+  primeBlockSelection,
+  collapseMessageSelectionToStart,
+  collapseToFocus,
 } from "./text_select.js";
 import { loadQuarkrc } from "../ipc/config.js";
 import type { ParsedRc } from "../ipc/types.js";
@@ -427,8 +428,15 @@ function extractMentionQuery(value: string): string | null {
  * Translate a movement direction + active target into the appropriate
  * Selection.modify / input-selection call.
  *
+ * In Visual mode this just extends the existing selection (vim semantics).
+ * In Normal mode, the 1-character block cursor must slide one character per
+ * keystroke — so we collapse the current selection to its "cursor" end,
+ * apply the move, then prime back to a 1-char block. Without the collapse,
+ * `Selection.modify("move", "forward", "character")` on `[N, N+1)` would
+ * land at `N+2`, making each press feel like a two-character jump.
+ *
  * Direction is given in semantic vim terms (up/down/left/right). Compose-box
- * "vertical" movement uses word granularity (the field is single-line, so
+ * vertical movement uses word granularity (the field is single-line, so
  * line granularity would just bounce to either end).
  */
 function moveTextSelection(
@@ -436,17 +444,28 @@ function moveTextSelection(
   dir: "up" | "down" | "left" | "right",
 ): void {
   const target = AppState.get("textSelectMode");
-  const alter: "move" | "extend" = modeManager.current === Mode.Visual ? "extend" : "move";
+  const inVisual = modeManager.current === Mode.Visual;
+  const alter: "move" | "extend" = inVisual ? "extend" : "move";
 
   if (target === "message") {
     const direction = dir === "up" || dir === "left" ? "backward" : "forward";
     const granularity = dir === "up" || dir === "down" ? "line" : "character";
+    if (!inVisual) collapseMessageSelectionToStart();
     modifyMessageSelection(alter, direction, granularity);
-  } else if (target === "compose") {
+    if (!inVisual) primeBlockSelection();
+    return;
+  }
+
+  if (target === "compose") {
     const field = components.input.getFieldElement();
     const direction = dir === "up" || dir === "left" ? "backward" : "forward";
     const granularity = dir === "up" || dir === "down" ? "word" : "character";
+    if (!inVisual) {
+      const cursor = field.selectionStart ?? 0;
+      field.setSelectionRange(cursor, cursor);
+    }
     modifyComposeSelection(field, alter, direction, granularity);
+    if (!inVisual) primeBlockSelection(field);
   }
 }
 
@@ -925,7 +944,7 @@ export function setupKeyboard(components: AppComponents): void {
       const hasContent = input.getValue().length > 0;
       const alreadyInTextSelect = AppState.get("textSelectMode") !== null;
       if (enteringFromInsert && hasContent && AppState.get("vimMode")) {
-        enterComposeTextSelect();
+        enterComposeTextSelect(input.getFieldElement());
         // Don't blur — the input field stays focused for caret-driven editing.
       } else if (!alreadyInTextSelect) {
         // Blur the input so normal-mode keys don't type into the textbox.
@@ -941,17 +960,12 @@ export function setupKeyboard(components: AppComponents): void {
       exitTextSelect();
     }
 
-    // Visual ↔ Normal while text-select is active: toggle the block-cursor
-    // styling. Entering Visual also primes the selection so it covers at
-    // least one character — vim shows the character under the cursor as
-    // highlighted as soon as you press `v`.
-    if (AppState.get("textSelectMode") !== null) {
-      if (to === Mode.Visual) {
-        primeVisualSelection(input.getFieldElement());
-        setVisualBlockCursor(true, input.getFieldElement());
-      } else if (from === Mode.Visual) {
-        setVisualBlockCursor(false, input.getFieldElement());
-      }
+    // Visual → Normal while text-select is active: the user has been extending
+    // a selection in Visual; collapse it to the focus end and re-prime to a
+    // 1-char block so the cursor lands where they last moved towards.
+    if (AppState.get("textSelectMode") !== null && from === Mode.Visual && to === Mode.Normal) {
+      collapseToFocus(input.getFieldElement());
+      primeBlockSelection(input.getFieldElement());
     }
   });
 

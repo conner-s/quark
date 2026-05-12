@@ -5,8 +5,9 @@ import {
   exitTextSelect,
   getSelectedText,
   modifyComposeSelection,
-  primeVisualSelection,
-  setVisualBlockCursor,
+  primeBlockSelection,
+  setBlockCursor,
+  collapseToFocus,
 } from "./text_select";
 import { AppState } from "./state";
 
@@ -205,7 +206,7 @@ describe("text_select", () => {
 
   // ── Block cursor (visual mode) ───────────────────────────────────────────
 
-  describe("primeVisualSelection (compose target)", () => {
+  describe("primeBlockSelection (compose target)", () => {
     it("expands a collapsed caret to cover one forward character", () => {
       const input = document.createElement("input");
       input.value = "hello";
@@ -214,7 +215,7 @@ describe("text_select", () => {
       input.setSelectionRange(2, 2);
 
       enterComposeTextSelect();
-      primeVisualSelection(input);
+      primeBlockSelection(input);
 
       expect(input.selectionStart).toBe(2);
       expect(input.selectionEnd).toBe(3);
@@ -228,7 +229,7 @@ describe("text_select", () => {
       input.setSelectionRange(2, 2);
 
       enterComposeTextSelect();
-      primeVisualSelection(input);
+      primeBlockSelection(input);
 
       expect(input.selectionStart).toBe(1);
       expect(input.selectionEnd).toBe(2);
@@ -242,36 +243,40 @@ describe("text_select", () => {
       input.setSelectionRange(1, 3);
 
       enterComposeTextSelect();
-      primeVisualSelection(input);
+      primeBlockSelection(input);
 
       expect(input.selectionStart).toBe(1);
       expect(input.selectionEnd).toBe(3);
     });
   });
 
-  describe("setVisualBlockCursor", () => {
+  describe("setBlockCursor", () => {
     it("toggles the message-body block-cursor class", () => {
       const body = document.createElement("div");
       body.textContent = "abc";
       document.body.appendChild(body);
       enterMessageTextSelect(body);
 
-      setVisualBlockCursor(true);
-      expect(body.classList.contains("message__body--text-select-visual")).toBe(true);
-      setVisualBlockCursor(false);
-      expect(body.classList.contains("message__body--text-select-visual")).toBe(false);
+      // Entering text-select already turns the class on.
+      expect(body.classList.contains("message__body--text-select-block")).toBe(true);
+      setBlockCursor(false);
+      expect(body.classList.contains("message__body--text-select-block")).toBe(false);
+      setBlockCursor(true);
+      expect(body.classList.contains("message__body--text-select-block")).toBe(true);
     });
 
     it("toggles the compose input's block-cursor class", () => {
       const input = document.createElement("input");
       input.value = "abc";
       document.body.appendChild(input);
-      enterComposeTextSelect();
+      enterComposeTextSelect(input);
 
-      setVisualBlockCursor(true, input);
-      expect(input.classList.contains("input-bar__field--text-select-visual")).toBe(true);
-      setVisualBlockCursor(false, input);
-      expect(input.classList.contains("input-bar__field--text-select-visual")).toBe(false);
+      // Entering compose text-select sets the class via the optional field arg.
+      expect(input.classList.contains("input-bar__field--text-select-block")).toBe(true);
+      setBlockCursor(false, input);
+      expect(input.classList.contains("input-bar__field--text-select-block")).toBe(false);
+      setBlockCursor(true, input);
+      expect(input.classList.contains("input-bar__field--text-select-block")).toBe(true);
     });
 
     it("drops the class on exit", () => {
@@ -279,10 +284,39 @@ describe("text_select", () => {
       body.textContent = "abc";
       document.body.appendChild(body);
       enterMessageTextSelect(body);
-      setVisualBlockCursor(true);
 
       exitTextSelect();
-      expect(body.classList.contains("message__body--text-select-visual")).toBe(false);
+      expect(body.classList.contains("message__body--text-select-block")).toBe(false);
+    });
+  });
+
+  describe("collapseToFocus (compose target)", () => {
+    it("collapses a forward-direction selection to its end", () => {
+      const input = document.createElement("input");
+      input.value = "hello";
+      document.body.appendChild(input);
+      input.focus();
+      input.setSelectionRange(1, 4, "forward");
+
+      enterComposeTextSelect();
+      collapseToFocus(input);
+
+      expect(input.selectionStart).toBe(4);
+      expect(input.selectionEnd).toBe(4);
+    });
+
+    it("collapses a backward-direction selection to its start", () => {
+      const input = document.createElement("input");
+      input.value = "hello";
+      document.body.appendChild(input);
+      input.focus();
+      input.setSelectionRange(1, 4, "backward");
+
+      enterComposeTextSelect();
+      collapseToFocus(input);
+
+      expect(input.selectionStart).toBe(1);
+      expect(input.selectionEnd).toBe(1);
     });
   });
 });
