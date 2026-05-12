@@ -1331,6 +1331,19 @@ body {
   white-space: pre-wrap;
 }
 
+/* Text-select mode: caret is placed inside this message body via `o`. */
+.message__body--text-select {
+  outline: 1px dashed color-mix(in srgb, var(--accent-primary) 60%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
+  caret-color: var(--accent-primary);
+  user-select: text;
+}
+
+.message__body--text-select:focus {
+  outline-color: var(--accent-primary);
+}
+
 .message--system .message__body {
   color: var(--msg-system);
   font-style: italic;

@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicoverbruggen/tauri-schema/main/tauri.conf.json",
   "productName": "Quark",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "identifier": "zone.derg.quark",
   "build": {
     "frontendDist": "../dist",

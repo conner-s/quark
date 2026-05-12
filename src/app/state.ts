@@ -6,6 +6,15 @@ import type { RoomInfo, TimelineEvent } from "../ipc/types.js";
 
 export type ActivePanel = "roomlist" | "timeline" | "spaces" | "members";
 
+/**
+ * Text-selection submode — orthogonal to vim Normal/Visual modes.
+ * - `"message"`: caret has been placed inside a timeline message body for
+ *   selecting and copying text from it.
+ * - `"compose"`: the compose box is focused for caret-driven editing while in
+ *   Normal/Visual rather than Insert mode (e.g. for pasting at the cursor).
+ */
+export type TextSelectMode = null | "message" | "compose";
+
 export interface AppStateSnapshot {
   loggedIn: boolean;
   /** Matrix user ID of the locally logged-in user (e.g. @alice:matrix.org). */
@@ -26,6 +35,8 @@ export interface AppStateSnapshot {
   memberListVisible: boolean;
   /** When false, vim modal editing is disabled — the app stays in Insert mode. */
   vimMode: boolean;
+  /** Active text-selection target, or null if not in text-select mode. */
+  textSelectMode: TextSelectMode;
 }
 
 export type StateChangeKey = keyof AppStateSnapshot;
@@ -73,6 +84,7 @@ class AppStateManager {
     threadRootEventId: null,
     memberListVisible: false,
     vimMode: true,
+    textSelectMode: null,
   };
 
   private _listeners: Map<string, Set<StateChangeListener>> = new Map();

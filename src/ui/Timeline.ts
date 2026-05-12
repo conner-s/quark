@@ -1972,6 +1972,13 @@ export class Timeline {
     return this._listEl.querySelector<HTMLElement>(`[data-message-id="${eventId}"]`);
   }
 
+  /** Returns the `.message__body` element for the currently selected message, or null. */
+  getSelectedMessageBodyElement(): HTMLElement | null {
+    if (this._selectedIndex < 0 || this._selectedIndex >= this._messages.length) return null;
+    const msgEl = this._getMessageElement(this._selectedIndex);
+    return msgEl?.querySelector<HTMLElement>(".message__body") ?? null;
+  }
+
   /**
    * Swap out the src of an image/sticker message once the mxc:// content
    * has been downloaded and converted to a data URL.
