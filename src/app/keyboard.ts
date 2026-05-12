@@ -929,6 +929,15 @@ export function setupKeyboard(components: AppComponents): void {
       : panel === "roomlist" ? "roomlist"
       : "global";
 
+    // Quark's keymap encodes only bare keys — feeding Ctrl+C into resolveKey
+    // would match the `c` (edit) action and preventDefault, stealing the
+    // browser's native copy/cut/paste/select-all. Ctrl+K and Ctrl+[ are the
+    // app-level Ctrl combos and are intercepted above this block.
+    if (e.ctrlKey || e.metaKey) {
+      keymapManager.resetSequence();
+      return;
+    }
+
     const result = keymapManager.resolveKey(e.key, activeContext);
 
     if (result.kind === "action") {
