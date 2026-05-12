@@ -5,6 +5,8 @@ import {
   exitTextSelect,
   getSelectedText,
   modifyComposeSelection,
+  primeVisualSelection,
+  setVisualBlockCursor,
 } from "./text_select";
 import { AppState } from "./state";
 
@@ -198,6 +200,89 @@ describe("text_select", () => {
       modifyComposeSelection(input, "move", "forward", "word");
       // After first word ("hello"), caret should be at the space boundary (5)
       expect(input.selectionStart).toBe(5);
+    });
+  });
+
+  // ── Block cursor (visual mode) ───────────────────────────────────────────
+
+  describe("primeVisualSelection (compose target)", () => {
+    it("expands a collapsed caret to cover one forward character", () => {
+      const input = document.createElement("input");
+      input.value = "hello";
+      document.body.appendChild(input);
+      input.focus();
+      input.setSelectionRange(2, 2);
+
+      enterComposeTextSelect();
+      primeVisualSelection(input);
+
+      expect(input.selectionStart).toBe(2);
+      expect(input.selectionEnd).toBe(3);
+    });
+
+    it("falls back to extending backward at the end of the field", () => {
+      const input = document.createElement("input");
+      input.value = "hi";
+      document.body.appendChild(input);
+      input.focus();
+      input.setSelectionRange(2, 2);
+
+      enterComposeTextSelect();
+      primeVisualSelection(input);
+
+      expect(input.selectionStart).toBe(1);
+      expect(input.selectionEnd).toBe(2);
+    });
+
+    it("leaves a non-collapsed selection alone", () => {
+      const input = document.createElement("input");
+      input.value = "hello";
+      document.body.appendChild(input);
+      input.focus();
+      input.setSelectionRange(1, 3);
+
+      enterComposeTextSelect();
+      primeVisualSelection(input);
+
+      expect(input.selectionStart).toBe(1);
+      expect(input.selectionEnd).toBe(3);
+    });
+  });
+
+  describe("setVisualBlockCursor", () => {
+    it("toggles the message-body block-cursor class", () => {
+      const body = document.createElement("div");
+      body.textContent = "abc";
+      document.body.appendChild(body);
+      enterMessageTextSelect(body);
+
+      setVisualBlockCursor(true);
+      expect(body.classList.contains("message__body--text-select-visual")).toBe(true);
+      setVisualBlockCursor(false);
+      expect(body.classList.contains("message__body--text-select-visual")).toBe(false);
+    });
+
+    it("toggles the compose input's block-cursor class", () => {
+      const input = document.createElement("input");
+      input.value = "abc";
+      document.body.appendChild(input);
+      enterComposeTextSelect();
+
+      setVisualBlockCursor(true, input);
+      expect(input.classList.contains("input-bar__field--text-select-visual")).toBe(true);
+      setVisualBlockCursor(false, input);
+      expect(input.classList.contains("input-bar__field--text-select-visual")).toBe(false);
+    });
+
+    it("drops the class on exit", () => {
+      const body = document.createElement("div");
+      body.textContent = "abc";
+      document.body.appendChild(body);
+      enterMessageTextSelect(body);
+      setVisualBlockCursor(true);
+
+      exitTextSelect();
+      expect(body.classList.contains("message__body--text-select-visual")).toBe(false);
     });
   });
 });

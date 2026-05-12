@@ -1344,6 +1344,14 @@ body {
   outline-color: var(--accent-primary);
 }
 
+/* Visual sub-mode: hide the I-beam so the selection highlight reads as a
+   vim-style block cursor. The keymap layer keeps the selection at least one
+   character wide while in Visual, so there's always a visible block. */
+.message__body--text-select-visual,
+.input-bar__field--text-select-visual {
+  caret-color: transparent;
+}
+
 .message--system .message__body {
   color: var(--msg-system);
   font-style: italic;

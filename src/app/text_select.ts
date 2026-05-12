@@ -55,6 +55,14 @@ export function enterMessageTextSelect(bodyEl: HTMLElement): void {
   }
 
   AppState.set("textSelectMode", "message");
+
+  // If the user was already in Visual when they entered text-select, apply
+  // the block-cursor styling immediately rather than waiting for a Normal↔Visual
+  // transition that may never come.
+  if (modeManager.current === Mode.Visual) {
+    primeVisualSelection();
+    setVisualBlockCursor(true);
+  }
 }
 
 /**
@@ -74,6 +82,9 @@ export function enterComposeTextSelect(): void {
  */
 export function exitTextSelect(): void {
   if (AppState.get("textSelectMode") === null) return;
+
+  // Drop the block-cursor class from whichever target was active.
+  setVisualBlockCursor(false);
 
   if (_messageBodyEl) {
     _messageBodyEl.classList.remove("message__body--text-select");
@@ -101,6 +112,60 @@ export function exitTextSelect(): void {
   _savedContentEditable = null;
   _savedTabIndex = null;
   AppState.set("textSelectMode", null);
+}
+
+/**
+ * Toggle the block-cursor CSS class on whichever element is the active
+ * text-select target. The CSS rule hides the native caret-color so the
+ * selection highlight (kept at least one character wide by the keymap layer)
+ * reads as a vim-style block.
+ */
+export function setVisualBlockCursor(on: boolean, composeField?: HTMLInputElement): void {
+  const target = AppState.get("textSelectMode");
+  if (target === "message" && _messageBodyEl) {
+    _messageBodyEl.classList.toggle("message__body--text-select-visual", on);
+  } else if (target === "compose" && composeField) {
+    composeField.classList.toggle("input-bar__field--text-select-visual", on);
+  }
+}
+
+/**
+ * Ensure the active selection covers at least one character so the block
+ * cursor has something to highlight. Called when entering Visual mode.
+ *
+ * For "message" target, extends `window.getSelection()` forward by a
+ * character if it's currently collapsed. For "compose", expands the input's
+ * selection range. If the caret is already at the end of the content, falls
+ * back to extending backward so the block lands on the previous character
+ * rather than disappearing past the end.
+ */
+export function primeVisualSelection(composeField?: HTMLInputElement): void {
+  const target = AppState.get("textSelectMode");
+
+  if (target === "message" && _messageBodyEl) {
+    const sel = window.getSelection();
+    if (!sel) return;
+    if (!sel.isCollapsed) return;
+    // Try extending forward; if the caret is at the very end, try backward.
+    const before = sel.toString();
+    sel.modify("extend", "forward", "character");
+    if (sel.toString() === before) {
+      sel.modify("extend", "backward", "character");
+    }
+    return;
+  }
+
+  if (target === "compose" && composeField) {
+    const start = composeField.selectionStart ?? 0;
+    const end = composeField.selectionEnd ?? 0;
+    if (start !== end) return;
+    const len = composeField.value.length;
+    if (end < len) {
+      composeField.setSelectionRange(start, end + 1, "forward");
+    } else if (start > 0) {
+      composeField.setSelectionRange(start - 1, end, "backward");
+    }
+  }
 }
 
 /**

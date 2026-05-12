@@ -48,6 +48,8 @@ import {
   quoteTextSelectionIntoCompose,
   modifyMessageSelection,
   modifyComposeSelection,
+  setVisualBlockCursor,
+  primeVisualSelection,
 } from "./text_select.js";
 import { loadQuarkrc } from "../ipc/config.js";
 import type { ParsedRc } from "../ipc/types.js";
@@ -937,6 +939,19 @@ export function setupKeyboard(components: AppComponents): void {
     // (Visual is the one mode where text-select makes sense alongside vim mode.)
     if (to === Mode.Insert || to === Mode.Command) {
       exitTextSelect();
+    }
+
+    // Visual ↔ Normal while text-select is active: toggle the block-cursor
+    // styling. Entering Visual also primes the selection so it covers at
+    // least one character — vim shows the character under the cursor as
+    // highlighted as soon as you press `v`.
+    if (AppState.get("textSelectMode") !== null) {
+      if (to === Mode.Visual) {
+        primeVisualSelection(input.getFieldElement());
+        setVisualBlockCursor(true, input.getFieldElement());
+      } else if (from === Mode.Visual) {
+        setVisualBlockCursor(false, input.getFieldElement());
+      }
     }
   });
 
