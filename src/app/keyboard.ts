@@ -46,7 +46,6 @@ import {
   exitTextSelect,
   copyTextSelection,
   quoteTextSelectionIntoCompose,
-  pasteAtComposeCursor,
   modifyMessageSelection,
   modifyComposeSelection,
 } from "./text_select.js";
@@ -102,6 +101,10 @@ function registerDefaultBindings(): void {
   // copy / paste
   keymapManager.nmap("y", "copy-message");
   keymapManager.nmap("p", "paste-to-input");
+
+  // Quote-selection — text-select Visual mode only. Outside text-select the
+  // action is unhandled (no-op), so binding it globally costs nothing.
+  keymapManager.nmap(">", "quote-selection");
 
   // close — clears selection / reply / thread for the active panel
   keymapManager.nmap("Escape", "close");
@@ -419,144 +422,134 @@ function extractMentionQuery(value: string): string | null {
 // ── Text-select submode keyboard handler ──────────────────────────────────────
 
 /**
+ * Translate a movement direction + active target into the appropriate
+ * Selection.modify / input-selection call.
+ *
+ * Direction is given in semantic vim terms (up/down/left/right). Compose-box
+ * "vertical" movement uses word granularity (the field is single-line, so
+ * line granularity would just bounce to either end).
+ */
+function moveTextSelection(
+  components: AppComponents,
+  dir: "up" | "down" | "left" | "right",
+): void {
+  const target = AppState.get("textSelectMode");
+  const alter: "move" | "extend" = modeManager.current === Mode.Visual ? "extend" : "move";
+
+  if (target === "message") {
+    const direction = dir === "up" || dir === "left" ? "backward" : "forward";
+    const granularity = dir === "up" || dir === "down" ? "line" : "character";
+    modifyMessageSelection(alter, direction, granularity);
+  } else if (target === "compose") {
+    const field = components.input.getFieldElement();
+    const direction = dir === "up" || dir === "left" ? "backward" : "forward";
+    const granularity = dir === "up" || dir === "down" ? "word" : "character";
+    modifyComposeSelection(field, alter, direction, granularity);
+  }
+}
+
+/**
  * Routes keys when text-select mode is active.
  *
- * Returns true if the key was consumed (caller should not fall through to the
- * normal panel keymap), false to defer to the regular handler.
+ * Resolves through the keymap so user remappings (e.g. ijkl-nav) apply here
+ * too — we switch on the resolved action name (`nav-down`, `copy-message`, …)
+ * rather than the literal key, so the text-select layer inherits whatever
+ * movement scheme the user has configured.
  *
- * Layout:
- *   - Visual + text-select: h/j/k/l/arrows extend selection.
- *   - Normal + text-select: h/j/k/l/arrows move the caret (no selection).
- *   - y         → copy current selection
- *   - >         → quote current selection into compose
- *   - p         → (compose target only) paste clipboard at caret
- *   - v         → enter Visual mode (text-select stays active)
- *   - Escape    → handled by the outer Escape branch; not seen here
+ * Returns true to consume the key (preventing it from reaching the focused
+ * contenteditable / input). The handler preventDefault's everything except
+ * Ctrl/Cmd/Alt combos so destructive keys (Backspace, Enter, Tab, raw
+ * character typing) can't reach the focused editable region.
  */
 function handleTextSelectKeydown(e: KeyboardEvent, components: AppComponents): boolean {
   const { input } = components;
   const target = AppState.get("textSelectMode");
   if (target === null) return false;
 
-  // Always let modifier combos (Ctrl/Cmd/Alt) through so browser copy/cut/etc.
-  // and our Ctrl+K palette still work.
+  // Let modifier combos (Ctrl/Cmd/Alt) through so browser copy/cut/paste/
+  // select-all and our Ctrl+K palette still work without being shadowed.
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
 
-  const inVisual = modeManager.current === Mode.Visual;
-  const alter: "move" | "extend" = inVisual ? "extend" : "move";
-
-  switch (e.key) {
-    case "v":
-      // Enter Visual mode so subsequent movement keys extend the selection.
-      modeManager.transition(Mode.Visual);
-      e.preventDefault();
-      return true;
-
-    case "y":
-      copyTextSelection(components);
-      // Exit text-select after a successful copy to match the "command-and-exit"
-      // feel of vim's `y` in visual mode.
-      exitTextSelect();
-      if (inVisual) modeManager.transition(Mode.Normal);
-      e.preventDefault();
-      return true;
-
-    case ">":
-      quoteTextSelectionIntoCompose(components);
-      e.preventDefault();
-      return true;
-
-    case "p":
-      if (target === "compose") {
-        void pasteAtComposeCursor(components);
-        e.preventDefault();
-        return true;
-      }
-      // For message target, `p` has no defined meaning — fall through to the
-      // panel keymap (where it would normally trigger paste-to-input, but we
-      // don't want to leave text-select silently). Treat as no-op.
-      e.preventDefault();
-      return true;
-
-    case "h":
-    case "ArrowLeft":
-      if (target === "message") {
-        modifyMessageSelection(alter, "backward", "character");
-      } else {
-        modifyComposeSelection(input.getFieldElement(), alter, "backward", "character");
-      }
-      e.preventDefault();
-      return true;
-
-    case "l":
-    case "ArrowRight":
-      if (target === "message") {
-        modifyMessageSelection(alter, "forward", "character");
-      } else {
-        modifyComposeSelection(input.getFieldElement(), alter, "forward", "character");
-      }
-      e.preventDefault();
-      return true;
-
-    case "j":
-    case "ArrowDown":
-      // Compose box is single-line so down moves to end. Message bodies wrap,
-      // so use "line" granularity to move down a visual line.
-      if (target === "message") {
-        modifyMessageSelection(alter, "forward", "line");
-      } else {
-        modifyComposeSelection(input.getFieldElement(), alter, "forward", "word");
-      }
-      e.preventDefault();
-      return true;
-
-    case "k":
-    case "ArrowUp":
-      if (target === "message") {
-        modifyMessageSelection(alter, "backward", "line");
-      } else {
-        modifyComposeSelection(input.getFieldElement(), alter, "backward", "word");
-      }
-      e.preventDefault();
-      return true;
-
-    case "w":
-      if (target === "message") {
-        modifyMessageSelection(alter, "forward", "word");
-      } else {
-        modifyComposeSelection(input.getFieldElement(), alter, "forward", "word");
-      }
-      e.preventDefault();
-      return true;
-
-    case "b":
-      if (target === "message") {
-        modifyMessageSelection(alter, "backward", "word");
-      } else {
-        modifyComposeSelection(input.getFieldElement(), alter, "backward", "word");
-      }
-      e.preventDefault();
-      return true;
-
-    case "i":
-    case "a":
-      // Re-enter Insert mode from a compose-target text-select. The caret stays
-      // where the user navigated to. For message-target, fall back to default
-      // handling (no-op via panel keymap won't fire since we'd return true).
-      if (target === "compose") {
-        // Exit text-select first so the mode listener doesn't bounce us back.
-        exitTextSelect();
-        modeManager.transition(Mode.Insert);
-        input.focus();
-        e.preventDefault();
-        return true;
-      }
-      e.preventDefault();
-      return true;
+  // Shift+modifier-only events (pressing Shift alone, etc.) carry no semantic
+  // payload — let them through so the user can prepare for the next key combo.
+  if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") {
+    return false;
   }
 
-  // Anything else — let the panel keymap take over (covers things like `:`).
-  return false;
+  // Default: consume the key so contenteditable / input don't process it.
+  // This is what blocks Backspace, Delete, Enter, Tab, and raw typing from
+  // mutating the focused region.
+  e.preventDefault();
+  e.stopPropagation();
+
+  // Resolve through the keymap so `nmap k nav-down` etc. apply here too.
+  const panel = AppState.get("activePanel");
+  const activeContext: KeyContext = panel === "timeline" ? "timeline"
+    : panel === "roomlist" ? "roomlist"
+    : "global";
+  const result = keymapManager.resolveKey(e.key, activeContext);
+
+  if (result.kind === "partial") return true;
+  const action = result.kind === "action" ? result.action : null;
+
+  switch (action) {
+    case "nav-up":    moveTextSelection(components, "up"); return true;
+    case "nav-down":  moveTextSelection(components, "down"); return true;
+    case "nav-left":  moveTextSelection(components, "left"); return true;
+    case "nav-right": moveTextSelection(components, "right"); return true;
+
+    case "mode-visual":
+      modeManager.transition(Mode.Visual);
+      return true;
+
+    case "mode-insert":
+      // Re-enter Insert at the current caret. exitTextSelect() before the
+      // transition so the mode listener doesn't try to bounce us back into
+      // text-select. The compose field stays focused, so the caret position
+      // the user navigated to is preserved for typing.
+      exitTextSelect();
+      modeManager.transition(Mode.Insert);
+      input.focus();
+      return true;
+
+    case "mode-command":
+      exitTextSelect();
+      dispatchAction("mode-command", components);
+      return true;
+
+    case "copy-message":
+      copyTextSelection(components);
+      exitTextSelect();
+      if (modeManager.current === Mode.Visual) modeManager.transition(Mode.Normal);
+      return true;
+
+    case "paste-to-input":
+      // We don't read the system clipboard programmatically — on macOS that
+      // pops a permission dialog every time. Instead, exit text-select with
+      // the caret preserved and drop into Insert; the user pastes with
+      // Ctrl/Cmd+V at the cursor.
+      if (target === "compose") {
+        const field = input.getFieldElement();
+        const start = field.selectionStart;
+        const end = field.selectionEnd;
+        exitTextSelect();
+        modeManager.transition(Mode.Insert);
+        if (start !== null && end !== null) {
+          field.setSelectionRange(start, end);
+        }
+      }
+      return true;
+
+    case "quote-selection":
+      quoteTextSelectionIntoCompose(components);
+      return true;
+
+    default:
+      // Block anything else — typing, Backspace, Enter, Tab, unrelated
+      // actions (reply/redact/etc.) — to keep the text-select layer
+      // read-only and non-destructive. The user can Escape to leave first.
+      return true;
+  }
 }
 
 // ── Insert mode keyboard handlers ─────────────────────────────────────────────

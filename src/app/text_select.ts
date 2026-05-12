@@ -170,33 +170,6 @@ export function quoteTextSelectionIntoCompose(components: AppComponents): void {
 }
 
 /**
- * Paste clipboard text into the compose box at the current caret position.
- * Used by 'p' in Normal+text-select-compose mode.
- */
-export async function pasteAtComposeCursor(components: AppComponents): Promise<void> {
-  const { input } = components;
-  const field = input.getFieldElement();
-
-  let clipboardText = "";
-  try {
-    clipboardText = await navigator.clipboard.readText();
-  } catch {
-    showToast("Clipboard read denied");
-    return;
-  }
-  if (!clipboardText) return;
-
-  const start = field.selectionStart ?? field.value.length;
-  const end = field.selectionEnd ?? field.value.length;
-  const newValue = field.value.slice(0, start) + clipboardText + field.value.slice(end);
-  field.value = newValue;
-  const caret = start + clipboardText.length;
-  field.selectionStart = field.selectionEnd = caret;
-  // Fire input event so any listeners (mention/shortcode autocomplete) update.
-  field.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
-/**
  * Extend (or move, in Normal) the selection by the given granularity and
  * direction. Used by Visual mode in text-select to grow the selection with
  * h/j/k/l. Only applies to "message" target — compose uses the input's
