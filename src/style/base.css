@@ -1333,15 +1333,15 @@ body {
 
 /* Text-select mode: caret is placed inside this message body via `o`. */
 .message__body--text-select {
-  outline: 1px dashed color-mix(in srgb, var(--accent-primary) 60%, transparent);
+  outline: 1px dashed color-mix(in srgb, var(--cursor) 60%, transparent);
   outline-offset: 2px;
   border-radius: 2px;
-  caret-color: var(--accent-primary);
+  caret-color: var(--cursor);
   user-select: text;
 }
 
 .message__body--text-select:focus {
-  outline-color: var(--accent-primary);
+  outline-color: var(--cursor);
 }
 
 /* Block-cursor styling: in text-select Normal mode the keymap layer keeps a
@@ -1351,6 +1351,33 @@ body {
 .message__body--text-select-block,
 .input-bar__field--text-select-block {
   caret-color: transparent;
+}
+
+/* Normal-mode block: render the 1-char selection with the theme's cursor
+   color so the block pops like vim's "Cursor" highlight group. Foreground
+   uses --bg for an inverse-video effect that stays readable on any theme. */
+.message__body--text-select-block::selection,
+.message__body--text-select-block *::selection {
+  background-color: var(--cursor);
+  color: var(--bg);
+}
+.input-bar__field--text-select-block::selection {
+  background-color: var(--cursor);
+  color: var(--bg);
+}
+
+/* Visual-mode override: while extending a selection, fall back to the
+   theme's standard selection palette (muted) so the user can tell the
+   difference between "this is my cursor" (cursor color) and "this is what
+   I've selected" (selection color). Class is toggled on Normal↔Visual. */
+.message__body--text-select-visual::selection,
+.message__body--text-select-visual *::selection {
+  background-color: var(--selection-bg);
+  color: var(--selection-fg);
+}
+.input-bar__field--text-select-visual::selection {
+  background-color: var(--selection-bg);
+  color: var(--selection-fg);
 }
 
 .message--system .message__body {

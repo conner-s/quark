@@ -87,8 +87,9 @@ export function enterComposeTextSelect(composeField?: HTMLInputElement): void {
 export function exitTextSelect(): void {
   if (AppState.get("textSelectMode") === null) return;
 
-  // Drop the block-cursor class from whichever target was active.
+  // Drop both selection-styling classes from whichever target was active.
   setBlockCursor(false);
+  setVisualModeClass(false);
 
   if (_messageBodyEl) {
     _messageBodyEl.classList.remove("message__body--text-select");
@@ -130,6 +131,21 @@ export function setBlockCursor(on: boolean, composeField?: HTMLInputElement): vo
     _messageBodyEl.classList.toggle("message__body--text-select-block", on);
   } else if (target === "compose" && composeField) {
     composeField.classList.toggle("input-bar__field--text-select-block", on);
+  }
+}
+
+/**
+ * Toggle the Visual-mode override class. When on, the selection highlight
+ * uses the theme's muted selection palette (`--selection-bg`/`--selection-fg`)
+ * instead of the bright cursor color — distinguishing "this is what I've
+ * selected" from "this is my cursor".
+ */
+export function setVisualModeClass(on: boolean, composeField?: HTMLInputElement): void {
+  const target = AppState.get("textSelectMode");
+  if (target === "message" && _messageBodyEl) {
+    _messageBodyEl.classList.toggle("message__body--text-select-visual", on);
+  } else if (target === "compose" && composeField) {
+    composeField.classList.toggle("input-bar__field--text-select-visual", on);
   }
 }
 

@@ -7,6 +7,7 @@ import {
   modifyComposeSelection,
   primeBlockSelection,
   setBlockCursor,
+  setVisualModeClass,
   collapseToFocus,
 } from "./text_select";
 import { AppState } from "./state";
@@ -287,6 +288,42 @@ describe("text_select", () => {
 
       exitTextSelect();
       expect(body.classList.contains("message__body--text-select-block")).toBe(false);
+    });
+  });
+
+  describe("setVisualModeClass", () => {
+    it("toggles the message-body visual class for muted selection palette", () => {
+      const body = document.createElement("div");
+      body.textContent = "hi";
+      document.body.appendChild(body);
+      enterMessageTextSelect(body);
+
+      setVisualModeClass(true);
+      expect(body.classList.contains("message__body--text-select-visual")).toBe(true);
+      setVisualModeClass(false);
+      expect(body.classList.contains("message__body--text-select-visual")).toBe(false);
+    });
+
+    it("toggles the compose input's visual class", () => {
+      const input = document.createElement("input");
+      input.value = "hi";
+      document.body.appendChild(input);
+      enterComposeTextSelect(input);
+
+      setVisualModeClass(true, input);
+      expect(input.classList.contains("input-bar__field--text-select-visual")).toBe(true);
+      setVisualModeClass(false, input);
+      expect(input.classList.contains("input-bar__field--text-select-visual")).toBe(false);
+    });
+
+    it("drops on exit", () => {
+      const body = document.createElement("div");
+      body.textContent = "hi";
+      document.body.appendChild(body);
+      enterMessageTextSelect(body);
+      setVisualModeClass(true);
+      exitTextSelect();
+      expect(body.classList.contains("message__body--text-select-visual")).toBe(false);
     });
   });
 

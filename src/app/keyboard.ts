@@ -51,6 +51,7 @@ import {
   primeBlockSelection,
   collapseMessageSelectionToStart,
   collapseToFocus,
+  setVisualModeClass,
 } from "./text_select.js";
 import { loadQuarkrc } from "../ipc/config.js";
 import type { ParsedRc } from "../ipc/types.js";
@@ -966,6 +967,15 @@ export function setupKeyboard(components: AppComponents): void {
     if (AppState.get("textSelectMode") !== null && from === Mode.Visual && to === Mode.Normal) {
       collapseToFocus(input.getFieldElement());
       primeBlockSelection(input.getFieldElement());
+    }
+
+    // Toggle the Visual-mode selection-color override so the highlight reads
+    // muted (theme `--selection-bg`/`--selection-fg`) while extending in
+    // Visual and bright (theme `--cursor`) when it represents the block
+    // cursor in Normal. Drops on Insert/Command too — exitTextSelect handles
+    // those, this is the in-text-select toggle.
+    if (AppState.get("textSelectMode") !== null) {
+      setVisualModeClass(to === Mode.Visual, input.getFieldElement());
     }
   });
 
