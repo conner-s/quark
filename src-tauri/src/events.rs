@@ -23,10 +23,28 @@ use matrix_sdk::{
     Client, Room,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use tauri::{Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 use tracing::{error, warn};
+
+/// Wall-clock time (ms since UNIX epoch) when the app finished initializing.
+///
+/// Used to suppress OS notifications for messages whose `origin_server_ts`
+/// predates this moment — those events arrive via the catch-up sync at
+/// startup and have already been "seen" in the user's sense (they were sent
+/// while the app was closed). Without this guard, every unread message
+/// fires a notification on launch.
+pub static STARTUP_TIME_MS: OnceLock<u64> = OnceLock::new();
+
+/// Record the moment startup completed. Called once from `lib.rs::run()`.
+pub fn init_startup_time() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let _ = STARTUP_TIME_MS.set(now);
+}
 
 use crate::{
     matrix::{rooms::RoomInfo, timeline::TimelineEvent},
@@ -169,7 +187,14 @@ pub fn setup_sync_event_handlers(client: &Client, app_handle: &tauri::AppHandle)
                             .and_then(|w: tauri::WebviewWindow| w.is_focused().ok())
                             .unwrap_or(false);
 
-                        emit_notification && !is_own_message && !window_focused
+                        // Skip messages whose server timestamp predates app
+                        // startup — those come from the initial catch-up sync.
+                        let is_pre_startup = STARTUP_TIME_MS
+                            .get()
+                            .map(|&start_ms| timeline_event.timestamp < start_ms)
+                            .unwrap_or(false);
+
+                        emit_notification && !is_own_message && !window_focused && !is_pre_startup
                     };
 
                     if should_send_os_notification {

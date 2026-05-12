@@ -23,6 +23,11 @@ pub fn run() {
         )
         .try_init();
 
+    // Record the moment of app launch so the message event handler can
+    // suppress OS notifications for messages that predate startup (catch-up
+    // sync would otherwise fire a notification for every unread message).
+    events::init_startup_time();
+
     // Load persisted configs from disk (fall back to defaults if absent).
     let app_config = config::app_config::load_app_config();
     let notification_config = notifications::load_notification_config();
