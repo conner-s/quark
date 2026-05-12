@@ -733,8 +733,8 @@ quark/
   - [ ] Show user's profile fixed to the left side with the ability to update status and profile picture
   - [ ] Click through to DMs
   - [ ] Replaces existing list of all unparented rooms
-- [ ] Single-user DMs show in mailbox psuedo space
-- [ ] Multi-user rooms without a space show in another psuedospace (similar to mail icon) but with a group icon instead
+- [x] Single-user DMs show in mailbox psuedo space — `__dms__` filter narrowed to `is_direct && member_count <= 2`; group DMs flow into the new groups view
+- [x] Multi-user rooms without a space show in another psuedospace (similar to mail icon) but with a group icon instead — new `__groups__` pseudo-space (icon `#`) filters to rooms outside any space that aren't 1:1 DMs; pseudo-spaces are now driven by a `PSEUDO_SPACES` registry in `src/app/pseudo_spaces.ts` so the SpaceStrip and `selectSpace` share a single source of truth
 - [ ] Text selection; o on a message moves the cursor into the message for selection of the text.
   - [ ] If in text selection mode and visual mode, 'y' should copy selected text and '>' should insert selected text into the text box with md quote prefix i.e. `> quoted text here`
   - [ ] If I'm in insert mode and the compose box is not empty, I should enter text select mode in the compose box.

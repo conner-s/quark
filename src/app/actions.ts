@@ -61,6 +61,7 @@ import { BUILTIN_THEME_MAP } from "../theme/builtins.js";
 import { getAppConfig } from "../ipc/app_config.js";
 import { setCurrentThemeName } from "../ui/SettingsDialog.js";
 import { registerAnimatedUrl } from "./animated_urls.js";
+import { getPseudoSpace, sortByRecency } from "./pseudo_spaces.js";
 
 import type { AppComponents } from "../ui/App.js";
 import type { RoomInfo, TimelineEvent, RoomMember } from "../ipc/types.js";
@@ -804,44 +805,12 @@ export async function selectSpace(spaceId: string): Promise<void> {
   AppState.set("currentSpaceId", spaceId);
   spaceStrip.setActiveSpace(spaceId);
 
-  if (spaceId === "__home__") {
-    // Show rooms that are NOT in any space (and include DMs), sorted by recent activity
+  const pseudo = getPseudoSpace(spaceId);
+  if (pseudo) {
     const allRooms = AppState.get("roomListCache");
     const spaceRoomIds = new Set(AppState.get("spaceRoomIds"));
-    const homeRooms = allRooms
-      .filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id))
-      .sort((a, b) => {
-        const aTs = a.last_activity_ts ?? 0;
-        const bTs = b.last_activity_ts ?? 0;
-        if (bTs !== aTs) return bTs - aTs;
-        const aScore = a.notification_count * 2 + a.unread_count;
-        const bScore = b.notification_count * 2 + b.unread_count;
-        if (bScore !== aScore) return bScore - aScore;
-        return (a.name ?? "").localeCompare(b.name ?? "");
-      });
-    roomList.setRooms(homeRooms.map(roomInfoToEntry));
-    AppState.focusPanel("roomlist");
-    return;
-  }
-
-  if (spaceId === "__dms__") {
-    const allRooms = AppState.get("roomListCache");
-    const dms = allRooms
-      .filter((r) => r.is_direct)
-      .sort((a, b) => {
-        // Primary: most recent activity first (last_activity_ts descending)
-        const aTs = a.last_activity_ts ?? 0;
-        const bTs = b.last_activity_ts ?? 0;
-        if (bTs !== aTs) return bTs - aTs;
-        // Fallback: unread/notification score descending
-        const aScore = a.notification_count * 2 + a.unread_count;
-        const bScore = b.notification_count * 2 + b.unread_count;
-        if (bScore !== aScore) return bScore - aScore;
-        // Final tiebreak: alphabetical
-        return (a.name ?? "").localeCompare(b.name ?? "");
-      })
-      .map(roomInfoToEntry);
-    roomList.setRooms(dms);
+    const filtered = sortByRecency(allRooms.filter((r) => pseudo.filter(r, spaceRoomIds)));
+    roomList.setRooms(filtered.map(roomInfoToEntry));
     AppState.focusPanel("roomlist");
     return;
   }
@@ -2534,22 +2503,14 @@ export async function refreshRooms(): Promise<void> {
       }
     }
 
-    // Refresh the current space view with fresh data
+    // Refresh the current pseudo-space view with fresh data. Real spaces are
+    // refreshed by their own getSpaceChildren flow when re-selected.
     const spaceId = AppState.get("currentSpaceId");
-    if (!spaceId || spaceId === "__home__") {
-      const spaceRoomIds = new Set(AppState.get("spaceRoomIds"));
-      const homeRooms = rooms
-        .filter((r) => r.is_direct || !spaceRoomIds.has(r.room_id))
-        .sort((a, b) => {
-          const aTs = a.last_activity_ts ?? 0;
-          const bTs = b.last_activity_ts ?? 0;
-          if (bTs !== aTs) return bTs - aTs;
-          const aScore = a.notification_count * 2 + a.unread_count;
-          const bScore = b.notification_count * 2 + b.unread_count;
-          if (bScore !== aScore) return bScore - aScore;
-          return (a.name ?? "").localeCompare(b.name ?? "");
-        });
-      roomList.setRooms(homeRooms.map(roomInfoToEntry));
+    const pseudo = getPseudoSpace(spaceId ?? "__home__");
+    if (pseudo) {
+      const spaceRoomIdsSet = new Set(AppState.get("spaceRoomIds"));
+      const filtered = sortByRecency(rooms.filter((r) => pseudo.filter(r, spaceRoomIdsSet)));
+      roomList.setRooms(filtered.map(roomInfoToEntry));
     }
   } catch (err) {
     showError(`Failed to load rooms: ${err instanceof Error ? err.message : String(err)}`);

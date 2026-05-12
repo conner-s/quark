@@ -1,6 +1,7 @@
 // Space selector strip — narrow vertical column of space icons
 
 import { isAnimatedUrl } from "../app/animated_urls.js";
+import { PSEUDO_SPACES, isPseudoSpace } from "../app/pseudo_spaces.js";
 
 export interface SpaceItem {
   id: string;
@@ -114,29 +115,28 @@ export class SpaceStrip {
   private _render(): void {
     this._el.innerHTML = "";
 
-    // Home item always at top
-    this._el.appendChild(this._createItem({ id: "__home__", name: "Home" }, "⌂"));
+    const topPseudos = PSEUDO_SPACES.filter((p) => p.position === "top");
+    const bottomPseudos = PSEUDO_SPACES.filter((p) => p.position === "bottom");
+
+    for (const ps of topPseudos) {
+      this._el.appendChild(this._createItem({ id: ps.id, name: ps.label }, ps.icon));
+    }
 
     if (this._items.length > 0) {
-      const divider = document.createElement("div");
-      divider.className = "space-strip__divider";
-      divider.setAttribute("role", "separator");
-      this._el.appendChild(divider);
+      this._el.appendChild(this._createDivider());
     }
 
     for (const item of this._items) {
       this._el.appendChild(this._createItem(item));
     }
 
-    // DMs always after spaces
     if (this._items.length > 0) {
-      const divider = document.createElement("div");
-      divider.className = "space-strip__divider";
-      divider.setAttribute("role", "separator");
-      this._el.appendChild(divider);
+      this._el.appendChild(this._createDivider());
     }
 
-    this._el.appendChild(this._createItem({ id: "__dms__", name: "Direct Messages" }, "✉"));
+    for (const ps of bottomPseudos) {
+      this._el.appendChild(this._createItem({ id: ps.id, name: ps.label }, ps.icon));
+    }
 
     // Spacer pushes settings button to the bottom
     const spacer = document.createElement("div");
@@ -186,7 +186,7 @@ export class SpaceStrip {
     }
 
     el.addEventListener("click", () => this._selectId(item.id));
-    if (item.id !== "__home__" && item.id !== "__dms__") {
+    if (!isPseudoSpace(item.id)) {
       el.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         this._onContextMenu?.(item.id, e.clientX, e.clientY);
@@ -204,6 +204,13 @@ export class SpaceStrip {
     });
 
     return el;
+  }
+
+  private _createDivider(): HTMLElement {
+    const divider = document.createElement("div");
+    divider.className = "space-strip__divider";
+    divider.setAttribute("role", "separator");
+    return divider;
   }
 
   private _selectId(id: string): void {
