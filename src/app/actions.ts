@@ -40,6 +40,7 @@ import {
   getThumbnail,
   downloadMedia,
   saveMediaToTemp,
+  saveMediaToPath,
   openMediaExternally,
   sendPastedImage,
   sendFile,
@@ -2942,7 +2943,15 @@ export function openQuickReactPicker(eventId: string): void {
   const roomId = AppState.get("currentRoomId");
   getEmojiPacks(roomId ?? undefined)
     .then((packs) => {
+      // Build entries with mutable refs so async thumbnail resolutions can
+      // update each entry in place. Calling setCustomEmoji always filters the
+      // shared `custom` array, so every previously-resolved entry stays visible.
       const custom: CustomEmojiEntry[] = [];
+      const pushResolved = () => {
+        if (quickReactPicker.isVisible()) {
+          quickReactPicker.setCustomEmoji(custom.filter((c) => c.imageUrl));
+        }
+      };
       for (const pack of packs) {
         for (const entry of pack.emojis) {
           if (!entry.usage.includes("emoticon")) continue;
@@ -2956,31 +2965,22 @@ export function openQuickReactPicker(eventId: string): void {
           if (cached) {
             custom.push({ key: mxc, shortcode: entry.shortcode, imageUrl: cached });
           } else if (mxc.startsWith("mxc://")) {
-            // Resolve then update picker once available.
-            // Push a placeholder with imageUrl "" so the entry exists in `custom`
-            // (for correct mapping in the .then), but filter it out when calling
-            // setCustomEmoji so the picker never shows raw mxc:// text.
+            // Placeholder ref — mutated in place when thumbnail resolves so that
+            // every concurrent resolution sees a consistent `custom` snapshot.
+            const ref: CustomEmojiEntry = { key: mxc, shortcode: entry.shortcode, imageUrl: "" };
+            custom.push(ref);
             getThumbnail(mxc, 32, 32).then((dl) => {
               const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
               _emojiImageCache.set(mxc, dataUrl);
-              // Re-build if picker is still open, filtering out still-unresolved entries
-              if (quickReactPicker.isVisible()) {
-                quickReactPicker.setCustomEmoji(
-                  custom
-                    .map((c) => c.key === mxc ? { ...c, imageUrl: dataUrl } : c)
-                    .filter((c) => c.imageUrl)
-                );
-              }
+              ref.imageUrl = dataUrl;
+              pushResolved();
             }).catch(() => { /* non-critical */ });
-            custom.push({ key: mxc, shortcode: entry.shortcode, imageUrl: "" });
           } else {
             custom.push({ key: mxc, shortcode: entry.shortcode, imageUrl: mxc });
           }
         }
       }
-      if (quickReactPicker.isVisible()) {
-        quickReactPicker.setCustomEmoji(custom.filter((c) => c.imageUrl));
-      }
+      pushResolved();
     })
     .catch(() => { /* non-critical */ });
 }
@@ -3037,8 +3037,9 @@ export function setupMessageActionHandlers(): void {
     const { mxcUrl, filename, encryptionInfo } =
       (e as CustomEvent<{ mxcUrl?: string; filename?: string; encryptionInfo?: string }>).detail;
     if (!mxcUrl) return;
-    void openMediaExternally(mxcUrl, encryptionInfo, filename).catch((err) => {
-      console.error("[file] open failed:", err);
+    void saveFileWithDialog(mxcUrl, filename, encryptionInfo).catch((err) => {
+      console.error("[file] save failed:", err);
+      showError(`Failed to save file: ${err instanceof Error ? err.message : String(err)}`);
     });
   });
 
@@ -3083,12 +3084,55 @@ export function setupMessageActionHandlers(): void {
   });
 }
 
+/** True when running inside the Tauri WebView (rather than browser dev). */
+function _isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
 async function _openVideoExternally(mxcUrl: string, encryptionInfo?: string, filename?: string): Promise<void> {
   try {
     await openMediaExternally(mxcUrl, encryptionInfo, filename);
   } catch (err) {
     showError(`Failed to open video: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+/**
+ * Prompt the user for a save destination via Tauri's dialog plugin, then
+ * download the file from the homeserver and write it to the chosen path.
+ *
+ * The fallback path (used in browser dev / mock mode) downloads via a
+ * synthetic <a download> anchor so the same UX is testable without Tauri.
+ */
+async function saveFileWithDialog(
+  mxcUrl: string,
+  filename?: string,
+  encryptionInfo?: string,
+): Promise<void> {
+  const suggested = filename && filename.trim().length > 0 ? filename : "file";
+
+  if (_isTauriRuntime()) {
+    const dialog = await import("@tauri-apps/plugin-dialog");
+    const dest = await dialog.save({
+      defaultPath: suggested,
+      title: "Save file as",
+    });
+    if (!dest) return; // user cancelled
+    await saveMediaToPath(mxcUrl, dest, encryptionInfo);
+    showSuccess(`Saved to ${dest}`);
+    return;
+  }
+
+  // Browser/mock fallback: trigger a normal browser download.
+  const dl = await downloadMedia(mxcUrl, encryptionInfo);
+  const url = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = suggested;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 /**

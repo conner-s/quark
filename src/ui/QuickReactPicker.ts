@@ -26,6 +26,9 @@ const CATEGORY_GLYPHS = new Map<string, Set<string>>(
   EMOJI_CATEGORIES.map((cat) => [cat.id, new Set(cat.entries.map(([, glyph]) => glyph))])
 );
 
+/** Special category id reserved for MSC2545 custom emoji */
+const CUSTOM_CATEGORY_ID = "__custom__";
+
 export interface CustomEmojiEntry {
   /** Reaction key — for custom emoji this is `:shortcode:` */
   key: string;
@@ -51,6 +54,7 @@ export class QuickReactPicker {
   private _el: HTMLElement;
   private _inputEl: HTMLInputElement;
   private _categoryBarEl: HTMLElement;
+  private _customCatBtnEl!: HTMLButtonElement;
   private _gridEl: HTMLElement;
   private _buttons: HTMLButtonElement[] = [];
   /** Parallel data array — one entry per button, same order as _buttons */
@@ -106,7 +110,20 @@ export class QuickReactPicker {
     allBtn.addEventListener("click", () => this._selectCategory(null, allBtn));
     this._categoryBarEl.appendChild(allBtn);
 
-    // One button per category
+    // "Custom" button — hidden until setCustomEmoji() supplies entries
+    this._customCatBtnEl = document.createElement("button");
+    this._customCatBtnEl.type = "button";
+    this._customCatBtnEl.className = "quick-react-picker__cat-btn";
+    this._customCatBtnEl.textContent = "🧩";
+    this._customCatBtnEl.title = "Custom emoji";
+    this._customCatBtnEl.dataset.categoryId = CUSTOM_CATEGORY_ID;
+    this._customCatBtnEl.style.display = "none";
+    this._customCatBtnEl.addEventListener("click", () =>
+      this._selectCategory(CUSTOM_CATEGORY_ID, this._customCatBtnEl)
+    );
+    this._categoryBarEl.appendChild(this._customCatBtnEl);
+
+    // One button per built-in category
     for (const cat of EMOJI_CATEGORIES) {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -163,6 +180,13 @@ export class QuickReactPicker {
    */
   setCustomEmoji(entries: CustomEmojiEntry[]): void {
     this._customEmoji = entries;
+    this._customCatBtnEl.style.display = entries.length > 0 ? "" : "none";
+    // If the custom category is the active filter but no custom emoji remain,
+    // fall back to "All" so the grid isn't empty.
+    if (entries.length === 0 && this._activeCategoryId === CUSTOM_CATEGORY_ID) {
+      const allBtn = this._categoryBarEl.firstElementChild as HTMLButtonElement | null;
+      if (allBtn) this._selectCategory(null, allBtn);
+    }
     this._rebuildButtons();
     this._applyFilter(this._inputEl.value);
   }
@@ -286,20 +310,25 @@ export class QuickReactPicker {
 
     if (!q) {
       // No text query — apply category filter
-      const catGlyphs = this._activeCategoryId
+      const showingCustom = this._activeCategoryId === CUSTOM_CATEGORY_ID;
+      const catGlyphs = this._activeCategoryId && !showingCustom
         ? CATEGORY_GLYPHS.get(this._activeCategoryId)
         : null;
 
       for (let i = 0; i < this._buttons.length; i++) {
         const { key, imageUrl } = this._allData[i];
-        if (catGlyphs === null || catGlyphs === undefined) {
+        if (showingCustom) {
+          // Custom category — only show custom emoji (have an imageUrl)
+          this._buttons[i].style.display = imageUrl ? "" : "none";
+        } else if (this._activeCategoryId === null) {
           // "All" view — show everything
           this._buttons[i].style.display = "";
         } else if (imageUrl) {
-          // Custom emoji are always shown regardless of category
-          this._buttons[i].style.display = "";
+          // When a built-in category is active, hide custom emoji so they're
+          // only listed under the custom category.
+          this._buttons[i].style.display = "none";
         } else {
-          this._buttons[i].style.display = catGlyphs.has(key) ? "" : "none";
+          this._buttons[i].style.display = catGlyphs?.has(key) ? "" : "none";
         }
       }
       return;

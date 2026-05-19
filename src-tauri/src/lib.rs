@@ -44,6 +44,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(MatrixState(Mutex::new(None)))
         .manage(SyncState {
             handle: Mutex::new(None),
@@ -98,6 +99,7 @@ pub fn run() {
             // Media
             commands::download_media,
             commands::save_media_to_temp,
+            commands::save_media_to_path,
             commands::open_media_externally,
             commands::upload_media,
             commands::send_pasted_image,

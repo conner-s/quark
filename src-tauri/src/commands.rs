@@ -546,6 +546,49 @@ pub async fn save_media_to_temp(
         .ok_or_else(|| "Temp path is not valid UTF-8".to_string())
 }
 
+/// Download a media file from the homeserver and write it to a caller-supplied
+/// absolute path on disk. The frontend is responsible for letting the user
+/// choose the destination via `tauri-plugin-dialog`'s save dialog before
+/// invoking this command. Used by the file affordance "save as" flow.
+#[tauri::command]
+pub async fn save_media_to_path(
+    state: State<'_, MatrixState>,
+    cache_state: State<'_, CacheState>,
+    mxc_url: String,
+    encryption_info: Option<String>,
+    dest_path: String,
+) -> Result<String, String> {
+    let client = get_client(&state)?;
+
+    let dl = crate::matrix::media::download_media_with_cache(
+        &client,
+        &mxc_url,
+        false,
+        None,
+        None,
+        Some(&cache_state.0),
+        encryption_info.as_deref(),
+    )
+    .await?;
+
+    let bytes = crate::matrix::media::decode_base64(&dl.data_base64)?;
+    let dest = std::path::PathBuf::from(&dest_path);
+
+    // If the user picked a path inside a directory that doesn't exist, fail
+    // loudly rather than silently writing nothing — the dialog plugin guards
+    // against this on its side, but defence-in-depth is cheap.
+    if let Some(parent) = dest.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            return Err(format!("Destination directory does not exist: {}", parent.display()));
+        }
+    }
+
+    std::fs::write(&dest, &bytes)
+        .map_err(|e| format!("Failed to write file: {e}"))?;
+
+    Ok(dest_path)
+}
+
 /// Download a video/audio file to a temp path and open it in the system's
 /// default media player. Uses xdg-open (Linux), open (macOS), or start
 /// (Windows) directly, bypassing the shell-plugin URL scope restrictions.

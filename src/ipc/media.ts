@@ -102,6 +102,23 @@ export async function saveMediaToTemp(
 }
 
 /**
+ * Download media from the homeserver and write it to a caller-supplied path.
+ * The frontend should first prompt the user for a destination via the dialog
+ * plugin's save() call; this command just performs the download + write.
+ */
+export async function saveMediaToPath(
+  mxcUrl: string,
+  destPath: string,
+  encryptionInfo?: string | null,
+): Promise<string> {
+  return invoke<string>("save_media_to_path", {
+    mxcUrl,
+    destPath,
+    encryptionInfo: encryptionInfo ?? null,
+  });
+}
+
+/**
  * Download a video/audio file and open it in the system's default media player
  * (xdg-open on Linux, open on macOS). Uses a direct process spawn rather than
  * plugin:shell|open, which only handles http/https URLs in Tauri's scope.

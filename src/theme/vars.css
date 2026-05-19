@@ -40,8 +40,20 @@
   --reaction-count: #888888;
 
   /* ── Typography ──────────────────────────────────────────────────────── */
-  --font-family: "JetBrains Mono", "Fira Code", "Roboto Mono", monospace;
-  --font-family-messages: "Roboto";
+  /* Emoji fallbacks (Apple/Segoe/Noto/Twemoji + the CSS `emoji` generic) are
+     appended so glyphs missing from the mono fonts still render in color
+     instead of falling back to a tofu box or monochrome outline. */
+  --font-emoji:
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+    "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", emoji;
+  --font-family:
+    "JetBrains Mono", "Fira Code", "Roboto Mono", monospace,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+    "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", emoji;
+  --font-family-messages:
+    "Roboto",
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+    "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", emoji;
   --font-size: 14px;
   --line-height: 1.5;
   --message-spacing: 4px;
@@ -85,7 +97,10 @@
   --scrollbar-track: transparent;
 
   /* ── Focus ───────────────────────────────────────────────────────────── */
-  --focus-color: #00ff41;
+  /* Derived from --accent-primary so that the focused-message highlight bar
+     and other focus rings track the active theme. Themes that want a
+     dedicated focus colour can still override --focus-color directly. */
+  --focus-color: var(--accent-primary);
   --focus-width: 1px;
 
   /* ── Overlays & shadows ──────────────────────────────────────────────── */
