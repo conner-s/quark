@@ -50,8 +50,13 @@
     "JetBrains Mono", "Fira Code", "Roboto Mono", monospace,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
     "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", emoji;
+  /* sans-serif must come BEFORE the emoji fonts: per-character font fallback
+     walks this list looking for a glyph, and Noto Color Emoji (preinstalled on
+     most Linux distros) contains Latin chars including a ~1em-wide space —
+     without a Latin generic in between, spaces inherit emoji-sized advance
+     width and message bodies render with huge gaps between words. */
   --font-family-messages:
-    "Roboto",
+    "Roboto", sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
     "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", emoji;
   --font-size: 14px;
