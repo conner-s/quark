@@ -103,8 +103,9 @@ export async function saveMediaToTemp(
 
 /**
  * Download media from the homeserver and write it to a caller-supplied path.
- * The frontend should first prompt the user for a destination via the dialog
- * plugin's save() call; this command just performs the download + write.
+ * The frontend should first prompt the user for a destination via the in-app
+ * save modal; this command just performs the download + write. Tilde-expansion
+ * and parent-directory creation are handled by the backend.
  */
 export async function saveMediaToPath(
   mxcUrl: string,
@@ -116,6 +117,14 @@ export async function saveMediaToPath(
     destPath,
     encryptionInfo: encryptionInfo ?? null,
   });
+}
+
+/**
+ * Get the user's default download directory (XDG_DOWNLOAD_DIR or `~/Downloads`).
+ * Used to pre-populate the save modal's folder input.
+ */
+export async function getDefaultSaveDir(): Promise<string> {
+  return invoke<string>("get_default_save_dir");
 }
 
 /**

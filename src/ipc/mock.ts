@@ -459,6 +459,8 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     case "save_media_to_path":
       console.log("[mock] save_media_to_path", args);
       return (args?.destPath as string) ?? "/tmp/quark-mock-save.bin";
+    case "get_default_save_dir":
+      return "/tmp/quark-mock-downloads";
     case "open_media_externally":
       console.log("[mock] open_media_externally", args);
       return null;

@@ -547,9 +547,12 @@ pub async fn save_media_to_temp(
 }
 
 /// Download a media file from the homeserver and write it to a caller-supplied
-/// absolute path on disk. The frontend is responsible for letting the user
-/// choose the destination via `tauri-plugin-dialog`'s save dialog before
-/// invoking this command. Used by the file affordance "save as" flow.
+/// path on disk. The frontend collects the destination via the in-app save
+/// modal before invoking this command. Used by the file affordance.
+///
+/// Tilde (`~`) at the start of the path is expanded to the user's home
+/// directory, and missing parent directories are created on demand — so the
+/// frontend can pass e.g. `~/Downloads/photo.jpg` without pre-checking.
 #[tauri::command]
 pub async fn save_media_to_path(
     state: State<'_, MatrixState>,
@@ -572,21 +575,56 @@ pub async fn save_media_to_path(
     .await?;
 
     let bytes = crate::matrix::media::decode_base64(&dl.data_base64)?;
-    let dest = std::path::PathBuf::from(&dest_path);
+    let expanded = expand_tilde(&dest_path);
 
-    // If the user picked a path inside a directory that doesn't exist, fail
-    // loudly rather than silently writing nothing — the dialog plugin guards
-    // against this on its side, but defence-in-depth is cheap.
-    if let Some(parent) = dest.parent() {
+    if let Some(parent) = expanded.parent() {
         if !parent.as_os_str().is_empty() && !parent.exists() {
-            return Err(format!("Destination directory does not exist: {}", parent.display()));
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create directory {}: {e}", parent.display()))?;
         }
     }
 
-    std::fs::write(&dest, &bytes)
+    std::fs::write(&expanded, &bytes)
         .map_err(|e| format!("Failed to write file: {e}"))?;
 
-    Ok(dest_path)
+    expanded.to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Saved path is not valid UTF-8".to_string())
+}
+
+/// Resolve the user's default download directory (XDG `XDG_DOWNLOAD_DIR`,
+/// `~/Downloads` on most Linux desktops, `~/Downloads` on macOS, etc.).
+/// Falls back to the home directory if no downloads dir is configured.
+/// Returns an absolute path as a UTF-8 string.
+#[tauri::command]
+pub fn get_default_save_dir() -> Result<String, String> {
+    let user_dirs = directories::UserDirs::new()
+        .ok_or_else(|| "Could not resolve user directories".to_string())?;
+
+    let path = user_dirs
+        .download_dir()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| user_dirs.home_dir().to_path_buf());
+
+    path.to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Download dir path is not valid UTF-8".to_string())
+}
+
+/// Expand a leading `~` to the user's home directory.
+fn expand_tilde(path: &str) -> std::path::PathBuf {
+    let trimmed = path.trim();
+    if let Some(rest) = trimmed.strip_prefix("~/") {
+        if let Some(home) = directories::UserDirs::new().map(|d| d.home_dir().to_path_buf()) {
+            return home.join(rest);
+        }
+    }
+    if trimmed == "~" {
+        if let Some(home) = directories::UserDirs::new().map(|d| d.home_dir().to_path_buf()) {
+            return home;
+        }
+    }
+    std::path::PathBuf::from(trimmed)
 }
 
 /// Download a video/audio file to a temp path and open it in the system's

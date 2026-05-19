@@ -41,6 +41,7 @@ import {
   downloadMedia,
   saveMediaToTemp,
   saveMediaToPath,
+  getDefaultSaveDir,
   openMediaExternally,
   sendPastedImage,
   sendFile,
@@ -69,6 +70,7 @@ import type { RoomInfo, TimelineEvent, RoomMember } from "../ipc/types.js";
 import type { ParsedCommand } from "../vim/commands.js";
 
 import { showToast, showError, showSuccess } from "../ui/NotificationToast.js";
+import { promptSaveFilePath } from "../ui/SaveFileDialog.js";
 import { showMainLayout } from "../ui/App.js";
 import packageJson from "../../package.json";
 
@@ -3084,11 +3086,6 @@ export function setupMessageActionHandlers(): void {
   });
 }
 
-/** True when running inside the Tauri WebView (rather than browser dev). */
-function _isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
 async function _openVideoExternally(mxcUrl: string, encryptionInfo?: string, filename?: string): Promise<void> {
   try {
     await openMediaExternally(mxcUrl, encryptionInfo, filename);
@@ -3098,41 +3095,33 @@ async function _openVideoExternally(mxcUrl: string, encryptionInfo?: string, fil
 }
 
 /**
- * Prompt the user for a save destination via Tauri's dialog plugin, then
+ * Prompt the user for a save destination via the in-app save modal, then
  * download the file from the homeserver and write it to the chosen path.
  *
- * The fallback path (used in browser dev / mock mode) downloads via a
- * synthetic <a download> anchor so the same UX is testable without Tauri.
+ * Uses an HTML modal rather than a native picker because rfd/xdg-portal
+ * crashes on some Linux setups with "No GSettings schemas are installed".
  */
 async function saveFileWithDialog(
   mxcUrl: string,
   filename?: string,
   encryptionInfo?: string,
 ): Promise<void> {
-  const suggested = filename && filename.trim().length > 0 ? filename : "file";
-
-  if (_isTauriRuntime()) {
-    const dialog = await import("@tauri-apps/plugin-dialog");
-    const dest = await dialog.save({
-      defaultPath: suggested,
-      title: "Save file as",
-    });
-    if (!dest) return; // user cancelled
-    await saveMediaToPath(mxcUrl, dest, encryptionInfo);
-    showSuccess(`Saved to ${dest}`);
-    return;
+  // Resolve the default downloads dir up front (failures fall back to "~/").
+  let defaultDir = "~/Downloads";
+  try {
+    defaultDir = await getDefaultSaveDir();
+  } catch {
+    /* keep fallback */
   }
 
-  // Browser/mock fallback: trigger a normal browser download.
-  const dl = await downloadMedia(mxcUrl, encryptionInfo);
-  const url = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = suggested;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  const dest = await promptSaveFilePath({
+    suggestedFilename: filename,
+    defaultDir,
+  });
+  if (!dest) return; // user cancelled
+
+  const writtenPath = await saveMediaToPath(mxcUrl, dest, encryptionInfo);
+  showSuccess(`Saved to ${writtenPath}`);
 }
 
 /**
