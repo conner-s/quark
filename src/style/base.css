@@ -5215,3 +5215,164 @@ a:hover {
   color: var(--accent-primary);
   background-color: color-mix(in srgb, var(--accent-primary) 12%, transparent);
 }
+
+/* ── Mobile mode ─────────────────────────────────────────────────────────────
+ * Activated by `body.quark-mobile`, set from src/app/mobile.ts when the
+ * viewport width <= 768px. Hides the desktop multi-column grid and stacks
+ * everything into a single full-width column; the space-strip + room-list
+ * become a left drawer revealed via the hamburger button or an edge-swipe.
+ * iOS specifics: safe-area insets, --keyboard-offset for the visual viewport.
+ */
+
+/* Mobile-only elements are hidden by default (desktop). */
+.mobile-top-bar,
+.mobile-backdrop {
+  display: none;
+}
+
+body.quark-mobile .mobile-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 12px;
+  padding-top: env(safe-area-inset-top);
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+  box-sizing: content-box;
+  background-color: var(--bg);
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+  z-index: 5;
+}
+
+.mobile-top-bar__btn {
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: 22px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.mobile-top-bar__btn:active {
+  background-color: var(--surface-hover-active);
+}
+
+.mobile-top-bar__title {
+  flex: 1;
+  text-align: center;
+  font-size: var(--font-size);
+  color: var(--accent-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Mobile layout: single column timeline, space + room list become a drawer. */
+body.quark-mobile .quark-layout,
+body.quark-mobile .quark-layout--thread-open,
+body.quark-mobile .quark-layout--member-list-open,
+body.quark-mobile .quark-layout--thread-open.quark-layout--member-list-open {
+  grid-template-columns: 1fr;
+  position: relative;
+}
+
+/* Space strip + room list collapse into a single off-canvas drawer.
+ * They share a translateX so they slide in together as one panel. */
+body.quark-mobile .space-strip,
+body.quark-mobile .room-list {
+  position: fixed;
+  top: 0;
+  height: 100%;
+  z-index: 20;
+  transform: translateX(-100%);
+  transition: transform 220ms ease;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 0 24px var(--shadow-color);
+}
+
+body.quark-mobile .space-strip {
+  left: 0;
+  width: var(--space-strip-width);
+  border-right: var(--border-width) solid var(--border-color);
+}
+
+body.quark-mobile .room-list {
+  /* Sits to the right of the space strip inside the drawer. */
+  left: var(--space-strip-width);
+  width: min(70vw, 280px);
+}
+
+body.quark-mobile-drawer-open .space-strip,
+body.quark-mobile-drawer-open .room-list {
+  transform: translateX(0);
+}
+
+body.quark-mobile .mobile-backdrop {
+  display: block;
+  position: fixed;
+  inset: 0;
+  background-color: var(--overlay-bg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+  z-index: 15;
+}
+
+body.quark-mobile-drawer-open .mobile-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The content area takes the full width on mobile and shifts up when the
+ * iOS virtual keyboard appears (--keyboard-offset tracks visualViewport). */
+body.quark-mobile .content-area {
+  grid-column: 1 / -1;
+  padding-bottom: var(--keyboard-offset, 0px);
+  transition: padding-bottom 120ms ease;
+}
+
+/* Input bar: respect iOS home indicator. */
+body.quark-mobile .input-bar-wrap {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Larger touch targets in the room list (drawer). */
+body.quark-mobile .room-list__item {
+  padding: 12px 12px;
+  min-height: 44px;
+  font-size: calc(var(--font-size) + 1px);
+}
+
+body.quark-mobile .space-strip__item,
+body.quark-mobile .space-strip__settings-btn {
+  width: 56px;
+  height: 56px;
+}
+
+/* Thread view + member list become full-screen overlays on mobile so the
+ * timeline isn't squeezed to nothing. */
+body.quark-mobile .thread-view,
+body.quark-mobile .member-list {
+  position: fixed;
+  inset: 0;
+  width: 100% !important;
+  z-index: 12;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Status bar stays out of the way on mobile — hidden by default, the mobile
+ * top bar carries the relevant info. */
+body.quark-mobile .status-bar {
+  display: none;
+}
+

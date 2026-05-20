@@ -638,8 +638,19 @@ quark/
   - Until Apple credentials are available, macOS builds can be produced unsigned (users must right-click → Open to bypass Gatekeeper).
 
 - [ ] **Mobile (Tauri v2)** — iOS and Android targets using the existing Tauri/Rust codebase.
-  - Phase 1: get a working build on Android first (easier toolchain setup than iOS) as a proof of concept.
-  - UI adaptations needed: responsive layout that collapses the space strip + room list into a bottom tab bar or slide-in drawer; virtual keyboard handling (ensure compose box stays above keyboard); replace vim-mode defaults with touch-friendly gesture equivalents (swipe to switch rooms, tap to select, long-press for context menu); vim mode remains available as a power-user toggle.
+  - Phase 1: get a working build on **iOS** first as a proof of concept (developer is on macOS, so the Xcode toolchain is already at hand).
+  - Spike in progress on branch `spike/mobile`:
+    - [x] Responsive CSS: viewport-driven mobile mode hides the space strip + room list and stacks the layout to a single full-width timeline column.
+    - [x] Slide-in left drawer that exposes the space strip + room list on mobile; backdrop dismisses it and selecting a room auto-closes it.
+    - [x] Slim mobile top bar with a hamburger button, current room name, and members toggle.
+    - [x] Virtual-keyboard handling via `visualViewport` resize → `--keyboard-offset` CSS var so the compose box stays above the keyboard.
+    - [x] iOS safe-area insets (`env(safe-area-inset-*)`) applied to top bar and input bar so the layout clears the notch and home indicator.
+    - [x] Touch gestures: edge-swipe right opens the drawer, swipe left on the drawer (or tap the backdrop) closes it.
+    - [x] Vim mode auto-disabled when mobile mode activates; re-enables on resize back to desktop.
+    - [ ] `pnpm tauri ios init` to generate the Xcode project under `src-tauri/gen/apple/` — requires the `aarch64-apple-ios-sim` and `x86_64-apple-ios` Rust targets for the simulator (`rustup target add aarch64-apple-ios-sim x86_64-apple-ios`).
+    - [ ] Smoke test on the iOS Simulator (`pnpm tauri ios dev`) and confirm matrix-sdk's SQLite store works under iOS sandboxing.
+  - UI adaptations still needed beyond the spike: long-press for context menu (replacing right-click), swipe between rooms in the timeline, pull-to-refresh, large-tap-target audit on pickers/dialogs, font-size adjust for high-DPI phones.
+  - Once iOS is working, Android follows by running `pnpm tauri android init` and adding the Android NDK / SDK paths; matrix-sdk supports both.
   - The Rust backend requires no changes — matrix-sdk supports mobile targets.
   - iOS requires a paid Apple Developer account ($99/yr) for device builds and App Store distribution; Android requires a Google Play account ($25 one-time) for Play Store distribution.
   - Track as a separate milestone after the desktop release is stable.

@@ -3,7 +3,7 @@
 
 import { mountApp } from "./ui/App.js";
 import { AppState } from "./app/state.js";
-import { setComponents, login, logout, attemptSessionRestore, selectRoom, selectSpace, refreshRooms, openSettings } from "./app/actions.js";
+import { setComponents, login, logout, attemptSessionRestore, selectRoom, selectSpace, refreshRooms, openSettings, toggleMemberList } from "./app/actions.js";
 import { setupKeyboard } from "./app/keyboard.js";
 import { setupPanelNav } from "./app/panels.js";
 import { startSync } from "./app/sync.js";
@@ -101,6 +101,11 @@ components.spaceStrip.onSelect((spaceId) => {
 
 components.spaceStrip.onSettingsClick(() => {
   openSettings();
+});
+
+// ── Mobile top bar wiring ────────────────────────────────────────────────────
+components.mobileTopBar.onMembersClick(() => {
+  toggleMemberList();
 });
 
 // ── GIF pause/resume on window focus ─────────────────────────────────────────

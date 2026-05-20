@@ -31,6 +31,10 @@ import { SpaceSettingsDialog } from "./SpaceSettingsDialog.js";
 import { DebugViewer } from "./DebugViewer.js";
 import { RevisionHistoryDialog } from "./RevisionHistoryDialog.js";
 import { ContextMenu } from "./ContextMenu.js";
+import { MobileTopBar } from "./MobileTopBar.js";
+import { initMobile, isMobile, closeDrawer, toggleDrawer, onMobileChange } from "../app/mobile.js";
+import { setupTouchGestures } from "../app/touch.js";
+import { AppState } from "../app/state.js";
 
 // ── AppComponents ─────────────────────────────────────────────────────────────
 
@@ -74,6 +78,10 @@ export interface AppComponents {
   debugViewer: DebugViewer;
   revisionHistoryDialog: RevisionHistoryDialog;
   contextMenu: ContextMenu;
+
+  // Mobile-only UI
+  mobileTopBar: MobileTopBar;
+  mobileBackdrop: HTMLElement;
 
   // Status
   statusBar: StatusBar;
@@ -125,6 +133,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   const debugViewer = new DebugViewer();
   const revisionHistoryDialog = new RevisionHistoryDialog();
   const contextMenu = new ContextMenu();
+  const mobileTopBar = new MobileTopBar();
 
   // ── Login screen ─────────────────────────────────────────────────────────
   container.appendChild(loginScreen.getElement());
@@ -143,6 +152,9 @@ export function mountApp(container: HTMLElement): AppComponents {
   // Column 3: Content area (room header + timeline + reply preview + input)
   const contentArea = document.createElement("div");
   contentArea.className = "content-area";
+
+  // Mobile-only top bar — hidden on desktop via CSS
+  contentArea.appendChild(mobileTopBar.getElement());
 
   contentArea.appendChild(roomHeader.getElement());
   contentArea.appendChild(timeline.getElement());
@@ -174,7 +186,41 @@ export function mountApp(container: HTMLElement): AppComponents {
   // Column 5: Member list sidebar (hidden by default)
   mainLayout.appendChild(memberList.getElement());
 
+  // Mobile drawer backdrop — sits over the content area while the drawer is open.
+  // Only visible when body has both .quark-mobile and .quark-mobile-drawer-open.
+  const mobileBackdrop = document.createElement("div");
+  mobileBackdrop.className = "mobile-backdrop";
+  mobileBackdrop.setAttribute("aria-hidden", "true");
+  mobileBackdrop.addEventListener("click", () => closeDrawer());
+  mainLayout.appendChild(mobileBackdrop);
+
   container.appendChild(mainLayout);
+
+  // ── Mobile mode bootstrap ─────────────────────────────────────────────────
+  initMobile();
+  setupTouchGestures(mainLayout, roomList.getElement());
+  mobileTopBar.onHamburgerClick(() => toggleDrawer());
+  // mobileTopBar.onMembersClick is wired from main.ts (needs the action layer).
+  // Close the drawer automatically after a room is selected (tap-and-go flow).
+  // Subscribe to currentRoomId rather than RoomList.onSelect — main.ts already
+  // owns that callback slot.
+  AppState.on("currentRoomId", () => {
+    if (isMobile()) closeDrawer();
+  });
+
+  // Keep the mobile top bar's title in sync with the active room.
+  const updateMobileTitle = (): void => {
+    const roomId = AppState.get("currentRoomId");
+    if (!roomId) {
+      mobileTopBar.setTitle("Quark");
+      return;
+    }
+    const room = AppState.get("roomListCache").find((r) => r.room_id === roomId);
+    mobileTopBar.setTitle(room?.name ?? roomId);
+  };
+  AppState.on("currentRoomId", updateMobileTitle);
+  AppState.on("roomListCache", updateMobileTitle);
+  onMobileChange(updateMobileTitle);
 
   // ── Align compose-box right edge with message bubbles ────────────────────
   // The timeline scrollbar takes space from its content area (classic scrollbars)
@@ -244,6 +290,8 @@ export function mountApp(container: HTMLElement): AppComponents {
     debugViewer,
     revisionHistoryDialog,
     contextMenu,
+    mobileTopBar,
+    mobileBackdrop,
     typingIndicator,
     mainLayout,
   };
