@@ -647,7 +647,9 @@ quark/
     - [x] iOS safe-area insets (`env(safe-area-inset-*)`) applied to top bar and input bar so the layout clears the notch and home indicator.
     - [x] Touch gestures: edge-swipe right opens the drawer, swipe left on the drawer (or tap the backdrop) closes it.
     - [x] Vim mode auto-disabled when mobile mode activates; re-enables on resize back to desktop.
-    - [ ] `pnpm tauri ios init` to generate the Xcode project under `src-tauri/gen/apple/` — requires the `aarch64-apple-ios-sim` and `x86_64-apple-ios` Rust targets for the simulator (`rustup target add aarch64-apple-ios-sim x86_64-apple-ios`).
+    - [x] `pnpm tauri ios init` generated the Xcode project at `gen/apple/quark.xcodeproj` (Tauri 2 places it at the repo root, not under `src-tauri/`). Cocoapods and `libimobiledevice` were installed automatically as part of `tauri ios init`.
+    - [x] `aarch64-apple-ios-sim` and `x86_64-apple-ios` Rust targets installed via rustup.
+    - [ ] **Toolchain gotcha**: Homebrew's `rust` is ahead of `~/.cargo/bin` on `PATH` and does not carry the iOS targets — only the rustup toolchain does. But the project's `Cargo.lock` is lockfile v4 (requires Rust ≥ 1.78) and the rustup default channel may be older. Either run `rustup update stable` so rustup's cargo is current, or `brew uninstall rust` and let rustup own the toolchain. Until this is resolved, `pnpm tauri ios dev` will fail at the Rust compile step.
     - [ ] Smoke test on the iOS Simulator (`pnpm tauri ios dev`) and confirm matrix-sdk's SQLite store works under iOS sandboxing.
   - UI adaptations still needed beyond the spike: long-press for context menu (replacing right-click), swipe between rooms in the timeline, pull-to-refresh, large-tap-target audit on pickers/dialogs, font-size adjust for high-DPI phones.
   - Once iOS is working, Android follows by running `pnpm tauri android init` and adding the Android NDK / SDK paths; matrix-sdk supports both.
