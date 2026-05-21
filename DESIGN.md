@@ -661,7 +661,15 @@ quark/
     - [x] Edge-swipe gesture suppresses native scroll on the timeline so swiping the drawer open doesn't also scroll messages behind it. While the drawer is open, the timeline is locked from touch/scroll.
     - [x] iOS app icons composited over a black background (previously rendered as white where iOS strips alpha).
   - UI adaptations still needed beyond the spike: swipe between rooms in the timeline, pull-to-refresh, font-size adjust for high-DPI phones.
-  - Once iOS is working, Android follows by running `pnpm tauri android init` and adding the Android NDK / SDK paths; matrix-sdk supports both.
+  - Android scaffolding (branch `feature/android-build`):
+    - [x] `pnpm tauri android init` generated the Gradle project at `src-tauri/gen/android/` (namespace `zone.derg.quark`, `minSdk = 24`, `compileSdk = 36`, NDK 28.2.13676358).
+    - [x] Rust Android targets installed: `aarch64-linux-android`, `armv7-linux-androideabi`, `i686-linux-android`, `x86_64-linux-android`.
+    - [x] `matrix-sdk` and `reqwest` switched to `rustls-tls` for `target_os = "android"` only — `native-tls` pulls in `openssl-sys`, which can't cross-compile to Android without a vendored OpenSSL build. Desktop + iOS keep `native-tls` so their existing TLS behaviour is unchanged.
+    - [x] Makefile targets `android-init`, `android-dev`, `android-build`, `android-build-debug` export `ANDROID_HOME`, `NDK_HOME`, and `JAVA_HOME` automatically (defaults assume the macOS Android Studio layout).
+    - [x] Debug APK builds cleanly for `aarch64-linux-android`.
+    - [ ] Smoke test on a physical device or emulator (`make android-dev`).
+    - [ ] Confirm matrix-sdk's SQLite store works under Android scoped storage.
+    - [ ] Android-specific icon set (currently the default Tauri launcher icons).
   - The Rust backend requires no changes — matrix-sdk supports mobile targets.
   - iOS requires a paid Apple Developer account ($99/yr) for device builds and App Store distribution; Android requires a Google Play account ($25 one-time) for Play Store distribution.
   - Track as a separate milestone after the desktop release is stable.

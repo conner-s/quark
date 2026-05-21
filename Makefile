@@ -32,6 +32,35 @@ build: ## Frontend production build (tsc + vite)
 tauri-build: ## Release Tauri bundle (.deb / .AppImage / etc)
 	pnpm tauri build
 
+# ---- Mobile (Android) ---------------------------------------------------
+# Tauri's Android tooling needs ANDROID_HOME, NDK_HOME, and JAVA_HOME on PATH.
+# Override these on the command line if your toolchain lives elsewhere.
+
+ANDROID_SDK_ROOT ?= $(HOME)/Library/Android/sdk
+ANDROID_NDK_VERSION ?= $(shell ls $(ANDROID_SDK_ROOT)/ndk 2>/dev/null | sort -V | tail -n 1)
+ANDROID_JAVA_HOME ?= $(shell /usr/libexec/java_home -v 21 2>/dev/null)
+
+android_env = \
+	ANDROID_HOME=$(ANDROID_SDK_ROOT) \
+	NDK_HOME=$(ANDROID_SDK_ROOT)/ndk/$(ANDROID_NDK_VERSION) \
+	JAVA_HOME=$(ANDROID_JAVA_HOME)
+
+.PHONY: android-init
+android-init: ## Generate the Android Studio project under src-tauri/gen/android
+	$(android_env) pnpm tauri android init
+
+.PHONY: android-dev
+android-dev: ## Run on a connected Android device / emulator (hot reload)
+	$(android_env) pnpm tauri android dev
+
+.PHONY: android-build
+android-build: ## Release APK + AAB for all four ABIs
+	$(android_env) pnpm tauri android build
+
+.PHONY: android-build-debug
+android-build-debug: ## Debug APK for arm64 only (fastest dev validation)
+	$(android_env) pnpm tauri android build --debug --apk --target aarch64
+
 # ---- Tests / checks -----------------------------------------------------
 
 .PHONY: test

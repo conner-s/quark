@@ -1,6 +1,6 @@
 [package]
 name = "quark"
-version = "0.6.2"
+version = "0.7.0"
 edition = "2021"
 description = "A CLI-styled Matrix client"
 
@@ -12,17 +12,26 @@ chrono = { version = "0.4", features = ["clock"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-matrix-sdk = { version = "0.9", features = ["e2e-encryption", "bundled-sqlite"] }
 toml = "0.8"
 directories = "6"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
-reqwest = { version = "0.12", features = ["json"] }
 mime = "0.3"
 sha2 = "0.10"
 rand = "0.8"
+
+# matrix-sdk and reqwest pick their TLS stack from features.
+# Desktop + iOS use native-tls (Security framework on Apple, OpenSSL on Linux);
+# Android can't cross-compile OpenSSL out of the box, so we use rustls there.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+matrix-sdk = { version = "0.9", features = ["e2e-encryption", "bundled-sqlite"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+matrix-sdk = { version = "0.9", default-features = false, features = ["e2e-encryption", "automatic-room-key-forwarding", "sqlite", "bundled-sqlite", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
