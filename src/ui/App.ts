@@ -32,9 +32,10 @@ import { DebugViewer } from "./DebugViewer.js";
 import { RevisionHistoryDialog } from "./RevisionHistoryDialog.js";
 import { ContextMenu } from "./ContextMenu.js";
 import { MobileTopBar } from "./MobileTopBar.js";
-import { initMobile, isMobile, closeDrawer, toggleDrawer, onMobileChange } from "../app/mobile.js";
+import { initMobile, isMobile, closeDrawer, toggleDrawer, onMobileChange, onDrawerChange } from "../app/mobile.js";
 import { setupTouchGestures } from "../app/touch.js";
 import { AppState } from "../app/state.js";
+import { toggleMemberList, closeThread } from "../app/actions.js";
 
 // ── AppComponents ─────────────────────────────────────────────────────────────
 
@@ -200,12 +201,34 @@ export function mountApp(container: HTMLElement): AppComponents {
   initMobile();
   setupTouchGestures(mainLayout, roomList.getElement());
   mobileTopBar.onHamburgerClick(() => toggleDrawer());
+  // Mobile-only: tapping the "Rooms" header in the drawer closes it. On
+  // desktop the header is purely decorative, so the listener is a no-op
+  // when isMobile() is false.
+  roomList.getHeaderElement().addEventListener("click", () => {
+    if (isMobile()) closeDrawer();
+  });
+  // Same affordance on the member-list: on mobile, the header doubles as a
+  // close button since the desktop sidebar's @ toggle in the top bar is
+  // covered by the full-screen overlay.
+  memberList.getHeaderElement().addEventListener("click", () => {
+    if (isMobile() && AppState.get("memberListVisible")) toggleMemberList();
+  });
   // mobileTopBar.onMembersClick is wired from main.ts (needs the action layer).
   // Close the drawer automatically after a room is selected (tap-and-go flow).
   // Subscribe to currentRoomId rather than RoomList.onSelect — main.ts already
   // owns that callback slot.
   AppState.on("currentRoomId", () => {
     if (isMobile()) closeDrawer();
+  });
+
+  // Mobile is one-overlay-at-a-time: opening the drawer dismisses the
+  // member list / thread view so they don't overlap. The opposite direction
+  // (opening member list closes drawer) is handled in toggleMemberList /
+  // openThread inside actions.ts.
+  onDrawerChange((open) => {
+    if (!open || !isMobile()) return;
+    if (AppState.get("memberListVisible")) toggleMemberList();
+    if (AppState.get("threadRootEventId")) closeThread();
   });
 
   // Keep the mobile top bar's title in sync with the active room.

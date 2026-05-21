@@ -157,9 +157,11 @@ pub fn run() {
             let window = app.get_webview_window("main")
                 .expect("no main window found");
             eprintln!("[quark] main window acquired");
+            #[cfg(desktop)]
             if let Some(icon) = app.default_window_icon() {
                 let _ = window.set_icon(icon.clone());
             }
+            let _ = window;
             Ok(())
         })
         .run(tauri::generate_context!())

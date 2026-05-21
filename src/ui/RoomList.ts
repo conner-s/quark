@@ -24,6 +24,7 @@ export interface RoomSection {
 
 export class RoomList {
   private _el: HTMLElement;
+  private _headerEl: HTMLElement;
   private _scrollEl: HTMLElement;
   private _rooms: RoomEntry[] = [];
   private _sections: RoomSection[] | null = null;
@@ -36,10 +37,10 @@ export class RoomList {
     this._el = document.createElement("div");
     this._el.className = "room-list";
 
-    const header = document.createElement("div");
-    header.className = "room-list__header";
-    header.textContent = "Rooms";
-    this._el.appendChild(header);
+    this._headerEl = document.createElement("div");
+    this._headerEl.className = "room-list__header";
+    this._headerEl.textContent = "Rooms";
+    this._el.appendChild(this._headerEl);
 
     this._scrollEl = document.createElement("div");
     this._scrollEl.className = "room-list__scroll";
@@ -51,6 +52,11 @@ export class RoomList {
 
     // Drag-to-resize handle at the right edge
     attachResizeHandle(this._el, "--room-list-width", "right", 120, 500);
+  }
+
+  /** Header element exposed so callers can wire mobile drawer-close behaviour. */
+  getHeaderElement(): HTMLElement {
+    return this._headerEl;
   }
 
   getElement(): HTMLElement {

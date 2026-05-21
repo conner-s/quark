@@ -10,9 +10,19 @@
   padding: 0;
 }
 
+/* Tap-and-hold "copy/save image" callout is rarely useful in-app and steals
+   normal taps on iOS. Selectable text re-enables it where it matters. */
+button,
+a,
+[role="button"] {
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
 html,
 body {
   height: 100%;
+  width: 100%;
   overflow: hidden;
   background-color: var(--bg);
   color: var(--fg);
@@ -21,6 +31,18 @@ body {
   line-height: var(--line-height);
   /* -webkit-font-smoothing: none; */
   /* font-smooth: never; */
+  /* iOS: prevent rubber-band overscroll that pushes the layout around. */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* iOS: kill the grey tap-highlight on every interactive element. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  /* iOS-only: also disable any browser-level pinch zoom that slips past the
+     viewport meta on older WebKit. Desktop browsers ignore this. */
+  touch-action: pan-x pan-y;
 }
 
 
@@ -60,8 +82,13 @@ body {
 
 #app {
   display: flex;
+  /* iOS Safari/WKWebView: 100vh resolves to the *largest* viewport (chrome
+     hidden) so content overflows the visible area. 100dvh tracks the actual
+     viewport. The fallback covers older WebKit that doesn't know dvh. */
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
+  width: 100dvw;
   overflow: hidden;
 }
 
@@ -2808,7 +2835,9 @@ a:hover {
   width: 100%;
   background-color: var(--bg);
   gap: 8px;
-  padding: 24px;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  overflow-y: auto;
 }
 
 .login-screen__banner {
@@ -2817,6 +2846,12 @@ a:hover {
   text-shadow: 0 0 var(--glow-radius) var(--glow-color),
     0 0 calc(var(--glow-radius) * 3) var(--glow-color);
   animation: banner-flicker 4s ease-in-out infinite;
+  /* The ASCII banner is ~42 chars wide. Shrink it to fit narrow viewports
+     so it doesn't bleed off the side on phones. */
+  font-size: min(var(--font-size), calc((100vw - 48px) / 28));
+  line-height: 1.1;
+  white-space: pre;
+  max-width: 100%;
 }
 
 @keyframes banner-flicker {
@@ -2837,6 +2872,11 @@ a:hover {
 .login-screen__divider {
   color: var(--border-color);
   margin: 4px 0;
+  /* 42 chars of `─`; scale so it never wraps on narrow screens. */
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 100%;
+  font-size: min(var(--font-size), calc((100vw - 48px) / 42));
 }
 
 .login-screen__form {
@@ -5284,8 +5324,9 @@ body.quark-mobile .quark-layout--thread-open.quark-layout--member-list-open {
   position: relative;
 }
 
-/* Space strip + room list collapse into a single off-canvas drawer.
- * They share a translateX so they slide in together as one panel. */
+/* Space strip + room list become a full-screen slide-over on mobile.
+ * They share a translateX so they animate as one drawer. The room-list
+ * absorbs the remainder of the viewport so room names aren't truncated. */
 body.quark-mobile .space-strip,
 body.quark-mobile .room-list {
   position: fixed;
@@ -5306,9 +5347,22 @@ body.quark-mobile .space-strip {
 }
 
 body.quark-mobile .room-list {
-  /* Sits to the right of the space strip inside the drawer. */
+  /* Fill the rest of the viewport so long room names aren't cut off. */
   left: var(--space-strip-width);
-  width: min(70vw, 280px);
+  width: calc(100vw - var(--space-strip-width));
+  width: calc(100dvw - var(--space-strip-width));
+  /* The shared rule sets transform: translateX(-100%), which is -100% of the
+   * element's *own width*. Because the room-list is offset from the viewport
+   * edge by var(--space-strip-width), -100% leaves a slice equal to that
+   * offset peeking in from the left. Override with an extra space-strip-
+   * width's worth of translation so the right edge clears the viewport. */
+  transform: translateX(calc(-100% - var(--space-strip-width)));
+}
+
+/* Status bar is hidden on mobile — reclaim the bottom padding that desktop
+   reserves for it in the room list scroller. */
+body.quark-mobile .room-list__scroll {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 body.quark-mobile-drawer-open .space-strip,
@@ -5316,33 +5370,72 @@ body.quark-mobile-drawer-open .room-list {
   transform: translateX(0);
 }
 
+/* Full-screen slide-over: the drawer covers the timeline completely, so the
+ * dimmed backdrop has nothing visible to dim. Keep it as a transparent
+ * tap-shield only so the timeline below doesn't receive stray taps that
+ * slip through the gap between the two fixed panels. */
 body.quark-mobile .mobile-backdrop {
-  display: block;
-  position: fixed;
-  inset: 0;
-  background-color: var(--overlay-bg);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 220ms ease;
-  z-index: 15;
+  display: none;
 }
 
-body.quark-mobile-drawer-open .mobile-backdrop {
-  opacity: 1;
-  pointer-events: auto;
+/* Make the room-list header double as the drawer's close affordance on
+ * mobile: tappable, taller, with a back arrow. */
+body.quark-mobile .room-list__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  font-size: var(--font-size);
+  letter-spacing: 0.08em;
+  color: var(--accent-primary);
+  cursor: pointer;
+  min-height: 44px;
+  user-select: none;
+}
+
+body.quark-mobile .room-list__header::before {
+  content: "◀";
+  font-size: calc(var(--font-size) - 1px);
+  color: var(--accent-primary);
+}
+
+body.quark-mobile .room-list__header:active {
+  background-color: var(--surface-hover-active);
+}
+
+/* Member list overlay: header doubles as the close button on mobile. */
+body.quark-mobile .member-list__header {
+  cursor: pointer;
+  min-height: 44px;
+  padding: 12px 16px;
+}
+
+body.quark-mobile .member-list__header::before {
+  content: "◀";
+  font-size: calc(var(--font-size) - 1px);
+  color: var(--accent-primary);
+  margin-right: 6px;
+}
+
+body.quark-mobile .member-list__header:active {
+  background-color: var(--surface-hover-active);
 }
 
 /* The content area takes the full width on mobile and shifts up when the
- * iOS virtual keyboard appears (--keyboard-offset tracks visualViewport). */
+ * iOS virtual keyboard appears (--keyboard-offset tracks visualViewport).
+ * Landscape iPhones tuck the notch into the side — pad accordingly. */
 body.quark-mobile .content-area {
   grid-column: 1 / -1;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
   padding-bottom: var(--keyboard-offset, 0px);
   transition: padding-bottom 120ms ease;
 }
 
-/* Input bar: respect iOS home indicator. */
+/* Input bar: respect iOS home indicator. When the keyboard is up the indicator
+ * is gone, so collapse to 0 to avoid an empty stripe under the field. */
 body.quark-mobile .input-bar-wrap {
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: max(0px, env(safe-area-inset-bottom) - var(--keyboard-offset, 0px));
 }
 
 /* Larger touch targets in the room list (drawer). */
@@ -5352,22 +5445,42 @@ body.quark-mobile .room-list__item {
   font-size: calc(var(--font-size) + 1px);
 }
 
+/* iOS auto-zooms into any input whose computed font-size is < 16px.
+ * viewport meta with user-scalable=no usually suppresses that, but make it
+ * explicit so the compose / login fields render predictably across versions. */
+body.quark-mobile .input-bar__field,
+body.quark-mobile .login-screen__field-input,
+body.quark-mobile .thread-view__input,
+body.quark-mobile input[type="text"],
+body.quark-mobile input[type="url"],
+body.quark-mobile input[type="email"],
+body.quark-mobile input[type="search"],
+body.quark-mobile input[type="password"],
+body.quark-mobile textarea {
+  font-size: max(16px, var(--font-size));
+}
+
 body.quark-mobile .space-strip__item,
 body.quark-mobile .space-strip__settings-btn {
   width: 56px;
   height: 56px;
 }
 
-/* Thread view + member list become full-screen overlays on mobile so the
- * timeline isn't squeezed to nothing. */
-body.quark-mobile .thread-view,
-body.quark-mobile .member-list {
+/* Thread view + member list become full-screen overlays on mobile *when
+ * they're toggled on*. The selectors include the layout's --open class so
+ * the panels stay hidden by default — without it, the !important width
+ * would defeat the desktop ":not(--open) { width: 0 }" rule and the member
+ * list would always cover the timeline. */
+body.quark-mobile .quark-layout--member-list-open .member-list,
+body.quark-mobile .quark-layout--thread-open .thread-view {
   position: fixed;
   inset: 0;
   width: 100% !important;
   z-index: 12;
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* Status bar stays out of the way on mobile — hidden by default, the mobile

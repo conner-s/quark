@@ -1,6 +1,7 @@
 // Action dispatcher — connects IPC calls to UI state updates
 
 import { AppState } from "./state.js";
+import { isMobile, closeDrawer } from "./mobile.js";
 
 import { saveSession, clearSession } from "./session.js";
 
@@ -1354,6 +1355,10 @@ export async function openThread(eventId: string): Promise<void> {
 
   const { timeline } = getComponents();
   AppState.set("threadRootEventId", eventId);
+
+  // Mobile is one-overlay-at-a-time: opening a thread pulls focus away from
+  // the drawer.
+  if (isMobile()) closeDrawer();
 
   const ownUserId = AppState.get("ownUserId");
 
@@ -2753,6 +2758,10 @@ export function toggleMemberList(): void {
   }
 
   mainLayout.classList.toggle("quark-layout--member-list-open", next);
+
+  // Mobile is one-overlay-at-a-time: opening the member-list pulls focus
+  // away from the drawer.
+  if (next && isMobile()) closeDrawer();
 }
 
 /** Convert IPC RoomMember → MemberList MemberEntry */

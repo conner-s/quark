@@ -113,6 +113,11 @@ export class MemberList {
     return this._el;
   }
 
+  /** Header element exposed so callers can wire mobile close behaviour. */
+  getHeaderElement(): HTMLElement {
+    return this._headerEl;
+  }
+
   onSelect(cb: MemberSelectCallback): void {
     this._onSelect = cb;
   }

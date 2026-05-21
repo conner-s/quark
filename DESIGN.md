@@ -641,12 +641,15 @@ quark/
   - Phase 1: get a working build on **iOS** first as a proof of concept (developer is on macOS, so the Xcode toolchain is already at hand).
   - Spike in progress on branch `spike/mobile`:
     - [x] Responsive CSS: viewport-driven mobile mode hides the space strip + room list and stacks the layout to a single full-width timeline column.
-    - [x] Slide-in left drawer that exposes the space strip + room list on mobile; backdrop dismisses it and selecting a room auto-closes it.
+    - [x] Full-screen slide-over drawer exposes the space strip + room list on mobile. Tapping the "◀ Rooms" header, selecting a room, or swiping left dismisses it. Only one mobile overlay (drawer, member list, or thread view) can be open at a time — opening any one closes the others.
     - [x] Slim mobile top bar with a hamburger button, current room name, and members toggle.
     - [x] Virtual-keyboard handling via `visualViewport` resize → `--keyboard-offset` CSS var so the compose box stays above the keyboard.
-    - [x] iOS safe-area insets (`env(safe-area-inset-*)`) applied to top bar and input bar so the layout clears the notch and home indicator.
+    - [x] iOS safe-area insets (`env(safe-area-inset-*)`) applied to top bar, input bar, content area, drawer panels, login screen, and full-screen overlays so the layout clears the notch and home indicator in both portrait and landscape.
     - [x] Touch gestures: edge-swipe right opens the drawer, swipe left on the drawer (or tap the backdrop) closes it.
     - [x] Vim mode auto-disabled when mobile mode activates; re-enables on resize back to desktop.
+    - [x] Viewport meta hardened (`user-scalable=no`, `viewport-fit=cover`, `apple-mobile-web-app-*`) to block pinch + double-tap zoom and opt into safe-area insets.
+    - [x] Root layout uses `100dvh`/`100dvw` so the timeline doesn't overflow the visible area when iOS browser chrome is showing.
+    - [x] Form inputs forced to ≥16px on mobile so iOS doesn't auto-zoom on focus; ASCII login banner + divider auto-scale so they don't bleed off narrow viewports.
     - [x] `pnpm tauri ios init` generated the Xcode project at `gen/apple/quark.xcodeproj` (Tauri 2 places it at the repo root, not under `src-tauri/`). Cocoapods and `libimobiledevice` were installed automatically as part of `tauri ios init`.
     - [x] `aarch64-apple-ios-sim` and `x86_64-apple-ios` Rust targets installed via rustup.
     - [ ] **Toolchain gotcha**: Homebrew's `rust` is ahead of `~/.cargo/bin` on `PATH` and does not carry the iOS targets — only the rustup toolchain does. But the project's `Cargo.lock` is lockfile v4 (requires Rust ≥ 1.78) and the rustup default channel may be older. Either run `rustup update stable` so rustup's cargo is current, or `brew uninstall rust` and let rustup own the toolchain. Until this is resolved, `pnpm tauri ios dev` will fail at the Rust compile step.
