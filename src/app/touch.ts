@@ -46,6 +46,28 @@ export function setupTouchGestures(layout: HTMLElement, drawerEl: HTMLElement): 
     };
   }, { passive: true });
 
+  // Non-passive so we can suppress native scroll while a drawer gesture is in
+  // flight. Without this, an edge-swipe right-drag also drags the timeline
+  // because the touch starts inside it.
+  layout.addEventListener("touchmove", (e) => {
+    const tracked = _active;
+    if (!tracked) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    const dx = touch.clientX - tracked.x;
+    const dy = touch.clientY - tracked.y;
+
+    // Once the horizontal component dominates, treat this as a drawer gesture
+    // and stop the page from scrolling underneath. A purely vertical move
+    // bails out (cancel the tracked gesture) so legitimate scrolling still works.
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 6) {
+      e.preventDefault();
+    } else if (Math.abs(dy) > Math.abs(dx) * 1.5 && Math.abs(dy) > 12) {
+      _active = null;
+    }
+  }, { passive: false });
+
   layout.addEventListener("touchend", (e) => {
     const tracked = _active;
     _active = null;

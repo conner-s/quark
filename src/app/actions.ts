@@ -471,6 +471,8 @@ export async function selectRoom(roomId: string): Promise<void> {
     roomInfo?.is_encrypted,
     cachedRoomAvatar
   );
+  // The mobile top bar mirrors the room avatar — tap opens settings.
+  getComponents().mobileTopBar.setRoom(roomName, cachedRoomAvatar);
   // Resolve the room avatar in the background if not already cached
   if (roomInfo?.avatar_url && roomInfo.room_id && !_roomAvatarDataUrl.has(roomInfo.room_id)) {
     const mxcUrl = roomInfo.avatar_url;
@@ -481,6 +483,7 @@ export async function selectRoom(roomId: string): Promise<void> {
       // Only update the header if the user is still looking at this room
       if (AppState.get("currentRoomId") === targetRoomId) {
         getComponents().roomHeader.setAvatarUrl(blobUrl);
+        getComponents().mobileTopBar.setRoom(roomName, blobUrl);
       }
     }).catch(() => { /* non-fatal: fallback letter stays */ });
   }

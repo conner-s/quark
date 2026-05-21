@@ -1,6 +1,7 @@
 // Quick reaction picker — text input as default, Tab to browse all emoji
 
 import { BUILTIN_EMOJI, EMOJI_CATEGORIES } from "../data/unicode-emoji.js";
+import { isMobile } from "../app/mobile.js";
 
 /** Build reaction data from the full built-in emoji set, with a set of pinned
  *  common reactions shown first so frequently-used emoji are always at the top. */
@@ -158,12 +159,16 @@ export class QuickReactPicker {
     this._inputEl.addEventListener("input", () => this._applyFilter(this._inputEl.value));
     this._gridEl.addEventListener("keydown", (e) => this._handleGridKeydown(e));
 
-    // Click outside closes
-    document.addEventListener("mousedown", (e) => {
+    // Click/tap outside closes. Listen for both mousedown (desktop) and
+    // touchstart (iOS WebView, where mousedown on a non-interactive element
+    // isn't always synthesised from a tap).
+    const outsideHandler = (e: Event): void => {
       if (this.isVisible() && !this._el.contains(e.target as Node)) {
         this.hide();
       }
-    });
+    };
+    document.addEventListener("mousedown", outsideHandler);
+    document.addEventListener("touchstart", outsideHandler, { passive: true });
   }
 
   getElement(): HTMLElement {
@@ -214,28 +219,41 @@ export class QuickReactPicker {
     }
     this._applyFilter("");
 
-    if (anchor) {
-      const rect = anchor.getBoundingClientRect();
-      const approxWidth = 300;
-      let left = rect.left;
-      if (left + approxWidth > window.innerWidth - 8) {
-        left = window.innerWidth - approxWidth - 8;
-      }
-      this._el.style.top = `${rect.bottom + 6}px`;
+    // On mobile, ignore the anchor and dock the picker to the bottom of the
+    // screen as a sheet. The anchor-based positioning produces a tiny window
+    // tucked into a corner where the grid can't be scrolled comfortably.
+    if (isMobile()) {
+      this._el.classList.add("quick-react-picker--mobile");
+      this._el.style.top = "";
+      this._el.style.left = "";
+      this._el.style.right = "";
       this._el.style.bottom = "";
-      this._el.style.left = `${Math.max(8, left)}px`;
       this._el.style.transform = "";
     } else {
-      this._el.style.top = "50%";
-      this._el.style.bottom = "";
-      this._el.style.left = "50%";
-      this._el.style.transform = "translate(-50%, -50%)";
+      this._el.classList.remove("quick-react-picker--mobile");
+      if (anchor) {
+        const rect = anchor.getBoundingClientRect();
+        const approxWidth = 300;
+        let left = rect.left;
+        if (left + approxWidth > window.innerWidth - 8) {
+          left = window.innerWidth - approxWidth - 8;
+        }
+        this._el.style.top = `${rect.bottom + 6}px`;
+        this._el.style.bottom = "";
+        this._el.style.left = `${Math.max(8, left)}px`;
+        this._el.style.transform = "";
+      } else {
+        this._el.style.top = "50%";
+        this._el.style.bottom = "";
+        this._el.style.left = "50%";
+        this._el.style.transform = "translate(-50%, -50%)";
+      }
     }
 
     this._el.style.display = "flex";
     // Defer focus so the element is rendered first; also check for overflow.
     requestAnimationFrame(() => {
-      if (anchor) {
+      if (!isMobile() && anchor) {
         const pickerRect = this._el.getBoundingClientRect();
         if (pickerRect.bottom > window.innerHeight - 8) {
           // Flip upward: position the picker above the anchor instead
@@ -247,7 +265,9 @@ export class QuickReactPicker {
           this._el.style.bottom = `${Math.min(desiredBottom, Math.max(8, maxBottom))}px`;
         }
       }
-      this._inputEl.focus();
+      // Skip auto-focus on mobile so the soft keyboard doesn't pop up and
+      // shrink the picker; tap the input field to type instead.
+      if (!isMobile()) this._inputEl.focus();
     });
   }
 
@@ -256,6 +276,7 @@ export class QuickReactPicker {
     this._el.style.transform = "";
     this._el.style.top = "";
     this._el.style.bottom = "";
+    this._el.classList.remove("quick-react-picker--mobile");
     this._targetEventId = null;
     this._focusedBtnIndex = -1;
     this._updateBtnFocus();

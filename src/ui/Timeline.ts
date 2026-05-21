@@ -5,6 +5,25 @@ import { invoke } from "../ipc/invoke.js";
 import type { ThreadMessageData } from "./ThreadView.js";
 import { isAnimatedUrl } from "../app/animated_urls.js";
 import { hashColor } from "./avatarColors.js";
+import { isMobile } from "../app/mobile.js";
+
+/**
+ * Open an external URL. On mobile (iOS WebView) we let the OS handle it via a
+ * synchronous `window.open(_, "_blank")` inside the user-initiated click so
+ * Safari pops open; the async `invoke("plugin:shell|open")` resolves too late
+ * for iOS popup-blocker rules. On desktop the shell plugin is reliable.
+ */
+function openExternalUrl(url: string): void {
+  if (!(url.startsWith("http://") || url.startsWith("https://"))) return;
+  if (isMobile()) {
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) void invoke("plugin:shell|open", { path: url }).catch(() => {});
+    return;
+  }
+  void invoke("plugin:shell|open", { path: url }).catch(() => {
+    window.open(url, "_blank", "noopener,noreferrer");
+  });
+}
 
 // ── Blob URL management ───────────────────────────────────────────────────────
 // Blob URLs are more memory-efficient than data: URIs — the binary data is held
@@ -50,18 +69,15 @@ function appendLinkifiedText(container: HTMLElement, text: string): void {
     }
     const url = match[0].replace(/[.,;:!?]+$/, ""); // strip trailing punctuation
     const a = document.createElement("a");
-    a.href = "#";
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
     a.textContent = url;
     a.className = "message__link";
     a.title = url;
     a.addEventListener("click", (e) => {
       e.preventDefault();
-      // Only open safe http/https URLs (already guaranteed by regex, but double-check)
-      if (url.startsWith("http://") || url.startsWith("https://")) {
-        void invoke("plugin:shell|open", { path: url }).catch(() => {
-          window.open(url, "_blank", "noopener,noreferrer");
-        });
-      }
+      openExternalUrl(url);
     });
     container.appendChild(a);
     last = match.index + url.length;
@@ -587,20 +603,23 @@ function buildMessageElement(msg: MessageData): HTMLElement {
         }
       }
       // Intercept all anchor clicks so they open in the system browser rather
-      // than navigating the Tauri WebView away from the chat UI.
+      // than navigating the Tauri WebView away from the chat UI. Keep the href
+      // attribute so iOS WebView treats the element as a real link (taps fire
+      // click events; the OS popup blocker accepts window.open from the handler).
       for (const a of body.querySelectorAll<HTMLAnchorElement>("a[href]")) {
         const href = a.getAttribute("href") ?? "";
-        a.removeAttribute("href");
-        a.setAttribute("role", "link");
-        a.style.cursor = "pointer";
-        a.addEventListener("click", (e) => {
-          e.preventDefault();
-          if (href.startsWith("http://") || href.startsWith("https://")) {
-            void invoke("plugin:shell|open", { path: href }).catch(() => {
-              window.open(href, "_blank", "noopener,noreferrer");
-            });
-          }
-        });
+        if (href.startsWith("http://") || href.startsWith("https://")) {
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.addEventListener("click", (e) => {
+            e.preventDefault();
+            openExternalUrl(href);
+          });
+        } else {
+          a.removeAttribute("href");
+          a.setAttribute("role", "link");
+          a.style.cursor = "pointer";
+        }
       }
     } else {
       appendLinkifiedText(body, msg.body);
@@ -1005,6 +1024,83 @@ export class Timeline {
         this._onContextMenuCallback?.(msgEl.dataset.messageId, e.clientX, e.clientY);
       }
     });
+
+    // Long-press → context menu for touch input (mobile). The hover toolbar
+    // doesn't reach finger-input users, so a 500ms press on a message opens
+    // the full action menu instead. Cancelled by any move/scroll/end.
+    this._setupLongPress();
+  }
+
+  private _setupLongPress(): void {
+    const LONG_PRESS_MS = 500;
+    const MOVE_TOLERANCE_PX = 10;
+    let timer: number | null = null;
+    let startX = 0;
+    let startY = 0;
+    let startEl: HTMLElement | null = null;
+    let fired = false;
+
+    const cancel = (): void => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+      startEl = null;
+    };
+
+    this._el.addEventListener("touchstart", (e) => {
+      // Single-finger only; ignore taps on interactive children
+      if (e.touches.length !== 1) {
+        cancel();
+        return;
+      }
+      const target = e.target as HTMLElement;
+      if (target.closest("a, button, img, .message__link, .message__edited-marker")) return;
+
+      const msgEl = target.closest<HTMLElement>("[data-message-id]");
+      if (!msgEl?.dataset.messageId) return;
+
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      startEl = msgEl;
+      fired = false;
+      timer = window.setTimeout(() => {
+        if (!startEl) return;
+        const eventId = startEl.dataset.messageId!;
+        fired = true;
+        // Haptic feedback hint on iOS via brief vibration if available
+        if (typeof navigator.vibrate === "function") navigator.vibrate(10);
+        this._onContextMenuCallback?.(eventId, startX, startY);
+        startEl = null;
+      }, LONG_PRESS_MS);
+    }, { passive: true });
+
+    this._el.addEventListener("touchmove", (e) => {
+      const touch = e.touches[0];
+      if (!touch) return cancel();
+      if (Math.abs(touch.clientX - startX) > MOVE_TOLERANCE_PX ||
+          Math.abs(touch.clientY - startY) > MOVE_TOLERANCE_PX) {
+        cancel();
+      }
+    }, { passive: true });
+
+    this._el.addEventListener("touchend", () => {
+      cancel();
+    }, { passive: true });
+
+    this._el.addEventListener("touchcancel", () => {
+      cancel();
+    }, { passive: true });
+
+    // Suppress the click that follows a long-press so we don't also select-and-act.
+    this._el.addEventListener("click", (e) => {
+      if (fired) {
+        fired = false;
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
   }
 
   getElement(): HTMLElement {

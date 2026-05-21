@@ -232,10 +232,14 @@ export function mountApp(container: HTMLElement): AppComponents {
   });
 
   // Keep the mobile top bar's title in sync with the active room.
+  // The avatar is updated from actions.ts:selectRoom once the avatar URL has
+  // resolved; here we just keep the title (and reset the avatar when no room
+  // is selected so the bar doesn't show the previous room's initial).
   const updateMobileTitle = (): void => {
     const roomId = AppState.get("currentRoomId");
     if (!roomId) {
       mobileTopBar.setTitle("Quark");
+      mobileTopBar.setRoom("", null);
       return;
     }
     const room = AppState.get("roomListCache").find((r) => r.room_id === roomId);

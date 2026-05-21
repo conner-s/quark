@@ -642,7 +642,7 @@ quark/
   - Spike in progress on branch `spike/mobile`:
     - [x] Responsive CSS: viewport-driven mobile mode hides the space strip + room list and stacks the layout to a single full-width timeline column.
     - [x] Full-screen slide-over drawer exposes the space strip + room list on mobile. Tapping the "◀ Rooms" header, selecting a room, or swiping left dismisses it. Only one mobile overlay (drawer, member list, or thread view) can be open at a time — opening any one closes the others.
-    - [x] Slim mobile top bar with a hamburger button, current room name, and members toggle.
+    - [x] Slim mobile top bar with a hamburger button, room avatar (tap → room settings), and current room name. Desktop room-header is hidden on mobile to avoid duplicate info.
     - [x] Virtual-keyboard handling via `visualViewport` resize → `--keyboard-offset` CSS var so the compose box stays above the keyboard.
     - [x] iOS safe-area insets (`env(safe-area-inset-*)`) applied to top bar, input bar, content area, drawer panels, login screen, and full-screen overlays so the layout clears the notch and home indicator in both portrait and landscape.
     - [x] Touch gestures: edge-swipe right opens the drawer, swipe left on the drawer (or tap the backdrop) closes it.
@@ -654,7 +654,14 @@ quark/
     - [x] `aarch64-apple-ios-sim` and `x86_64-apple-ios` Rust targets installed via rustup.
     - [ ] **Toolchain gotcha**: Homebrew's `rust` is ahead of `~/.cargo/bin` on `PATH` and does not carry the iOS targets — only the rustup toolchain does. But the project's `Cargo.lock` is lockfile v4 (requires Rust ≥ 1.78) and the rustup default channel may be older. Either run `rustup update stable` so rustup's cargo is current, or `brew uninstall rust` and let rustup own the toolchain. Until this is resolved, `pnpm tauri ios dev` will fail at the Rust compile step.
     - [ ] Smoke test on the iOS Simulator (`pnpm tauri ios dev`) and confirm matrix-sdk's SQLite store works under iOS sandboxing.
-  - UI adaptations still needed beyond the spike: long-press for context menu (replacing right-click), swipe between rooms in the timeline, pull-to-refresh, large-tap-target audit on pickers/dialogs, font-size adjust for high-DPI phones.
+    - [x] Long-press on a message opens the context menu (replaces hover toolbar on touch). Hover action bar hidden via CSS on mobile.
+    - [x] Quick-react picker docks as a bottom sheet on mobile with finger-scrollable grid; taps outside dismiss.
+    - [x] Settings dialog: tabs horizontally scrollable on mobile so all sections are reachable on narrow viewports.
+    - [x] Profile dialog: full-width with stacked rows so long user IDs and homeserver names wrap.
+    - [x] Links in messages keep their `href` + `target="_blank"` on mobile so iOS WebView opens them in Safari (the async shell-plugin invoke loses iOS popup-blocker eligibility).
+    - [x] Edge-swipe gesture suppresses native scroll on the timeline so swiping the drawer open doesn't also scroll messages behind it. While the drawer is open, the timeline is locked from touch/scroll.
+    - [x] iOS app icons composited over a black background (previously rendered as white where iOS strips alpha).
+  - UI adaptations still needed beyond the spike: swipe between rooms in the timeline, pull-to-refresh, font-size adjust for high-DPI phones.
   - Once iOS is working, Android follows by running `pnpm tauri android init` and adding the Android NDK / SDK paths; matrix-sdk supports both.
   - The Rust backend requires no changes — matrix-sdk supports mobile targets.
   - iOS requires a paid Apple Developer account ($99/yr) for device builds and App Store distribution; Android requires a Google Play account ($25 one-time) for Play Store distribution.

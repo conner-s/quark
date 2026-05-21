@@ -2078,6 +2078,9 @@ span.reaction__emoji {
   padding: 6px;
   max-height: 160px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .quick-react-picker__custom-img {
@@ -5307,12 +5310,47 @@ body.quark-mobile .mobile-top-bar {
 
 .mobile-top-bar__title {
   flex: 1;
-  text-align: center;
   font-size: var(--font-size);
   color: var(--accent-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.mobile-top-bar__avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: none;
+  padding: 0;
+  border-radius: var(--icon-radius);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background-color: transparent;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: 16px;
+  font-weight: bold;
+  outline: none;
+}
+
+.mobile-top-bar__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mobile-top-bar__avatar:active {
+  opacity: 0.6;
+}
+
+/* Hide the desktop room-header on mobile — its info (name, member count,
+ * encryption) duplicates the mobile top bar and wastes vertical space. */
+body.quark-mobile .room-header {
+  display: none;
 }
 
 /* Mobile layout: single column timeline, space + room list become a drawer. */
@@ -5368,6 +5406,14 @@ body.quark-mobile .room-list__scroll {
 body.quark-mobile-drawer-open .space-strip,
 body.quark-mobile-drawer-open .room-list {
   transform: translateX(0);
+}
+
+/* While the drawer is open, fully lock the content area so the timeline
+ * underneath can't scroll or receive taps through the panel. */
+body.quark-mobile-drawer-open .content-area {
+  overflow: hidden;
+  touch-action: none;
+  pointer-events: none;
 }
 
 /* Full-screen slide-over: the drawer covers the timeline completely, so the
@@ -5487,5 +5533,125 @@ body.quark-mobile .quark-layout--thread-open .thread-view {
  * top bar carries the relevant info. */
 body.quark-mobile .status-bar {
   display: none;
+}
+
+/* Hover-driven message action bar is meaningless on touch; replaced by
+ * long-press → context menu wired up in Timeline.ts. */
+body.quark-mobile .message:hover .message__actions {
+  display: none;
+}
+
+/* Profile dialog: full-width on mobile with stacked rows so long user IDs and
+ * homeserver names wrap instead of overflowing. */
+body.quark-mobile .profile-dialog {
+  width: calc(100vw - 24px);
+  width: calc(100dvw - 24px);
+  max-width: 420px;
+  max-height: calc(100dvh - 60px);
+  overflow-y: auto;
+}
+
+body.quark-mobile .profile-dialog__avatar {
+  width: 96px;
+  height: 96px;
+  font-size: 40px;
+}
+
+body.quark-mobile .profile-dialog__row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+body.quark-mobile .profile-dialog__label {
+  min-width: 0;
+  font-size: calc(var(--font-size) - 3px);
+}
+
+body.quark-mobile .profile-dialog__value {
+  word-break: break-all;
+}
+
+body.quark-mobile .profile-dialog__copy-btn {
+  align-self: flex-start;
+  padding: 4px 0;
+}
+
+body.quark-mobile .profile-dialog__dm-btn {
+  padding: 8px 14px;
+  font-size: var(--font-size);
+}
+
+/* Settings tabs: horizontally scrollable on mobile so all sections are reachable
+ * regardless of viewport width. The container becomes a horizontal scroller and
+ * tabs stop shrinking. */
+body.quark-mobile .settings-dialog__panel {
+  width: 100vw;
+  width: 100dvw;
+  max-height: 100vh;
+  max-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  border: none;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+body.quark-mobile .settings-dialog__tabs {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+body.quark-mobile .settings-dialog__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+body.quark-mobile .settings-dialog__tab {
+  flex-shrink: 0;
+  padding: 10px 14px;
+}
+
+/* Bottom-sheet variant of the quick-react picker: docks to the bottom of the
+ * viewport so the grid has room to breathe and can be scrolled with a finger.
+ * The class is added at show time from QuickReactPicker.ts when isMobile(). */
+.quick-react-picker--mobile {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  top: auto !important;
+  width: 100% !important;
+  transform: none !important;
+  max-height: 60vh;
+  padding-bottom: env(safe-area-inset-bottom);
+  border-bottom: none;
+  border-left: none;
+  border-right: none;
+  border-top: var(--border-width) solid var(--accent-primary);
+  animation: quick-react-sheet-in 140ms ease;
+}
+
+.quick-react-picker--mobile .quick-react-picker__grid {
+  max-height: 40vh;
+  font-size: calc(var(--font-size) + 4px);
+}
+
+.quick-react-picker--mobile .quick-react-picker__btn {
+  padding: 8px 9px;
+  font-size: 24px;
+}
+
+@keyframes quick-react-sheet-in {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* Larger tap target for inline links — iOS Human Interface Guidelines
+ * recommend ≥44pt. We pad vertically so the underline stays tight. */
+body.quark-mobile .message__link {
+  padding: 4px 0;
+  -webkit-touch-callout: default;
 }
 

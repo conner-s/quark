@@ -3,7 +3,7 @@
 
 import { mountApp } from "./ui/App.js";
 import { AppState } from "./app/state.js";
-import { setComponents, login, logout, attemptSessionRestore, selectRoom, selectSpace, refreshRooms, openSettings, toggleMemberList } from "./app/actions.js";
+import { setComponents, login, logout, attemptSessionRestore, selectRoom, selectSpace, refreshRooms, openSettings, openRoomSettings } from "./app/actions.js";
 import { setupKeyboard } from "./app/keyboard.js";
 import { setupPanelNav } from "./app/panels.js";
 import { startSync } from "./app/sync.js";
@@ -104,8 +104,10 @@ components.spaceStrip.onSettingsClick(() => {
 });
 
 // ── Mobile top bar wiring ────────────────────────────────────────────────────
-components.mobileTopBar.onMembersClick(() => {
-  toggleMemberList();
+// Tapping the room avatar opens room settings. This is the only entry to the
+// room-settings flow on mobile since the desktop room-header is hidden.
+components.mobileTopBar.onAvatarClick(() => {
+  void openRoomSettings();
 });
 
 // ── GIF pause/resume on window focus ─────────────────────────────────────────
