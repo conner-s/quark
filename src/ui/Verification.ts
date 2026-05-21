@@ -82,11 +82,18 @@ export class Verification {
     title.textContent = "verify device";
     header.appendChild(title);
 
-    const closeHint = document.createElement("span");
-    closeHint.className = "verification-dialog__close-hint";
-    closeHint.textContent = "Esc";
-    closeHint.setAttribute("aria-hidden", "true");
-    header.appendChild(closeHint);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "verification-dialog__close-hint dialog-close-btn";
+    closeBtn.textContent = "[× Esc]";
+    closeBtn.setAttribute("aria-label", "Close verification");
+    closeBtn.tabIndex = -1;
+    // Match the Escape-key path: deny the verification and dismiss the dialog.
+    closeBtn.addEventListener("click", () => {
+      this._onDeny?.();
+      this.hide();
+    });
+    header.appendChild(closeBtn);
 
     // ── Body ──────────────────────────────────────────────────────────────
     const body = document.createElement("div");

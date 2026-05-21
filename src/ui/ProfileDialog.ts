@@ -149,12 +149,14 @@ export class ProfileDialog {
     hint.textContent = "Esc: close";
     this._el.appendChild(hint);
 
-    // Click outside closes
-    document.addEventListener("mousedown", (e) => {
+    // Click/tap outside closes — both mousedown and touchstart for iOS.
+    const outsideHandler = (e: Event): void => {
       if (this.isVisible() && !this._el.contains(e.target as Node)) {
         this.hide();
       }
-    });
+    };
+    document.addEventListener("mousedown", outsideHandler);
+    document.addEventListener("touchstart", outsideHandler, { passive: true });
 
     // Keyboard handling — block global handler and support close action
     this._el.addEventListener("keydown", (e) => {

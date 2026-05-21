@@ -166,11 +166,15 @@ export class EmojiPicker {
     this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
 
     // ── Click outside closes ─────────────────────────────────────────────
-    document.addEventListener("mousedown", (e) => {
+    // Listen for both mousedown (desktop) and touchstart (iOS WebView, where
+    // a tap on non-interactive chrome doesn't always synthesise mousedown).
+    const outsideHandler = (e: Event): void => {
       if (this.isVisible() && !this._el.contains(e.target as Node)) {
         this.hide();
       }
-    });
+    };
+    document.addEventListener("mousedown", outsideHandler);
+    document.addEventListener("touchstart", outsideHandler, { passive: true });
   }
 
   getElement(): HTMLElement {

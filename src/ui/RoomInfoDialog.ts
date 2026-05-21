@@ -17,12 +17,14 @@ export class RoomInfoDialog {
     this._el.setAttribute("tabindex", "-1");
     this._el.style.display = "none";
 
-    // Click outside to close
-    document.addEventListener("mousedown", (e) => {
+    // Click/tap outside to close — touchstart for iOS WebView reliability.
+    const outsideHandler = (e: Event): void => {
       if (this.isVisible() && !this._el.contains(e.target as Node)) {
         this.hide();
       }
-    });
+    };
+    document.addEventListener("mousedown", outsideHandler);
+    document.addEventListener("touchstart", outsideHandler, { passive: true });
 
     // Keyboard
     this._el.addEventListener("keydown", (e) => {

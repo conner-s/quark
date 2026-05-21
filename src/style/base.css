@@ -5353,6 +5353,46 @@ body.quark-mobile .room-header {
   display: none;
 }
 
+/* Dialog close button — applied alongside each dialog's existing `__close-hint`
+ * class so the static "Esc" hint becomes a tappable button. The per-dialog
+ * class supplies colour and font-size; this strips default button chrome and
+ * widens the tap target on mobile. */
+.dialog-close-btn {
+  background: transparent;
+  border: none;
+  font-family: var(--font-family);
+  cursor: pointer;
+  padding: 2px 4px;
+  letter-spacing: 0.02em;
+}
+
+.dialog-close-btn:hover {
+  opacity: 1;
+}
+
+body.quark-mobile .dialog-close-btn {
+  padding: 8px 12px;
+  font-size: var(--font-size);
+  opacity: 1;
+  margin: -4px 0;
+}
+
+/* DevicePicker — previously had no CSS at all; give it minimal structure so
+ * the header row lays out and the close button is reachable. */
+.device-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 2px;
+}
+
+.device-picker__close-hint {
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  opacity: 0.6;
+}
+
 /* Mobile layout: single column timeline, space + room list become a drawer. */
 body.quark-mobile .quark-layout,
 body.quark-mobile .quark-layout--thread-open,

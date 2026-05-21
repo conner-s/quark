@@ -42,11 +42,14 @@ export class SpaceSettingsDialog {
     title.className = "settings-dialog__title";
     title.textContent = "── space settings ──";
     header.appendChild(title);
-    const closeHint = document.createElement("span");
-    closeHint.className = "settings-dialog__close-hint";
-    closeHint.textContent = "Esc";
-    closeHint.setAttribute("aria-hidden", "true");
-    header.appendChild(closeHint);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "settings-dialog__close-hint dialog-close-btn";
+    closeBtn.textContent = "[× Esc]";
+    closeBtn.setAttribute("aria-label", "Close space settings");
+    closeBtn.tabIndex = -1;
+    closeBtn.addEventListener("click", () => this.hide());
+    header.appendChild(closeBtn);
     this._panelEl.appendChild(header);
 
     // Tabs

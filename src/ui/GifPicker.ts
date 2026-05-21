@@ -56,11 +56,14 @@ export class GifPicker {
     title.textContent = "GIF Search";
     header.appendChild(title);
 
-    const closeHint = document.createElement("span");
-    closeHint.className = "gif-picker__close-hint";
-    closeHint.textContent = "Esc";
-    closeHint.setAttribute("aria-hidden", "true");
-    header.appendChild(closeHint);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "gif-picker__close-hint dialog-close-btn";
+    closeBtn.textContent = "[× Esc]";
+    closeBtn.setAttribute("aria-label", "Close GIF search");
+    closeBtn.tabIndex = -1;
+    closeBtn.addEventListener("click", () => this.hide());
+    header.appendChild(closeBtn);
 
     // ── Search input ─────────────────────────────────────────────────────
     const searchWrap = document.createElement("div");

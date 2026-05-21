@@ -29,10 +29,28 @@ export class DevicePicker {
     this._el.setAttribute("tabindex", "-1");
     this._el.style.display = "none";
 
+    // Header row: title + close button so touch users can dismiss without Esc.
+    const header = document.createElement("div");
+    header.className = "device-picker__header";
+
     this._titleEl = document.createElement("div");
     this._titleEl.className = "device-picker__title";
     this._titleEl.textContent = "Choose device to verify";
-    this._el.appendChild(this._titleEl);
+    header.appendChild(this._titleEl);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "device-picker__close-hint dialog-close-btn";
+    closeBtn.textContent = "[× Esc]";
+    closeBtn.setAttribute("aria-label", "Cancel device selection");
+    closeBtn.tabIndex = -1;
+    closeBtn.addEventListener("click", () => {
+      this.hide();
+      this._onCancel?.();
+    });
+    header.appendChild(closeBtn);
+
+    this._el.appendChild(header);
 
     const hint = document.createElement("div");
     hint.className = "device-picker__hint";

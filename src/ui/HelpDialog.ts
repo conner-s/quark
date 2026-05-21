@@ -111,11 +111,14 @@ export class HelpDialog {
     this._titleEl.className = "help-dialog__title";
     header.appendChild(this._titleEl);
 
-    const closeHint = document.createElement("span");
-    closeHint.className = "help-dialog__close-hint";
-    closeHint.textContent = "Esc";
-    closeHint.setAttribute("aria-hidden", "true");
-    header.appendChild(closeHint);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "help-dialog__close-hint dialog-close-btn";
+    closeBtn.textContent = "[× Esc]";
+    closeBtn.setAttribute("aria-label", "Close help");
+    closeBtn.tabIndex = -1;
+    closeBtn.addEventListener("click", () => this.hide());
+    header.appendChild(closeBtn);
 
     // ── Tab bar ───────────────────────────────────────────────────────────
     const tabs = document.createElement("div");

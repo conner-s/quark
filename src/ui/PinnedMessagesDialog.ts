@@ -39,11 +39,14 @@ export class PinnedMessagesDialog {
     title.textContent = "── pinned messages ──";
     header.appendChild(title);
 
-    const closeHint = document.createElement("span");
-    closeHint.className = "pinned-dialog__close-hint";
-    closeHint.textContent = "Esc";
-    closeHint.setAttribute("aria-hidden", "true");
-    header.appendChild(closeHint);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "pinned-dialog__close-hint dialog-close-btn";
+    closeBtn.textContent = "[× Esc]";
+    closeBtn.setAttribute("aria-label", "Close pinned messages");
+    closeBtn.tabIndex = -1;
+    closeBtn.addEventListener("click", () => this.hide());
+    header.appendChild(closeBtn);
 
     this._panelEl.appendChild(header);
 

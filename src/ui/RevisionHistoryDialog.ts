@@ -53,11 +53,14 @@ export class RevisionHistoryDialog {
     this._titleEl.textContent = "── edit history ──";
     header.appendChild(this._titleEl);
 
-    const closeHint = document.createElement("span");
-    closeHint.className = "revision-dialog__close-hint";
-    closeHint.textContent = "Esc";
-    closeHint.setAttribute("aria-hidden", "true");
-    header.appendChild(closeHint);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "revision-dialog__close-hint dialog-close-btn";
+    closeBtn.textContent = "[× Esc]";
+    closeBtn.setAttribute("aria-label", "Close edit history");
+    closeBtn.tabIndex = -1;
+    closeBtn.addEventListener("click", () => this.hide());
+    header.appendChild(closeBtn);
 
     this._panelEl.appendChild(header);
 
