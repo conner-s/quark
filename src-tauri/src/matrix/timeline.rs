@@ -138,6 +138,11 @@ pub async fn get_timeline(
                     let rev_id = ev.event_id.to_string();
                     reaction_raw.entry(target).or_default().push((key, sender, rev_id));
                 }
+                AnySyncTimelineEvent::MessageLike(
+                    AnySyncMessageLikeEvent::RoomEncrypted(SyncMessageLikeEvent::Original(ev)),
+                ) => {
+                    events.push(convert_sync_encrypted(ev));
+                }
                 _ => {}
             }
         }
@@ -228,6 +233,11 @@ pub async fn paginate_forward(
                     let rev_id = ev.event_id.to_string();
                     reaction_raw.entry(target).or_default().push((key, sender, rev_id));
                 }
+                AnySyncTimelineEvent::MessageLike(
+                    AnySyncMessageLikeEvent::RoomEncrypted(SyncMessageLikeEvent::Original(ev)),
+                ) => {
+                    events.push(convert_sync_encrypted(ev));
+                }
                 _ => {}
             }
         }
@@ -278,6 +288,9 @@ fn convert_sync_message_event(event: AnySyncMessageLikeEvent) -> Option<Timeline
         AnySyncMessageLikeEvent::Sticker(SyncMessageLikeEvent::Original(ev)) => {
             Some(convert_sync_sticker(ev))
         }
+        AnySyncMessageLikeEvent::RoomEncrypted(SyncMessageLikeEvent::Original(ev)) => {
+            Some(convert_sync_encrypted(ev))
+        }
         _ => None,
     }
 }
@@ -315,6 +328,34 @@ fn convert_sync_sticker(ev: matrix_sdk::ruma::events::OriginalSyncMessageLikeEve
         media_width: w,
         media_height: h,
         media_encryption_info: enc,
+        media_thumbnail_url: None,
+        media_thumbnail_encryption_info: None,
+        reactions: vec![],
+    }
+}
+
+fn convert_sync_encrypted(
+    ev: matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent<
+        matrix_sdk::ruma::events::room::encrypted::RoomEncryptedEventContent,
+    >,
+) -> TimelineEvent {
+    let timestamp: u64 = ev.origin_server_ts.get().into();
+    TimelineEvent {
+        event_id: ev.event_id.to_string(),
+        sender: ev.sender.to_string(),
+        body: "\u{1f512} unable to decrypt".to_string(),
+        formatted_body: None,
+        timestamp,
+        msg_type: "m.room.encrypted".to_string(),
+        is_edit: false,
+        relates_to_event_id: None,
+        in_reply_to: None,
+        thread_root: None,
+        media_url: None,
+        media_mimetype: None,
+        media_width: None,
+        media_height: None,
+        media_encryption_info: None,
         media_thumbnail_url: None,
         media_thumbnail_encryption_info: None,
         reactions: vec![],

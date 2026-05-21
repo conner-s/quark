@@ -669,6 +669,7 @@ quark/
 #### E2EE / Crypto
 - [ ] Key backup (SSSS) — no backup/restore commands exist
 - [x] Cross-signing setup UI — `:cross-sign [password]` bootstraps keys; `:verify <user-id>` starts SAS with emoji polling
+- [x] Undecryptable events surface as `🔒 unable to decrypt` placeholders in the timeline instead of being silently dropped, so users on a new (un-verified) device can see *that* encrypted messages exist while keys are pending
 
 #### Media
 - [x] Authenticated media (MSC3916) — matrix-sdk 0.9 routes to `/_matrix/client/v1/media/download/` automatically for Matrix 1.11+ servers; E2EE media now decrypted by passing `EncryptedFile` key material through the `download_media` IPC command
