@@ -630,11 +630,10 @@ quark/
   - macOS builds must be code-signed for Gatekeeper to allow the update; Linux and Windows updates work without signing but signing is recommended.
   - Add `:checkupdate` command to trigger a manual check.
 
-- [ ] **Windows and macOS builds** — GitHub Actions matrix CI (free on public repo).
-  - Single workflow file (`.github/workflows/release.yml`) triggered on `v*` tags.
-  - Three jobs in a matrix: `ubuntu-latest` (`.deb` + `.AppImage`), `macos-latest` (`.dmg`, universal binary targeting both Apple Silicon and Intel via `--target universal-apple-darwin`), `windows-latest` (`.msi` + NSIS `.exe`).
-  - Each job runs `pnpm tauri build` with the appropriate targets, then uploads artifacts to the GitHub Release via `softprops/action-gh-release`.
-  - Secrets needed: `TAURI_SIGNING_PRIVATE_KEY` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for the updater signature; macOS additionally needs `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` for notarization.
+- [x] **Multi-platform builds** — GitLab CI pipeline (`.gitlab-ci.yml`) triggered only on tag pushes.
+  - Jobs: `build:linux` (`.deb` + `.AppImage` + `.rpm`), `build:flatpak`, `build:windows` (`.msi` + NSIS `.exe`), `build:macos` (`.dmg` + `.app.tar.gz`), `build:android` (universal `.apk`).
+  - Each job runs `pnpm tauri build` (or `pnpm tauri android build --apk` for Android) and uploads its bundles to the project's Generic Package Registry under `quark/<tag>/quark-<tag>-<platform>.<ext>`. The `release` job creates a GitLab Release whose asset links point to those stable, externally-accessible URLs (not job-artifact URLs, which expire).
+  - Secrets needed (optional): macOS notarisation — `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`; Android release signing — `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without Android keystore vars, the APK is debug-signed (installable on dev devices, not for public distribution).
   - Until Apple credentials are available, macOS builds can be produced unsigned (users must right-click → Open to bypass Gatekeeper).
 
 - [ ] **Mobile (Tauri v2)** — iOS and Android targets using the existing Tauri/Rust codebase.

@@ -1,6 +1,9 @@
 # Quark — Tauri v2 CI/CD Pipeline
 #
-# Produces installable artifacts for Linux, Windows, and macOS.
+# Produces installable artifacts for Linux, Windows, macOS, and Android.
+# Pipeline only runs on tag pushes; each build uploads its bundles to the
+# project's Generic Package Registry so the resulting Release links point to
+# permanent, externally-accessible copies (not job-artifact URLs that expire).
 #
 # Runner requirements:
 #   Linux:   Any runner with Docker executor (handled via image: below)
@@ -8,12 +11,20 @@
 #              - Rust (stable), pnpm, Node 20, MSVC build tools, WebView2 SDK
 #   macOS:   A shell-executor runner tagged "macos" with:
 #              - Rust (stable), pnpm, Node 20, Xcode CLT
-#
-# Artifacts are retained for 30 days and downloadable from the GitLab UI.
+#   Android: Any Linux Docker runner (image installs SDK/NDK/JDK on demand)
 
 stages:
   - test
   - build
+  - release
+
+# ─── pipeline-level gating ──────────────────────────────────────────────────
+#
+# Pipeline only fires on tag pushes. Nothing runs on regular pushes or MRs.
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG
 
 # ─── shared defaults ────────────────────────────────────────────────────────
 
@@ -24,6 +35,8 @@ variables:
   CARGO_TERM_COLOR: always
   # Keep incremental artefacts out of the source tree so caches stay clean.
   CARGO_TARGET_DIR: $CI_PROJECT_DIR/src-tauri/target
+  # Generic Package Registry base URL for this tag.
+  PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}"
 
 # ─── cache templates ────────────────────────────────────────────────────────
 
@@ -63,6 +76,33 @@ variables:
       - $HOME/.cargo/git/db/
       - src-tauri/target/
 
+# ─── upload helper ──────────────────────────────────────────────────────────
+#
+# Usage in a script step:
+#   - upload_to_registry "<source-glob>" "<dest-filename>"
+#
+# `dest-filename` is the name under which the file will live in the registry
+# (and the name that ends up on the Release page). It must be predictable so
+# the `release` job can link to it.
+
+.upload_helper: &upload_helper |
+  upload_to_registry() {
+    local src_glob="$1"
+    local dest_name="$2"
+    local file
+    file=$(ls -1 $src_glob 2>/dev/null | head -n1 || true)
+    if [ -z "$file" ] || [ ! -f "$file" ]; then
+      echo "upload_to_registry: no file matched '$src_glob'" >&2
+      return 1
+    fi
+    echo "Uploading $file → $dest_name"
+    curl --fail-with-body --silent --show-error \
+         --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+         --upload-file "$file" \
+         "$PACKAGE_REGISTRY_URL/$dest_name"
+    echo
+  }
+
 # ─── test ───────────────────────────────────────────────────────────────────
 
 test:
@@ -87,20 +127,18 @@ test:
     - . "$HOME/.cargo/env"
     # Install pnpm + deps
     - corepack enable
-    - corepack prepare pnpm@latest --activate
+    # Honour the "packageManager" field in package.json (pnpm 10.x — pnpm 11
+    # requires Node 22.13+, which this image doesn't ship).
+    - corepack install
     - pnpm install --frozen-lockfile
     - pnpm build
   script:
     - pnpm test
     - cargo test --manifest-path src-tauri/Cargo.toml
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 # ─── build: Linux ───────────────────────────────────────────────────────────
 #
-# Produces: .deb, .AppImage, .rpm  (whatever Tauri's "all" target emits)
-# Uses a Debian Bookworm image with WebKit/GTK system deps.
+# Produces: .deb, .AppImage, .rpm (whatever Tauri's "all" target emits).
 
 build:linux:
   stage: build
@@ -127,17 +165,21 @@ build:linux:
         patchelf
         libxdo-dev
         libayatana-appindicator3-dev
-    # Install Rust
     - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
     - . "$HOME/.cargo/env"
-    # Install Node + pnpm
     - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     - apt-get install -y nodejs
     - corepack enable
-    - corepack prepare pnpm@latest --activate
+    # Honour the "packageManager" field in package.json (pnpm 10.x — pnpm 11
+    # requires Node 22.13+, which this image doesn't ship).
+    - corepack install
     - pnpm install --frozen-lockfile
   script:
+    - *upload_helper
     - pnpm tauri build
+    - upload_to_registry "src-tauri/target/release/bundle/deb/*.deb"           "quark-${CI_COMMIT_TAG}-linux-amd64.deb"
+    - upload_to_registry "src-tauri/target/release/bundle/appimage/*.AppImage" "quark-${CI_COMMIT_TAG}-linux-amd64.AppImage"
+    - upload_to_registry "src-tauri/target/release/bundle/rpm/*.rpm"           "quark-${CI_COMMIT_TAG}-linux-x86_64.rpm"
   artifacts:
     name: "quark-linux-$CI_COMMIT_SHORT_SHA"
     paths:
@@ -145,23 +187,12 @@ build:linux:
       - src-tauri/target/release/bundle/appimage/*.AppImage
       - src-tauri/target/release/bundle/rpm/*.rpm
     expire_in: 30 days
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
 
 # ─── build: Flatpak ─────────────────────────────────────────────────────────
 #
-# Produces: quark.flatpak  (single-file bundle installable via flatpak install)
-#
-# Runner requirements:
-#   - Docker executor with privileged = true  (bubblewrap needs user namespaces)
-#   - Internet access to download Flatpak runtimes on first run
-#
-# Runtimes are cached in /var/lib/flatpak so subsequent runs skip the ~1 GB
-# download. Invalidate by changing the cache key prefix below.
+# Produces: quark.flatpak (single-file bundle).
+# Runner needs Docker executor with privileged = true (bubblewrap requires
+# user namespaces). Runtimes (~1 GB) are cached after the first run.
 
 build:flatpak:
   stage: build
@@ -182,8 +213,8 @@ build:flatpak:
         ca-certificates curl
         nodejs npm
         elfutils
-    - npm install -g pnpm
-    # Restore cached runtimes into the system Flatpak store
+    # pnpm 11 requires Node 22.13+; this image ships Node 20. Pin to 10.x to match package.json.
+    - npm install -g pnpm@10
     - |
       if [ -d .flatpak-runtime-cache ]; then
         cp -a .flatpak-runtime-cache/. /var/lib/flatpak/ 2>/dev/null || true
@@ -194,34 +225,24 @@ build:flatpak:
         org.gnome.Sdk//47
         org.freedesktop.Sdk.Extension.rust-stable//24.08
         org.freedesktop.Sdk.Extension.node22//24.08
-    # Persist runtimes for next run
     - cp -a /var/lib/flatpak/. .flatpak-runtime-cache/
     - pnpm install --frozen-lockfile
   script:
+    - *upload_helper
     - flatpak-builder --force-clean --repo=flatpak-repo flatpak-build flatpak/zone.derg.quark.yml
     - flatpak build-bundle flatpak-repo quark.flatpak zone.derg.quark
+    - upload_to_registry "quark.flatpak" "quark-${CI_COMMIT_TAG}.flatpak"
   artifacts:
     name: "quark-flatpak-$CI_COMMIT_SHORT_SHA"
     paths:
       - quark.flatpak
     expire_in: 30 days
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
 
 # ─── build: Windows ─────────────────────────────────────────────────────────
 #
-# Requires a Windows shell-executor runner tagged "windows".
-# Pre-installed on the runner:
-#   - Rust (stable, msvc toolchain)
-#   - Node 20 + pnpm (or Volta)
-#   - MSVC Build Tools (Visual Studio 2022 or Build Tools equivalent)
-#   - WebView2 (ships with Windows 11; or install the Evergreen bootstrapper)
-#
-# Produces: .msi, .exe (NSIS installer)
+# Requires a Windows shell-executor runner tagged "windows" with Rust,
+# Node 20, pnpm, MSVC Build Tools, and WebView2 pre-installed.
+# Produces: .msi, .exe (NSIS installer).
 
 build:windows:
   stage: build
@@ -233,33 +254,39 @@ build:windows:
     - pnpm install --frozen-lockfile
   script:
     - pnpm tauri build
+    # Upload bundles to the Generic Package Registry. PowerShell, not bash.
+    - |
+      $msi = Get-ChildItem -Path "src-tauri\target\release\bundle\msi\*.msi" | Select-Object -First 1
+      $exe = Get-ChildItem -Path "src-tauri\target\release\bundle\nsis\*.exe" | Select-Object -First 1
+      $headers = @{ "JOB-TOKEN" = "$env:CI_JOB_TOKEN" }
+      if ($msi) {
+        $dest = "$env:PACKAGE_REGISTRY_URL/quark-$env:CI_COMMIT_TAG-windows-x64.msi"
+        Write-Host "Uploading $($msi.FullName) -> $dest"
+        Invoke-WebRequest -Method Put -Headers $headers -InFile $msi.FullName -Uri $dest
+      }
+      if ($exe) {
+        $dest = "$env:PACKAGE_REGISTRY_URL/quark-$env:CI_COMMIT_TAG-windows-x64.exe"
+        Write-Host "Uploading $($exe.FullName) -> $dest"
+        Invoke-WebRequest -Method Put -Headers $headers -InFile $exe.FullName -Uri $dest
+      }
   artifacts:
     name: "quark-windows-$CI_COMMIT_SHORT_SHA"
     paths:
       - src-tauri/target/release/bundle/msi/*.msi
       - src-tauri/target/release/bundle/nsis/*.exe
     expire_in: 30 days
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
 
 # ─── build: macOS ───────────────────────────────────────────────────────────
 #
-# Requires a macOS shell-executor runner tagged "macos".
-# Pre-installed on the runner:
-#   - Xcode Command Line Tools  (xcode-select --install)
-#   - Rust (stable)             (curl https://sh.rustup.rs … )
-#   - Node 20 + pnpm            (brew install node pnpm)
+# Requires a macOS shell-executor runner tagged "macos" with Xcode CLT,
+# Rust, Node 20, pnpm pre-installed.
 #
 # Code-signing: set CI/CD variables APPLE_SIGNING_IDENTITY, APPLE_CERTIFICATE,
-# APPLE_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
-# and Tauri will sign & notarise automatically when they are present.
-# Without them the build succeeds but the .app will not be notarised.
+# APPLE_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID — Tauri
+# will sign & notarise automatically when they are present. Without them the
+# build succeeds but the .app is not notarised.
 #
-# Produces: .dmg, .app (inside a .tar.gz)
+# Produces: .dmg, .app (inside a .tar.gz).
 
 build:macos:
   stage: build
@@ -270,37 +297,160 @@ build:macos:
     - rustup update stable
     - pnpm install --frozen-lockfile
   script:
+    - *upload_helper
     - pnpm tauri build
+    - upload_to_registry "src-tauri/target/release/bundle/dmg/*.dmg"            "quark-${CI_COMMIT_TAG}-macos.dmg"
+    - upload_to_registry "src-tauri/target/release/bundle/macos/*.app.tar.gz"   "quark-${CI_COMMIT_TAG}-macos.app.tar.gz"
   artifacts:
     name: "quark-macos-$CI_COMMIT_SHORT_SHA"
     paths:
       - src-tauri/target/release/bundle/dmg/*.dmg
       - src-tauri/target/release/bundle/macos/*.app.tar.gz
     expire_in: 30 days
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-      allow_failure: true
+
+# ─── build: Android ─────────────────────────────────────────────────────────
+#
+# Builds a universal release APK via `pnpm tauri android build --apk`.
+# Signing: if ANDROID_KEYSTORE_BASE64 + related vars are set, the APK is
+# signed for release with apksigner; otherwise it falls back to a debug-signed
+# APK (installable on dev devices, NOT suitable for public distribution).
+#
+# Required CI/CD variables for release signing:
+#   ANDROID_KEYSTORE_BASE64    — base64 of your .jks keystore (file-type var ok)
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+
+build:android:
+  stage: build
+  image: eclipse-temurin:17-jdk-jammy
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+    ANDROID_HOME: /opt/android-sdk
+    ANDROID_SDK_ROOT: /opt/android-sdk
+    NDK_VERSION: "26.1.10909125"
+    SDK_PLATFORM: "android-34"
+    BUILD_TOOLS_VERSION: "34.0.0"
+  cache:
+    - key:
+        files:
+          - src-tauri/Cargo.lock
+        prefix: rust-android
+      paths:
+        - $HOME/.cargo/registry/index/
+        - $HOME/.cargo/registry/cache/
+        - $HOME/.cargo/git/db/
+        - src-tauri/target/
+    - key: android-sdk-v1
+      paths:
+        - .android-sdk-cache/
+        - .gradle-cache/
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends
+        ca-certificates curl unzip git file
+        build-essential pkg-config
+    # Restore cached SDK if present.
+    - mkdir -p "$ANDROID_HOME"
+    - |
+      if [ -d .android-sdk-cache ] && [ "$(ls -A .android-sdk-cache 2>/dev/null)" ]; then
+        cp -a .android-sdk-cache/. "$ANDROID_HOME/"
+      fi
+    # Install Android SDK cmdline-tools if not cached.
+    - |
+      if [ ! -d "$ANDROID_HOME/cmdline-tools/latest" ]; then
+        cd /tmp
+        curl -sSLo cmdline.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+        mkdir -p "$ANDROID_HOME/cmdline-tools"
+        unzip -q cmdline.zip -d "$ANDROID_HOME/cmdline-tools"
+        mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+        cd "$CI_PROJECT_DIR"
+      fi
+    - export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION:$PATH"
+    - yes | sdkmanager --licenses >/dev/null 2>&1 || true
+    - sdkmanager --install
+        "platform-tools"
+        "platforms;$SDK_PLATFORM"
+        "build-tools;$BUILD_TOOLS_VERSION"
+        "ndk;$NDK_VERSION"
+        >/dev/null
+    - export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+    # Persist the SDK to cache for next time.
+    - cp -a "$ANDROID_HOME/." .android-sdk-cache/
+    # Rust + Android targets.
+    - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+    - . "$HOME/.cargo/env"
+    - rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+    # Node + pnpm.
+    - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    - apt-get install -y nodejs
+    - corepack enable
+    # Honour the "packageManager" field in package.json (pnpm 10.x — pnpm 11
+    # requires Node 22.13+, which this image doesn't ship).
+    - corepack install
+    - pnpm install --frozen-lockfile
+    # Initialise the Android project (idempotent; safe to re-run).
+    - pnpm tauri android init --ci
+  script:
+    - *upload_helper
+    - . "$HOME/.cargo/env"
+    - export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION:$PATH"
+    - export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+    - export GRADLE_USER_HOME="$CI_PROJECT_DIR/.gradle-cache"
+    - |
+      if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+        echo "Building release APK (release-signed)…"
+        pnpm tauri android build --apk
+        UNSIGNED=$(find src-tauri/gen/android/app/build/outputs/apk -name "*-release-unsigned.apk" | head -n1)
+        if [ -z "$UNSIGNED" ]; then
+          # Some Tauri versions emit *-release.apk (still unsigned without a signingConfig).
+          UNSIGNED=$(find src-tauri/gen/android/app/build/outputs/apk -name "*-release.apk" | head -n1)
+        fi
+        echo "Found APK: $UNSIGNED"
+        echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > /tmp/quark.jks
+        zipalign -p -f 4 "$UNSIGNED" /tmp/quark-aligned.apk
+        apksigner sign \
+          --ks /tmp/quark.jks \
+          --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
+          --ks-key-alias "$ANDROID_KEY_ALIAS" \
+          --key-pass "pass:$ANDROID_KEY_PASSWORD" \
+          --out quark-android.apk \
+          /tmp/quark-aligned.apk
+        rm -f /tmp/quark.jks /tmp/quark-aligned.apk
+      else
+        echo "No ANDROID_KEYSTORE_BASE64 set — building DEBUG-signed APK."
+        echo "  (Installable on dev devices, but NOT suitable for public release.)"
+        pnpm tauri android build --apk --debug
+        DEBUG_APK=$(find src-tauri/gen/android/app/build/outputs/apk -name "*-debug.apk" | head -n1)
+        cp "$DEBUG_APK" quark-android.apk
+      fi
+    - upload_to_registry "quark-android.apk" "quark-${CI_COMMIT_TAG}-android.apk"
+  artifacts:
+    name: "quark-android-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - quark-android.apk
+    expire_in: 30 days
 
 # ─── release ────────────────────────────────────────────────────────────────
 #
-# When a tag is pushed, create a GitLab release that links all three bundles.
-# Requires the "release-cli" image; the runner must have internet access.
+# Creates a GitLab Release whose asset links point to the Generic Package
+# Registry. Those URLs are stable (independent of job artifacts) and
+# externally downloadable when project visibility allows it.
 
 release:
-  stage: build
+  stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   needs:
     - job: build:linux
-      artifacts: true
+      artifacts: false
     - job: build:windows
-      artifacts: true
+      artifacts: false
     - job: build:macos
-      artifacts: true
+      artifacts: false
     - job: build:flatpak
-      artifacts: true
+      artifacts: false
+    - job: build:android
+      artifacts: false
   script:
     - echo "Creating release for $CI_COMMIT_TAG"
   release:
@@ -309,17 +459,30 @@ release:
     description: "Automated release — see CHANGELOG or commit history for details."
     assets:
       links:
-        - name: "Linux (.deb)"
-          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/src-tauri/target/release/bundle/deb/?job=build:linux"
-        - name: "Linux (.AppImage)"
-          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/src-tauri/target/release/bundle/appimage/?job=build:linux"
-        - name: "Windows (.msi)"
-          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/src-tauri/target/release/bundle/msi/?job=build:windows"
-        - name: "Windows (.exe)"
-          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/src-tauri/target/release/bundle/nsis/?job=build:windows"
-        - name: "macOS (.dmg)"
-          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/src-tauri/target/release/bundle/dmg/?job=build:macos"
+        - name: "Linux (.deb, amd64)"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-linux-amd64.deb"
+          link_type: package
+        - name: "Linux (.AppImage, amd64)"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-linux-amd64.AppImage"
+          link_type: package
+        - name: "Linux (.rpm, x86_64)"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-linux-x86_64.rpm"
+          link_type: package
         - name: "Linux (Flatpak)"
-          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/quark.flatpak?job=build:flatpak"
-  rules:
-    - if: $CI_COMMIT_TAG
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}.flatpak"
+          link_type: package
+        - name: "Windows (.msi, x64)"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-windows-x64.msi"
+          link_type: package
+        - name: "Windows (.exe NSIS, x64)"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-windows-x64.exe"
+          link_type: package
+        - name: "macOS (.dmg)"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-macos.dmg"
+          link_type: package
+        - name: "macOS (.app.tar.gz)"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-macos.app.tar.gz"
+          link_type: package
+        - name: "Android (.apk)"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-android.apk"
+          link_type: package
