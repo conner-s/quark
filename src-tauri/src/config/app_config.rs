@@ -180,16 +180,24 @@ impl Default for AppConfig {
 // ─── I/O ─────────────────────────────────────────────────────────────────────
 
 /// Return the canonical path to `~/.config/quark/config.toml`.
+///
+/// Desktop only — Android's filesystem layout has no `~/.config/`, so the
+/// caller should pass an explicit directory via `config_path_in()`.
 pub fn config_path() -> Option<std::path::PathBuf> {
     directories::ProjectDirs::from("", "", "quark")
         .map(|d| d.config_dir().join("config.toml"))
 }
 
-/// Load config from disk; return defaults if file is absent or unparseable.
-pub fn load_app_config() -> AppConfig {
-    let Some(path) = config_path() else { return AppConfig::default() };
+/// Return `<dir>/config.toml`. Use this on Android where the config dir comes
+/// from Tauri's `app.path().app_config_dir()` rather than XDG.
+pub fn config_path_in(dir: &std::path::Path) -> std::path::PathBuf {
+    dir.join("config.toml")
+}
+
+/// Load config from `path`; return defaults if the file is absent or unparseable.
+pub fn load_app_config_from(path: &std::path::Path) -> AppConfig {
     if !path.exists() { return AppConfig::default() }
-    let content = match std::fs::read_to_string(&path) {
+    let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
             tracing::warn!("Failed to read config.toml: {e}");
@@ -205,11 +213,8 @@ pub fn load_app_config() -> AppConfig {
     }
 }
 
-/// Serialize config and write it to `~/.config/quark/config.toml`.
-pub fn save_app_config(config: &AppConfig) -> Result<(), String> {
-    let path = config_path()
-        .ok_or_else(|| "Could not determine config directory".to_string())?;
-
+/// Serialize config and write it to `path`.
+pub fn save_app_config_to(path: &std::path::Path, config: &AppConfig) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create config dir: {e}"))?;
@@ -218,7 +223,7 @@ pub fn save_app_config(config: &AppConfig) -> Result<(), String> {
     let content = toml::to_string_pretty(config)
         .map_err(|e| format!("Failed to serialize config: {e}"))?;
 
-    std::fs::write(&path, content)
+    std::fs::write(path, content)
         .map_err(|e| format!("Failed to write config.toml: {e}"))?;
 
     Ok(())

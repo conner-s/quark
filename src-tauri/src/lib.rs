@@ -14,6 +14,13 @@ use tauri::Manager;
 /// Tauri managed state for the media cache.
 pub struct CacheState(pub Arc<MediaCache>);
 
+/// Resolved on-disk locations. Populated in `.setup()` so the values come from
+/// Tauri's per-platform path resolver — important on Android where the
+/// `directories` crate doesn't return a writable path.
+pub struct Paths {
+    pub config_dir: std::path::PathBuf,
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = tracing_subscriber::fmt()
@@ -28,18 +35,15 @@ pub fn run() {
     // sync would otherwise fire a notification for every unread message).
     events::init_startup_time();
 
-    // Load persisted configs from disk (fall back to defaults if absent).
-    let app_config = config::app_config::load_app_config();
-    let notification_config = notifications::load_notification_config();
-
-    // Initialise the media cache using the persisted size limit.
-    let cache_size_mb = app_config.media.cache_size_mb;
-    let cache = MediaCache::new(cache_size_mb)
-        .unwrap_or_else(|e| {
-            tracing::warn!("Failed to initialise media cache: {e}. Using temp dir fallback.");
-            let tmp = std::env::temp_dir().join("quark_media_cache");
-            MediaCache::with_dir(tmp, cache_size_mb).expect("Could not create fallback cache")
-        });
+    // Configs and the media cache are populated inside `.setup()` once the
+    // AppHandle's path resolver is available (needed for Android, where
+    // `directories::ProjectDirs` returns None). Until then the managed state
+    // holds defaults; the setup callback swaps in the persisted values.
+    let initial_cache = MediaCache::with_dir(
+        std::env::temp_dir().join("quark_media_cache"),
+        config::app_config::AppConfig::default().media.cache_size_mb,
+    )
+    .expect("Could not create initial media cache");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -49,9 +53,9 @@ pub fn run() {
             handle: Mutex::new(None),
             handlers_registered: Mutex::new(false),
         })
-        .manage(CacheState(Arc::new(cache)))
-        .manage(Mutex::new(app_config))
-        .manage(Mutex::new(notification_config))
+        .manage(CacheState(Arc::new(initial_cache)))
+        .manage(Mutex::new(config::app_config::AppConfig::default()))
+        .manage(Mutex::new(notifications::NotificationConfig::default()))
         .invoke_handler(tauri::generate_handler![
             // Auth
             commands::login,
@@ -154,6 +158,54 @@ pub fn run() {
         ])
         .setup(|app| {
             eprintln!("[quark] setup callback running...");
+
+            // Resolve the platform's writable config dir. On desktop this is
+            // typically ~/.config/quark; on Android, /data/data/<id>/files
+            // (the `directories` crate doesn't know either of those for
+            // Android, so we go through Tauri's path resolver).
+            let config_dir = app
+                .path()
+                .app_config_dir()
+                .map(|p| {
+                    // Some platforms return the parent application support
+                    // dir directly; nested "quark" keeps everything namespaced.
+                    if p.ends_with("quark") { p } else { p.join("quark") }
+                })
+                .unwrap_or_else(|_| std::env::temp_dir().join("quark"));
+            tracing::info!("Config directory: {}", config_dir.display());
+
+            // Now that we know the directory, load persisted configs and
+            // replace the placeholder default values we stashed in managed
+            // state at builder time.
+            let loaded_app =
+                config::app_config::load_app_config_from(&config::app_config::config_path_in(&config_dir));
+            let loaded_notif = notifications::load_notification_config_from(&config_dir);
+            if let Some(cfg_state) = app.try_state::<Mutex<config::app_config::AppConfig>>() {
+                if let Ok(mut g) = cfg_state.lock() { *g = loaded_app.clone(); }
+            }
+            if let Some(notif_state) = app.try_state::<Mutex<notifications::NotificationConfig>>() {
+                if let Ok(mut g) = notif_state.lock() { *g = loaded_notif; }
+            }
+
+            // Swap the media cache to the platform-appropriate data dir if we
+            // can resolve one. Falling through to the temp-dir cache built at
+            // startup is fine (it just won't persist across reboots).
+            if let Ok(data_dir) = app.path().app_data_dir() {
+                let cache_dir = data_dir.join("media_cache");
+                let cache_size_mb = loaded_app.media.cache_size_mb;
+                if let Ok(real_cache) = MediaCache::with_dir(cache_dir, cache_size_mb) {
+                    if let Some(cache_state) = app.try_state::<CacheState>() {
+                        // Swap the inner Arc. CacheState's field is Arc, not
+                        // Mutex<Arc>, so we have to manage state by replacing
+                        // it via app.manage() — Tauri allows re-managing.
+                        let _ = cache_state;
+                        app.manage(CacheState(Arc::new(real_cache)));
+                    }
+                }
+            }
+
+            app.manage(Paths { config_dir });
+
             let window = app.get_webview_window("main")
                 .expect("no main window found");
             eprintln!("[quark] main window acquired");

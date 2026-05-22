@@ -1,5 +1,5 @@
 // Slim top bar shown only in mobile mode.
-// Layout: [≡ hamburger] [room avatar — tap to open settings] [room name]
+// Layout: [≡ hamburger] [room avatar — tap to open settings] [room name] [@ members]
 //
 // On mobile the desktop `.room-header` is hidden (it'd duplicate the room
 // name and member count), so this bar carries the contextual room info too.
@@ -11,8 +11,10 @@ export class MobileTopBar {
   private _titleEl: HTMLElement;
   private _hamburgerEl: HTMLButtonElement;
   private _avatarBtnEl: HTMLButtonElement;
+  private _membersBtnEl: HTMLButtonElement;
   private _onHamburger: (() => void) | null = null;
   private _onAvatar: (() => void) | null = null;
+  private _onMembers: (() => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -41,9 +43,20 @@ export class MobileTopBar {
     this._titleEl.className = "mobile-top-bar__title";
     this._titleEl.textContent = "Quark";
 
+    // Member-list toggle on the right. Mirrors desktop's @ shortcut. Hidden
+    // (via the --no-room modifier) until a room is selected so it doesn't
+    // sit there inert at startup.
+    this._membersBtnEl = document.createElement("button");
+    this._membersBtnEl.type = "button";
+    this._membersBtnEl.className = "mobile-top-bar__btn mobile-top-bar__members mobile-top-bar__members--hidden";
+    this._membersBtnEl.setAttribute("aria-label", "Show members");
+    this._membersBtnEl.textContent = "@";
+    this._membersBtnEl.addEventListener("click", () => this._onMembers?.());
+
     this._el.appendChild(this._hamburgerEl);
     this._el.appendChild(this._avatarBtnEl);
     this._el.appendChild(this._titleEl);
+    this._el.appendChild(this._membersBtnEl);
   }
 
   getElement(): HTMLElement {
@@ -52,6 +65,11 @@ export class MobileTopBar {
 
   setTitle(text: string): void {
     this._titleEl.textContent = text || "Quark";
+  }
+
+  /** Show or hide the @ members button (hidden when no room is selected). */
+  setMembersButtonVisible(visible: boolean): void {
+    this._membersBtnEl.classList.toggle("mobile-top-bar__members--hidden", !visible);
   }
 
   /**
@@ -86,5 +104,10 @@ export class MobileTopBar {
   /** Wire what happens when the user taps the room avatar (open settings). */
   onAvatarClick(handler: () => void): void {
     this._onAvatar = handler;
+  }
+
+  /** Wire what happens when the user taps the @ members button. */
+  onMembersClick(handler: () => void): void {
+    this._onMembers = handler;
   }
 }

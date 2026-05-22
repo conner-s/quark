@@ -5347,6 +5347,18 @@ body.quark-mobile .mobile-top-bar {
   opacity: 0.6;
 }
 
+/* @ members button sits to the right of the title; reuses the generic
+ * .mobile-top-bar__btn styling but is hidden when no room is selected. */
+.mobile-top-bar__members {
+  font-size: 18px;
+  color: var(--accent-primary);
+}
+
+.mobile-top-bar__members--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* Hide the desktop room-header on mobile — its info (name, member count,
  * encryption) duplicates the mobile top bar and wastes vertical space. */
 body.quark-mobile .room-header {
@@ -5415,6 +5427,13 @@ body.quark-mobile .room-list {
   transition: transform 220ms ease;
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Drop-shadow only blooms outwards when the drawer is open; closed, it bled
+ * 24px into the viewport from the right edge of the off-screen panel and made
+ * the edge-swipe target look smudged. */
+body.quark-mobile-drawer-open .space-strip,
+body.quark-mobile-drawer-open .room-list {
   box-shadow: 0 0 24px var(--shadow-color);
 }
 

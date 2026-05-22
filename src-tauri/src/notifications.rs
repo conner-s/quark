@@ -118,14 +118,12 @@ pub fn is_in_quiet_hours(config: &NotificationConfig) -> bool {
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
-fn notification_config_path() -> Option<std::path::PathBuf> {
-    directories::ProjectDirs::from("", "", "quark")
-        .map(|d| d.config_dir().join("notifications.toml"))
-}
+/// Notification config filename within the config directory.
+pub const NOTIFICATIONS_FILENAME: &str = "notifications.toml";
 
-/// Load notification config from disk; returns defaults if absent or invalid.
-pub fn load_notification_config() -> NotificationConfig {
-    let Some(path) = notification_config_path() else { return NotificationConfig::default() };
+/// Load notification config from `<config_dir>/notifications.toml`.
+pub fn load_notification_config_from(config_dir: &std::path::Path) -> NotificationConfig {
+    let path = config_dir.join(NOTIFICATIONS_FILENAME);
     if !path.exists() { return NotificationConfig::default() }
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
@@ -143,16 +141,15 @@ pub fn load_notification_config() -> NotificationConfig {
     }
 }
 
-/// Write notification config to `~/.config/quark/notifications.toml`.
-pub fn save_notification_config(config: &NotificationConfig) -> Result<(), String> {
-    let path = notification_config_path()
-        .ok_or_else(|| "Could not determine config directory".to_string())?;
+/// Write notification config to `<config_dir>/notifications.toml`.
+pub fn save_notification_config_to(
+    config_dir: &std::path::Path,
+    config: &NotificationConfig,
+) -> Result<(), String> {
+    std::fs::create_dir_all(config_dir)
+        .map_err(|e| format!("Failed to create config dir: {e}"))?;
 
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create config dir: {e}"))?;
-    }
-
+    let path = config_dir.join(NOTIFICATIONS_FILENAME);
     let content = toml::to_string_pretty(config)
         .map_err(|e| format!("Failed to serialize notifications config: {e}"))?;
 

@@ -343,6 +343,29 @@ async function _loadOwnProfile(): Promise<void> {
 }
 
 /**
+ * Poll refreshRooms() until the room cache populates, capped at ~8s.
+ *
+ * Rationale: on first login the backend `start_sync` has only just been
+ * spawned and the long-poll sync hasn't returned any rooms yet. Calling
+ * refreshRooms() once at this point gets an empty list. The matrix-sdk
+ * sync loop runs internally and exits the `Ok(_)` arm of our Rust loop
+ * rarely — so the EVENT_CONNECTED frontend listener can't be relied on
+ * for the initial population on slower mobile networks.
+ *
+ * We poll instead: ~500ms ticks for 8s should cover most homeserver
+ * round-trips, and stops as soon as the first sync lands rooms.
+ */
+async function _pollUntilRoomsLoaded(): Promise<void> {
+  const POLL_MS = 500;
+  const MAX_ATTEMPTS = 16; // ~8s
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    if (AppState.get("roomListCache").length > 0) return;
+    await new Promise((r) => setTimeout(r, POLL_MS));
+    try { await refreshRooms(); } catch { /* keep polling */ }
+  }
+}
+
+/**
  * Attempt password login. On success, transitions to main layout and loads rooms.
  */
 export async function login(homeserver: string, username: string, password: string): Promise<void> {
@@ -360,6 +383,9 @@ export async function login(homeserver: string, username: string, password: stri
     void _loadOwnProfile();
     await loadThemeFromConfig();
     await refreshRooms();
+    // First-login race: the Rust sync loop is up but hasn't returned rooms yet.
+    // Keep retrying in the background so the user doesn't have to relaunch.
+    void _pollUntilRoomsLoaded();
 
     showSuccess("Connected successfully");
   } catch (err) {

@@ -5,22 +5,24 @@ import { invoke } from "../ipc/invoke.js";
 import type { ThreadMessageData } from "./ThreadView.js";
 import { isAnimatedUrl } from "../app/animated_urls.js";
 import { hashColor } from "./avatarColors.js";
-import { isMobile } from "../app/mobile.js";
 
 /**
- * Open an external URL. On mobile (iOS WebView) we let the OS handle it via a
- * synchronous `window.open(_, "_blank")` inside the user-initiated click so
- * Safari pops open; the async `invoke("plugin:shell|open")` resolves too late
- * for iOS popup-blocker rules. On desktop the shell plugin is reliable.
+ * Open an external URL via the Tauri shell plugin (`UIApplication.shared.open`
+ * on iOS, `Intent.ACTION_VIEW` on Android, the OS default browser everywhere
+ * else). Falls back to `window.open` only when the plugin invoke errors —
+ * normally a non-Tauri environment (browser dev mode).
+ *
+ * Earlier iterations split the iOS path off to a synchronous `window.open` on
+ * the assumption that the async shell invoke would lose user-gesture
+ * eligibility, but iOS WKWebView doesn't have Safari's popup-blocker rule —
+ * the shell plugin works regardless of when it runs. `window.open` itself
+ * doesn't work in WKWebView at all without a `createWebViewWith` delegate
+ * (Tauri sets none), so the iOS-only path silently no-op'd taps.
  */
 function openExternalUrl(url: string): void {
   if (!(url.startsWith("http://") || url.startsWith("https://"))) return;
-  if (isMobile()) {
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) void invoke("plugin:shell|open", { path: url }).catch(() => {});
-    return;
-  }
-  void invoke("plugin:shell|open", { path: url }).catch(() => {
+  void invoke("plugin:shell|open", { path: url }).catch((err) => {
+    console.warn("shell|open failed, falling back to window.open:", err);
     window.open(url, "_blank", "noopener,noreferrer");
   });
 }

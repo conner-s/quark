@@ -1321,9 +1321,11 @@ pub async fn get_app_config(
 pub async fn set_app_config(
     config_state: State<'_, Mutex<AppConfig>>,
     cache_state: State<'_, CacheState>,
+    paths: State<'_, crate::Paths>,
     config: AppConfig,
 ) -> Result<(), String> {
-    crate::config::app_config::save_app_config(&config)?;
+    let path = crate::config::app_config::config_path_in(&paths.config_dir);
+    crate::config::app_config::save_app_config_to(&path, &config)?;
     let new_cache_mb = config.media.cache_size_mb;
     let mut guard = config_state.lock().map_err(|_| "App config lock poisoned")?;
     *guard = config;
@@ -1373,15 +1375,15 @@ struct PartialTheme {
     meta: Option<PartialThemeMeta>,
 }
 
-/// Scan `~/.config/quark/themes/` for *.toml files and return their names and
+/// Scan `<config_dir>/themes/` for *.toml files and return their names and
 /// paths.  Every .toml file is included regardless of whether it is a complete
 /// valid theme — display name falls back to the filename stem when the [meta]
 /// table is absent.  Full validation happens later when the user clicks Apply.
 #[tauri::command]
-pub async fn list_custom_themes() -> Result<Vec<CustomThemeEntry>, String> {
-    let dirs = directories::ProjectDirs::from("", "", "quark")
-        .ok_or_else(|| "Could not determine config directory".to_string())?;
-    let themes_dir = dirs.config_dir().join("themes");
+pub async fn list_custom_themes(
+    paths: State<'_, crate::Paths>,
+) -> Result<Vec<CustomThemeEntry>, String> {
+    let themes_dir = paths.config_dir.join("themes");
 
     if !themes_dir.exists() {
         return Ok(vec![]);
@@ -1426,13 +1428,11 @@ pub async fn parse_quarkrc(content: String) -> Result<ParsedRc, String> {
     Ok(crate::config::quarkrc::parse_quarkrc(&content))
 }
 
-/// Load and parse the user's quarkrc from the XDG config dir (~/.config/quark/quarkrc).
+/// Load and parse the user's quarkrc from the resolved config dir.
 /// Returns an empty ParsedRc if the file does not exist.
 #[tauri::command]
-pub async fn load_quarkrc() -> Result<ParsedRc, String> {
-    let dirs = directories::ProjectDirs::from("", "", "quark")
-        .ok_or_else(|| "Could not determine config directory".to_string())?;
-    let rc_path = dirs.config_dir().join("quarkrc");
+pub async fn load_quarkrc(paths: State<'_, crate::Paths>) -> Result<ParsedRc, String> {
+    let rc_path = paths.config_dir.join("quarkrc");
 
     if !rc_path.exists() {
         return Ok(ParsedRc { directives: vec![], errors: vec![] });
@@ -1486,9 +1486,10 @@ pub async fn get_notification_config(
 #[tauri::command]
 pub async fn set_notification_config(
     config_state: State<'_, Mutex<NotificationConfig>>,
+    paths: State<'_, crate::Paths>,
     config: NotificationConfig,
 ) -> Result<(), String> {
-    crate::notifications::save_notification_config(&config)?;
+    crate::notifications::save_notification_config_to(&paths.config_dir, &config)?;
     let mut guard = config_state.lock().map_err(|_| "Notification config lock poisoned")?;
     *guard = config;
     Ok(())

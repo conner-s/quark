@@ -201,6 +201,9 @@ export function mountApp(container: HTMLElement): AppComponents {
   initMobile();
   setupTouchGestures(mainLayout, roomList.getElement());
   mobileTopBar.onHamburgerClick(() => toggleDrawer());
+  // The @ button on the right mirrors the desktop `@` keybinding — opens the
+  // member list as a full-screen overlay on mobile.
+  mobileTopBar.onMembersClick(() => toggleMemberList());
   // Mobile-only: tapping the "Rooms" header in the drawer closes it. On
   // desktop the header is purely decorative, so the listener is a no-op
   // when isMobile() is false.
@@ -240,10 +243,12 @@ export function mountApp(container: HTMLElement): AppComponents {
     if (!roomId) {
       mobileTopBar.setTitle("Quark");
       mobileTopBar.setRoom("", null);
+      mobileTopBar.setMembersButtonVisible(false);
       return;
     }
     const room = AppState.get("roomListCache").find((r) => r.room_id === roomId);
     mobileTopBar.setTitle(room?.name ?? roomId);
+    mobileTopBar.setMembersButtonVisible(true);
   };
   AppState.on("currentRoomId", updateMobileTitle);
   AppState.on("roomListCache", updateMobileTitle);

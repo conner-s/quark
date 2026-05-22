@@ -8,10 +8,14 @@
 
 import { isMobile, isDrawerOpen, openDrawer, closeDrawer } from "./mobile.js";
 
-const EDGE_THRESHOLD_PX = 24;
-const SWIPE_DISTANCE_PX = 60;
-const SWIPE_MAX_DURATION_MS = 500;
-const SWIPE_VERTICAL_TOLERANCE_PX = 40;
+// Android's system back-gesture grabs the leftmost ~16dp, so the app's
+// edge-swipe target has to start further in. 32px is a comfortable middle
+// ground: still feels like an edge swipe, but the touch is reliably the
+// app's and not the system gesture's.
+const EDGE_THRESHOLD_PX = 32;
+const SWIPE_DISTANCE_PX = 48;
+const SWIPE_MAX_DURATION_MS = 600;
+const SWIPE_VERTICAL_TOLERANCE_PX = 50;
 
 interface Tracked {
   x: number;
