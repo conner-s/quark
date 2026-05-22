@@ -737,7 +737,8 @@ async function applyRcDirectives(rc: ParsedRc): Promise<void> {
 
 export function setupKeyboard(components: AppComponents): void {
   const { input, commandBar, shortcodePreview, mentionPreview, timeline,
-          emojiPicker, gifPicker, verification, helpDialog, quickReactPicker, profileDialog, devicePicker,
+          emojiPicker, gifPicker, verification, helpDialog, quickReactPicker,
+          profileDialog, profileEditDialog, devicePicker,
           settingsDialog, roomInfoDialog, pinnedMessagesDialog, roomDirectoryDialog,
           roomSettingsDialog, spaceSettingsDialog, debugViewer, revisionHistoryDialog,
           roomHeader, imageLightbox, quickNavPalette, contextMenu,
@@ -1100,7 +1101,8 @@ export function setupKeyboard(components: AppComponents): void {
       return;
     }
     if (gifPicker.isVisible() || verification.isVisible() || helpDialog.isVisible() ||
-        profileDialog.isVisible() || devicePicker.isVisible() ||
+        profileDialog.isVisible() || profileEditDialog.isVisible() ||
+        devicePicker.isVisible() ||
         settingsDialog.isVisible() || roomInfoDialog.isVisible() ||
         pinnedMessagesDialog.isVisible() || roomDirectoryDialog.isVisible() ||
         roomSettingsDialog.isVisible() || spaceSettingsDialog.isVisible() ||

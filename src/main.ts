@@ -3,7 +3,7 @@
 
 import { mountApp } from "./ui/App.js";
 import { AppState } from "./app/state.js";
-import { setComponents, login, logout, attemptSessionRestore, selectRoom, selectSpace, refreshRooms, openSettings, openRoomSettings } from "./app/actions.js";
+import { setComponents, login, logout, attemptSessionRestore, selectRoom, selectSpace, refreshRooms, openSettings, openRoomSettings, openOwnProfile } from "./app/actions.js";
 import { setupKeyboard } from "./app/keyboard.js";
 import { setupPanelNav } from "./app/panels.js";
 import { setupBackButton } from "./app/back.js";
@@ -112,6 +112,10 @@ components.spaceStrip.onSelect((spaceId) => {
 
 components.spaceStrip.onSettingsClick(() => {
   openSettings();
+});
+
+components.spaceStrip.onProfileClick(() => {
+  void openOwnProfile();
 });
 
 // ── Mobile top bar wiring ────────────────────────────────────────────────────

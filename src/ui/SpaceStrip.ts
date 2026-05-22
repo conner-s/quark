@@ -17,7 +17,10 @@ export class SpaceStrip {
   private _activeId: string | null = null;
   private _onSelect: ((id: string) => void) | null = null;
   private _onSettings: (() => void) | null = null;
+  private _onProfile: (() => void) | null = null;
   private _onContextMenu: ((spaceId: string, x: number, y: number) => void) | null = null;
+  private _ownAvatarUrl: string | null = null;
+  private _ownInitial: string = "?";
 
   constructor() {
     this._el = document.createElement("div");
@@ -37,6 +40,21 @@ export class SpaceStrip {
 
   onSettingsClick(handler: () => void): void {
     this._onSettings = handler;
+  }
+
+  onProfileClick(handler: () => void): void {
+    this._onProfile = handler;
+  }
+
+  /**
+   * Update the profile-button avatar. Pass `null` to render a colored initial
+   * fallback derived from `initial` (typically the first character of the
+   * user's display name or MXID localpart).
+   */
+  setOwnProfile(initial: string, avatarUrl: string | null): void {
+    this._ownAvatarUrl = avatarUrl;
+    this._ownInitial = (initial && initial[0]) ? initial[0].toUpperCase() : "?";
+    this._render();
   }
 
   onContextMenu(handler: (spaceId: string, x: number, y: number) => void): void {
@@ -138,11 +156,39 @@ export class SpaceStrip {
       this._el.appendChild(this._createItem({ id: ps.id, name: ps.label }, ps.icon));
     }
 
-    // Spacer pushes settings button to the bottom
+    // Spacer pushes the profile + settings buttons to the bottom
     const spacer = document.createElement("div");
     spacer.className = "space-strip__spacer";
     spacer.setAttribute("aria-hidden", "true");
     this._el.appendChild(spacer);
+
+    // Profile button — sits just above settings. The avatar (or coloured
+    // initial fallback) is the universal entry point to "my profile" on both
+    // desktop and mobile.
+    const profileBtn = document.createElement("div");
+    profileBtn.className = "space-strip__profile-btn";
+    profileBtn.setAttribute("role", "button");
+    profileBtn.setAttribute("tabindex", "0");
+    profileBtn.setAttribute("aria-label", "Your profile");
+    profileBtn.title = "Profile";
+    if (this._ownAvatarUrl) {
+      const img = document.createElement("img");
+      img.src = this._ownAvatarUrl;
+      img.alt = "";
+      img.className = "space-strip__profile-img";
+      profileBtn.appendChild(img);
+    } else {
+      profileBtn.classList.add("space-strip__profile-btn--fallback");
+      profileBtn.textContent = this._ownInitial;
+    }
+    profileBtn.addEventListener("click", () => this._onProfile?.());
+    profileBtn.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        this._onProfile?.();
+      }
+    });
+    this._el.appendChild(profileBtn);
 
     // Settings button always at the bottom
     const settingsBtn = document.createElement("div");

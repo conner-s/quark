@@ -667,6 +667,9 @@ quark/
     - [x] `matrix-sdk` and `reqwest` switched to `rustls-tls` for `target_os = "android"` only — `native-tls` pulls in `openssl-sys`, which can't cross-compile to Android without a vendored OpenSSL build. Desktop + iOS keep `native-tls` so their existing TLS behaviour is unchanged.
     - [x] Makefile targets `android-init`, `android-dev`, `android-build`, `android-build-debug` export `ANDROID_HOME`, `NDK_HOME`, and `JAVA_HOME` automatically (defaults assume the macOS Android Studio layout).
     - [x] Debug APK builds cleanly for `aarch64-linux-android`.
+    - [x] Config persistence works on Android — routed through `app_handle.path().app_config_dir()` so `directories::ProjectDirs` returning `None` on Android no longer breaks theme/notification save.
+    - [x] Hardware back button is wired: seeds a history entry on startup and uses `popstate` to close the topmost overlay, then member list, then thread, then drawer; with nothing else open, the back press toggles the drawer.
+    - [x] OS notification permission (POST_NOTIFICATIONS, Android 13+) is requested on login + session-restore via the notification plugin. Settings → Notifications has a "test notification" button for verification.
     - [ ] Smoke test on a physical device or emulator (`make android-dev`).
     - [ ] Confirm matrix-sdk's SQLite store works under Android scoped storage.
     - [ ] Android-specific icon set (currently the default Tauri launcher icons).
@@ -703,6 +706,7 @@ quark/
 - [ ] Theme hot-reloading — filesystem watcher (`notify` crate) not hooked up; requires app restart to change theme
 
 #### UI / Polish
+- [x] Profile edit dialog — display name and presence status are editable via a `[edit profile]` button on the own-profile view; opened from a new avatar button at the bottom of the space strip. Avatar upload is still a TODO (needs file picker + mxc upload).
 - [ ] Home UI: Friends' icons and chat bubbles float around and the user's status
   - [ ] Hides room list and member list
   - [ ] Show user's profile fixed to the left side with the ability to update status and profile picture

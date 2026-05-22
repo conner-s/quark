@@ -337,6 +337,23 @@ async function _loadOwnProfile(): Promise<void> {
     const profile = await getOwnProfile();
     AppState.set("ownUserId", profile.user_id);
     AppState.set("ownDisplayName", profile.display_name);
+
+    // Render the user's avatar in the space-strip profile button. Mxc URLs
+    // need downloading; the initial fallback works without network. Both
+    // the space strip's own renderer handles either case.
+    const initialSource = profile.display_name || profile.user_id.replace(/^@/, "");
+    const { spaceStrip } = getComponents();
+    spaceStrip.setOwnProfile(initialSource, null);
+
+    if (profile.avatar_url?.startsWith("mxc://")) {
+      try {
+        const dl = await downloadMedia(profile.avatar_url);
+        const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
+        spaceStrip.setOwnProfile(initialSource, dataUrl);
+      } catch {
+        // Network or media error — leave the initial fallback in place.
+      }
+    }
   } catch {
     // Non-critical — sendMessage falls back to user ID string
   }
@@ -1912,23 +1929,79 @@ export async function openProfileDialog(): Promise<void> {
       }
     }
     // Fallback: own profile
+    await openOwnProfile();
+  } catch (err) {
+    showError(`Failed to load profile: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Show the current user's own profile dialog with an [edit profile] button.
+ *
+ * Wired to the SpaceStrip profile button, so it's the universal "my profile"
+ * entry point. Keyboard-driven flows still go through `openProfileDialog`,
+ * which falls back here when no message or member is selected.
+ */
+export async function openOwnProfile(): Promise<void> {
+  const { profileDialog } = getComponents();
+  try {
     const profile = await getOwnProfile();
     let avatarUrl: string | null = null;
     if (profile.avatar_url) {
       try {
-        // Use full media (not thumbnail) so animated GIF/WEBP avatars are preserved.
         const dl = await downloadMedia(profile.avatar_url);
         avatarUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
       } catch { /* non-critical */ }
     }
+    const cachedStatus = AppState.getUserStatus(profile.user_id);
     profileDialog.show({
       userId: profile.user_id,
       displayName: profile.display_name,
       avatarUrl,
+      statusMessage: cachedStatus,
+      onEdit: () => openProfileEdit(),
     });
   } catch (err) {
     showError(`Failed to load profile: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+/**
+ * Open the profile-edit modal pre-filled with the user's current display
+ * name and status. On save: persist both via IPC, refresh the status bar
+ * presence chip, and surface a toast on failure.
+ */
+export async function openProfileEdit(): Promise<void> {
+  const { profileEditDialog, statusBar } = getComponents();
+  let profile;
+  try {
+    profile = await getOwnProfile();
+  } catch (err) {
+    showError(`Failed to load profile: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  const currentStatus = AppState.getUserStatus(profile.user_id);
+  profileEditDialog.show(
+    {
+      userId: profile.user_id,
+      displayName: profile.display_name,
+      statusMessage: currentStatus,
+    },
+    async ({ displayName, statusMessage, displayNameChanged, statusChanged }) => {
+      // Persist in parallel — neither call depends on the other and there's
+      // no rollback story we can offer either way. The dialog surfaces any
+      // error string returned from either IPC.
+      const ops: Promise<unknown>[] = [];
+      if (displayNameChanged) ops.push(ipcSetDisplayName(displayName));
+      if (statusChanged) ops.push(ipcSetPresenceStatus(statusMessage));
+      await Promise.all(ops);
+      // Reflect the new status in the status bar so the user sees the change
+      // without re-opening their profile. The display-name change shows up
+      // automatically on the next presence event from the homeserver.
+      if (statusChanged) statusBar.setStatusMessage(statusMessage);
+      AppState.cacheUserStatus(profile.user_id, statusMessage || null);
+    }
+  );
 }
 
 /**

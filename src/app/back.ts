@@ -37,6 +37,7 @@ function _isHandlingDialog(c: AppComponents): boolean {
     c.devicePicker,
     c.helpDialog,
     c.profileDialog,
+    c.profileEditDialog,
     c.settingsDialog,
     c.roomInfoDialog,
     c.pinnedMessagesDialog,

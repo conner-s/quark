@@ -11,6 +11,9 @@ export interface ProfileData {
   statusMessage?: string | null;
   /** If provided, a [message] button is shown that calls this when clicked. */
   onMessage?: () => void;
+  /** If provided, an [edit profile] button is shown — typically only set
+   *  when the profile being shown is the current user's. */
+  onEdit?: () => void;
 }
 
 /**
@@ -27,6 +30,7 @@ export class ProfileDialog {
   private _statusMsgRow: HTMLElement;
   private _copyBtn: HTMLButtonElement;
   private _dmBtn: HTMLButtonElement;
+  private _editBtn: HTMLButtonElement;
   private _actionsEl: HTMLElement;
 
   constructor() {
@@ -140,6 +144,18 @@ export class ProfileDialog {
     this._dmBtn.setAttribute("aria-label", "Open direct message");
     this._dmBtn.setAttribute("tabindex", "-1");
     this._actionsEl.appendChild(this._dmBtn);
+
+    // [edit profile] — only shown when caller provides `onEdit`, typically
+    // for the user's own profile. Reusing the same actions row keeps the
+    // dialog's geometry stable whether it's a self-view or other-view.
+    this._editBtn = document.createElement("button");
+    this._editBtn.type = "button";
+    this._editBtn.className = "profile-dialog__dm-btn";
+    this._editBtn.textContent = "[edit profile]";
+    this._editBtn.setAttribute("aria-label", "Edit profile");
+    this._editBtn.setAttribute("tabindex", "-1");
+    this._actionsEl.appendChild(this._editBtn);
+
     this._actionsEl.style.display = "none";
     this._el.appendChild(this._actionsEl);
 
@@ -199,21 +215,38 @@ export class ProfileDialog {
       this._statusMsgRow.style.display = "none";
     }
 
-    // Wire up DM button
+    // Wire up DM button — replace existing listener by cloning the node.
     if (data.onMessage) {
       const handler = data.onMessage;
-      // Remove previous listener by cloning the node
       const newBtn = this._dmBtn.cloneNode(true) as HTMLButtonElement;
       this._dmBtn.replaceWith(newBtn);
       this._dmBtn = newBtn;
+      this._dmBtn.style.display = "";
       this._dmBtn.addEventListener("click", () => {
         this.hide();
         handler();
       });
-      this._actionsEl.style.display = "";
     } else {
-      this._actionsEl.style.display = "none";
+      this._dmBtn.style.display = "none";
     }
+
+    // Wire up edit button. Same clone trick to drop the previous handler.
+    if (data.onEdit) {
+      const handler = data.onEdit;
+      const newEdit = this._editBtn.cloneNode(true) as HTMLButtonElement;
+      this._editBtn.replaceWith(newEdit);
+      this._editBtn = newEdit;
+      this._editBtn.style.display = "";
+      this._editBtn.addEventListener("click", () => {
+        this.hide();
+        handler();
+      });
+    } else {
+      this._editBtn.style.display = "none";
+    }
+
+    // Show the action row if either button is in use.
+    this._actionsEl.style.display = data.onMessage || data.onEdit ? "" : "none";
 
     if (data.avatarUrl) {
       this._avatarEl.innerHTML = "";

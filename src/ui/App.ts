@@ -19,6 +19,7 @@ import { DevicePicker } from "./DevicePicker.js";
 import { ShortcodePreview } from "./ShortcodePreview.js";
 import { QuickReactPicker } from "./QuickReactPicker.js";
 import { ProfileDialog } from "./ProfileDialog.js";
+import { ProfileEditDialog } from "./ProfileEditDialog.js";
 import { SettingsDialog } from "./SettingsDialog.js";
 import { RoomInfoDialog } from "./RoomInfoDialog.js";
 import { PinnedMessagesDialog } from "./PinnedMessagesDialog.js";
@@ -67,6 +68,7 @@ export interface AppComponents {
   commandBar: CommandBar;
   quickReactPicker: QuickReactPicker;
   profileDialog: ProfileDialog;
+  profileEditDialog: ProfileEditDialog;
   settingsDialog: SettingsDialog;
   roomInfoDialog: RoomInfoDialog;
   pinnedMessagesDialog: PinnedMessagesDialog;
@@ -122,6 +124,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   const helpDialog = new HelpDialog();
   const quickReactPicker = new QuickReactPicker();
   const profileDialog = new ProfileDialog();
+  const profileEditDialog = new ProfileEditDialog();
   const settingsDialog = new SettingsDialog();
   const roomInfoDialog = new RoomInfoDialog();
   const pinnedMessagesDialog = new PinnedMessagesDialog();
@@ -279,6 +282,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   document.body.appendChild(helpDialog.getElement());
   document.body.appendChild(quickReactPicker.getElement());
   document.body.appendChild(profileDialog.getElement());
+  document.body.appendChild(profileEditDialog.getElement());
   document.body.appendChild(settingsDialog.getElement());
   document.body.appendChild(roomInfoDialog.getElement());
   document.body.appendChild(pinnedMessagesDialog.getElement());
@@ -310,6 +314,7 @@ export function mountApp(container: HTMLElement): AppComponents {
     helpDialog,
     quickReactPicker,
     profileDialog,
+    profileEditDialog,
     settingsDialog,
     roomInfoDialog,
     pinnedMessagesDialog,
