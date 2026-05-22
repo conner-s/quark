@@ -10,6 +10,8 @@ import {
   muteRoomIpc,
   unmuteRoomIpc,
 } from "../ipc/notifications.js";
+import { invoke } from "../ipc/invoke.js";
+import { isTauri } from "../ipc/mock.js";
 import { showToast } from "../ui/NotificationToast.js";
 import type { NotificationConfig } from "../ipc/notifications.js";
 
@@ -59,10 +61,36 @@ function _shouldShowInAppToast(roomId: string): boolean {
  *
  * Call this once during app startup. It loads the persisted config from the
  * Rust backend so that subsequent calls to `shouldNotifyInApp` reflect the
- * user's preferences.
+ * user's preferences, and (on Android 13+) prompts the user for the
+ * POST_NOTIFICATIONS runtime permission. Without that, all OS notifications
+ * the Rust backend tries to emit are silently dropped.
  */
 export async function initNotifications(): Promise<void> {
   await _loadConfig();
+  await _ensureNotificationPermission();
+}
+
+/**
+ * Check + request the OS notification permission. No-op on desktop and in
+ * non-Tauri contexts. On Android 13+ this surfaces the system permission
+ * dialog the first time it runs. The result is fire-and-forget — if the
+ * user denies, we keep going (in-app toasts still work).
+ */
+async function _ensureNotificationPermission(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const granted = await invoke<boolean>("plugin:notification|is_permission_granted");
+    if (granted) return;
+    // request_permission returns "granted" | "denied" | "default" on most
+    // platforms. We don't act on the result here — the user's choice is
+    // remembered by the OS and the Rust backend will simply fail to emit
+    // notifications if they declined.
+    await invoke("plugin:notification|request_permission");
+  } catch (err) {
+    // Plugin may be missing in some build configurations (e.g. minimal mobile
+    // smoke builds). Log and keep going — in-app toasts still function.
+    console.warn("Notification permission check failed:", err);
+  }
 }
 
 /**

@@ -3,6 +3,8 @@
 import { keymapManager } from "../vim/keybindings.js";
 import { getConfig, setNotificationConfig } from "../app/notifications.js";
 import type { NotificationConfig } from "../app/notifications.js";
+import { testNotification } from "../ipc/notifications.js";
+import { showSuccess, showError } from "./NotificationToast.js";
 import { getCacheStats, clearMediaCache, setCacheSizeLimit } from "../ipc/media.js";
 import type { CacheStats } from "../ipc/media.js";
 import { getAppConfig, setAppConfig } from "../ipc/app_config.js";
@@ -624,6 +626,24 @@ export class SettingsDialog {
       await setNotificationConfig({ ...draft, quiet_hours });
     });
     footer.appendChild(saveBtn);
+
+    // Test button — sends a one-shot OS notification so the user can confirm
+    // the permission grant and channel setup work end-to-end (especially on
+    // Android, where missing POST_NOTIFICATIONS used to silently drop them).
+    const testBtn = document.createElement("button");
+    testBtn.type = "button";
+    testBtn.className = "settings-dialog__save-btn";
+    testBtn.textContent = "[ test notification ]";
+    testBtn.style.marginLeft = "8px";
+    testBtn.addEventListener("click", async () => {
+      try {
+        await testNotification();
+        showSuccess("Sent test notification");
+      } catch (err) {
+        showError(`Test notification failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    });
+    footer.appendChild(testBtn);
 
     section.appendChild(qhSection);
     section.appendChild(footer);

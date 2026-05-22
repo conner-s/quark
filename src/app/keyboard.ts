@@ -793,7 +793,7 @@ export function setupKeyboard(components: AppComponents): void {
     revisionHistoryDialog.show(eventId, originalBody);
   });
 
-  // Right-click context menu for messages
+  // Right-click / long-press context menu for messages
   timeline.onContextMenu((eventId, x, y) => {
     const events = AppState.get("currentTimeline");
     const evt = events.find((ev) => ev.event_id === eventId);
@@ -812,6 +812,11 @@ export function setupKeyboard(components: AppComponents): void {
         label: "React",
         hint: "e",
         action: () => openQuickReactPicker(eventId),
+      },
+      {
+        label: "Thread",
+        hint: "t",
+        action: () => void openThread(eventId),
       },
       { separator: true },
       {

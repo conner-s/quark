@@ -6,6 +6,8 @@ import { AppState } from "./app/state.js";
 import { setComponents, login, logout, attemptSessionRestore, selectRoom, selectSpace, refreshRooms, openSettings, openRoomSettings } from "./app/actions.js";
 import { setupKeyboard } from "./app/keyboard.js";
 import { setupPanelNav } from "./app/panels.js";
+import { setupBackButton } from "./app/back.js";
+import { initNotifications } from "./app/notifications.js";
 import { startSync } from "./app/sync.js";
 import { showError } from "./ui/NotificationToast.js";
 import { setForceMock } from "./ipc/invoke.js";
@@ -43,6 +45,10 @@ setComponents(components);
 // Wire panel navigation (must happen before any keyboard setup)
 setupPanelNav(components);
 
+// Wire Android hardware back button. Seeds one history entry now so the OS
+// back press fires `popstate` instead of exiting the app.
+setupBackButton(components);
+
 // ── Debug auto-login ──────────────────────────────────────────────────────────
 
 if (DEBUG_MODE) {
@@ -71,6 +77,7 @@ if (!DEBUG_MODE) {
     if (restored) {
       setupKeyboard(components);
       void startSync(components);
+      void initNotifications();
     }
   });
 }
@@ -84,6 +91,10 @@ components.loginScreen.onLogin(async (homeserver, username, password) => {
   if (AppState.get("loggedIn")) {
     setupKeyboard(components);
     void startSync(components);
+    // Prompt for the OS notification permission once the user is in. Doing
+    // this after login (not on cold start) keeps the system dialog tied to
+    // an obvious "you're about to start chatting" context.
+    void initNotifications();
   }
 });
 

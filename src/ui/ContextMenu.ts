@@ -1,5 +1,12 @@
 // Floating context menu — replaces the browser's native right-click menu
 // for app-relevant elements (messages, room icons, etc.)
+//
+// On mobile (long-press), the menu morphs into a bottom sheet: full-width,
+// docked to the bottom of the viewport, with large-tap rows. The trigger
+// coordinates from a long-press are usually wherever the user's finger is,
+// which is the worst possible spot to anchor a tiny floating popover.
+
+import { isMobile } from "../app/mobile.js";
 
 export interface ContextMenuItem {
   label: string;
@@ -20,8 +27,11 @@ export class ContextMenu {
   private _activeIndex = -1;
   private _items: ContextMenuItem[] = [];
 
-  // Close when the user clicks anywhere outside the menu
-  private _outsideHandler = (e: MouseEvent) => {
+  // Close when the user clicks/taps anywhere outside the menu. Listens to both
+  // mousedown (desktop) and touchstart (mobile) since taps don't reliably
+  // synthesize a mousedown before the click bubbles up — that race was eating
+  // the first tap inside the bottom-sheet variant.
+  private _outsideHandler = (e: Event) => {
     if (!this._el.contains(e.target as Node)) this.hide();
   };
 
@@ -82,27 +92,37 @@ export class ContextMenu {
       this._el.appendChild(row);
     }
 
+    this._el.classList.toggle("context-menu--mobile", isMobile());
     this._el.style.display = "block";
     this._visible = true;
 
-    // Position the menu; flip left/up if it would overflow the viewport
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    // Temporarily place off-screen to measure
-    this._el.style.left = "-9999px";
-    this._el.style.top = "-9999px";
-    const { width, height } = this._el.getBoundingClientRect();
-    const left = x + width > vw ? Math.max(0, x - width) : x;
-    const top = y + height > vh ? Math.max(0, y - height) : y;
-    this._el.style.left = `${left}px`;
-    this._el.style.top = `${top}px`;
+    if (isMobile()) {
+      // Bottom-sheet variant: docks to the viewport edges; coordinates from
+      // the long-press are ignored because they're typically right under the
+      // user's finger and would clip badly.
+      this._el.style.left = "";
+      this._el.style.top = "";
+    } else {
+      // Position the menu; flip left/up if it would overflow the viewport
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      // Temporarily place off-screen to measure
+      this._el.style.left = "-9999px";
+      this._el.style.top = "-9999px";
+      const { width, height } = this._el.getBoundingClientRect();
+      const left = x + width > vw ? Math.max(0, x - width) : x;
+      const top = y + height > vh ? Math.max(0, y - height) : y;
+      this._el.style.left = `${left}px`;
+      this._el.style.top = `${top}px`;
+    }
 
     this._el.focus();
 
-    // Defer outside-click registration so the triggering mousedown doesn't
-    // immediately close the menu.
+    // Defer outside-click registration so the triggering mousedown / touchstart
+    // doesn't immediately close the menu.
     setTimeout(() => {
       document.addEventListener("mousedown", this._outsideHandler, { capture: true });
+      document.addEventListener("touchstart", this._outsideHandler, { capture: true, passive: true });
       document.addEventListener("scroll", this._scrollHandler, { capture: true, passive: true });
     }, 0);
   }
@@ -110,9 +130,11 @@ export class ContextMenu {
   hide(): void {
     if (!this._visible) return;
     this._el.style.display = "none";
+    this._el.classList.remove("context-menu--mobile");
     this._visible = false;
     this._activeIndex = -1;
     document.removeEventListener("mousedown", this._outsideHandler, { capture: true });
+    document.removeEventListener("touchstart", this._outsideHandler, { capture: true });
     document.removeEventListener("scroll", this._scrollHandler, { capture: true });
   }
 

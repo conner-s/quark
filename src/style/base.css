@@ -5714,3 +5714,49 @@ body.quark-mobile .message__link {
   -webkit-touch-callout: default;
 }
 
+/* Long-press context menu (#26): on touch, the floating context menu is
+ * useless — taps from the user's finger usually land on top of it because
+ * the menu opens at the long-press point. Redock as a bottom sheet with
+ * full-width rows and bigger tap targets so react / reply / thread are
+ * obvious affordances. The base .context-menu styles still apply on
+ * desktop — this overrides only when `.context-menu--mobile` is added
+ * from ContextMenu.ts:show().
+ */
+.context-menu--mobile {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  top: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  border-radius: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  border-top: var(--border-width) solid var(--accent-primary) !important;
+  padding: 4px 0 !important;
+  padding-bottom: max(4px, env(safe-area-inset-bottom)) !important;
+  animation: context-menu-sheet-in 140ms ease;
+}
+
+.context-menu--mobile .context-menu__item {
+  padding: 14px 18px;
+  font-size: calc(var(--font-size) + 1px);
+  min-height: 44px;
+}
+
+.context-menu--mobile .context-menu__item-hint {
+  /* Keybinding hints are noise on touch — hide them. */
+  display: none;
+}
+
+.context-menu--mobile .context-menu__separator {
+  margin: 4px 0;
+}
+
+@keyframes context-menu-sheet-in {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
