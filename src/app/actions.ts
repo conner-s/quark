@@ -1980,7 +1980,13 @@ export async function openProfileEdit(): Promise<void> {
     showError(`Failed to load profile: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
-  const currentStatus = AppState.getUserStatus(profile.user_id);
+  // The presence event handler caches own-user status into AppState now,
+  // but on cold launch — before the first sync — that cache is empty. The
+  // status bar is the only other place the value lives in the UI, and it's
+  // either fresh from the user's last edit or freshly populated by the
+  // homeserver's presence push. Read from there as a fallback.
+  const cachedStatus = AppState.getUserStatus(profile.user_id);
+  const currentStatus = cachedStatus ?? statusBar.getStatusMessage() ?? null;
   profileEditDialog.show(
     {
       userId: profile.user_id,

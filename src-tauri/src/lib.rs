@@ -159,19 +159,32 @@ pub fn run() {
         .setup(|app| {
             eprintln!("[quark] setup callback running...");
 
-            // Resolve the platform's writable config dir. On desktop this is
-            // typically ~/.config/quark; on Android, /data/data/<id>/files
-            // (the `directories` crate doesn't know either of those for
-            // Android, so we go through Tauri's path resolver).
-            let config_dir = app
-                .path()
-                .app_config_dir()
-                .map(|p| {
-                    // Some platforms return the parent application support
-                    // dir directly; nested "quark" keeps everything namespaced.
-                    if p.ends_with("quark") { p } else { p.join("quark") }
-                })
-                .unwrap_or_else(|_| std::env::temp_dir().join("quark"));
+            // Resolve the platform's writable config dir.
+            //
+            // Desktop: keep using `directories::ProjectDirs` so the path
+            // matches what every prior release used (~/.config/quark on
+            // Linux, ~/Library/Application Support/quark on macOS,
+            // %APPDATA%/quark on Windows). Switching to Tauri's resolver
+            // on desktop would silently move every user's settings.
+            //
+            // Mobile (iOS/Android): the `directories` crate doesn't return
+            // a usable path, so fall through to Tauri's per-platform
+            // resolver. On Android that's /data/data/<id>/files; on iOS
+            // it's the app sandbox's Library/Application Support.
+            let config_dir = {
+                #[cfg(any(target_os = "android", target_os = "ios"))]
+                {
+                    app.path()
+                        .app_config_dir()
+                        .unwrap_or_else(|_| std::env::temp_dir().join("quark"))
+                }
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                {
+                    directories::ProjectDirs::from("", "", "quark")
+                        .map(|d| d.config_dir().to_path_buf())
+                        .unwrap_or_else(|| std::env::temp_dir().join("quark"))
+                }
+            };
             tracing::info!("Config directory: {}", config_dir.display());
 
             // Now that we know the directory, load persisted configs and
@@ -187,20 +200,25 @@ pub fn run() {
                 if let Ok(mut g) = notif_state.lock() { *g = loaded_notif; }
             }
 
-            // Swap the media cache to the platform-appropriate data dir if we
-            // can resolve one. Falling through to the temp-dir cache built at
-            // startup is fine (it just won't persist across reboots).
-            if let Ok(data_dir) = app.path().app_data_dir() {
-                let cache_dir = data_dir.join("media_cache");
+            // Swap the media cache to the persistent data dir. Same desktop-
+            // vs-mobile split as the config dir above so desktop users keep
+            // their existing cache location (`<data>/quark/media_cache`).
+            let cache_dir_opt: Option<std::path::PathBuf> = {
+                #[cfg(any(target_os = "android", target_os = "ios"))]
+                { app.path().app_data_dir().ok().map(|d| d.join("media_cache")) }
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                {
+                    directories::ProjectDirs::from("", "", "quark")
+                        .map(|d| d.data_dir().join("media_cache"))
+                }
+            };
+            if let Some(cache_dir) = cache_dir_opt {
                 let cache_size_mb = loaded_app.media.cache_size_mb;
                 if let Ok(real_cache) = MediaCache::with_dir(cache_dir, cache_size_mb) {
-                    if let Some(cache_state) = app.try_state::<CacheState>() {
-                        // Swap the inner Arc. CacheState's field is Arc, not
-                        // Mutex<Arc>, so we have to manage state by replacing
-                        // it via app.manage() — Tauri allows re-managing.
-                        let _ = cache_state;
-                        app.manage(CacheState(Arc::new(real_cache)));
-                    }
+                    // CacheState's field is an Arc, not Mutex<Arc>, so we have
+                    // to swap by re-managing — Tauri allows re-managing the
+                    // same type and the new value wins.
+                    app.manage(CacheState(Arc::new(real_cache)));
                 }
             }
 

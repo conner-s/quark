@@ -77,6 +77,13 @@ export class StatusBar {
     this._statusEl.classList.toggle("status-bar__status--placeholder", !msg);
   }
 
+  /** Return the currently-displayed status message, or empty string if unset. */
+  getStatusMessage(): string {
+    if (this._statusInput) return this._statusInput.value;
+    if (this._statusEl.classList.contains("status-bar__status--placeholder")) return "";
+    return this._statusEl.textContent ?? "";
+  }
+
   /** Register a callback invoked when the user commits a new status message. */
   onSetStatus(cb: (msg: string) => void): void {
     this._onSetStatus = cb;

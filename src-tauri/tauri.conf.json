@@ -1,13 +1,18 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicoverbruggen/tauri-schema/main/tauri.conf.json",
   "productName": "Quark",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "identifier": "zone.derg.quark",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1450",
     "beforeDevCommand": "pnpm dev",
     "beforeBuildCommand": "pnpm build"
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
   },
   "app": {
     "windows": [

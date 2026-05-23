@@ -255,13 +255,18 @@ export async function startSync(components: AppComponents): Promise<() => void> 
   const unlistenPresence = await tauriListen<SyncPresencePayload>(
     "quark://sync/presence",
     (payload) => {
+      // Cache every presence payload — including the own user's — so the
+      // profile-edit dialog can pre-fill the status field without an extra
+      // round-trip. Previously only other users' status was cached, so
+      // opening "edit profile" showed an empty status box even when one was
+      // set.
+      AppState.cacheUserStatus(payload.user_id, payload.status_msg ?? null);
+
       const ownUserId = AppState.get("ownUserId");
       if (payload.user_id === ownUserId) {
-        // Own user's presence — update the status bar
+        // Own user's presence — also update the status bar chip.
         statusBar.setStatusMessage(payload.status_msg ?? "");
       } else {
-        // Cache other users' status messages for profile views
-        AppState.cacheUserStatus(payload.user_id, payload.status_msg ?? null);
         // Cache presence state and update the member list indicator live
         AppState.cacheUserPresence(payload.user_id, payload.presence);
         const validPresence = (payload.presence === "online" || payload.presence === "unavailable")
