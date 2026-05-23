@@ -1,5 +1,41 @@
 # Quark — A CLI-Styled Matrix Client
 
+## Verification queue — 0.8.x mobile batch
+
+Branch `fix/mobile-issues-25-33`. 0.8.1 installed on iPhone via `xcrun devicectl`; Android needs `make android-build` + sideload to verify. Delete this section once everything's confirmed.
+
+### iOS (installed 0.8.1)
+- [ ] **#17 Link tap** — open a message with an http(s) link, tap it, confirm Safari opens. *Plugin scope was unset until 0.8.1.*
+- [ ] **#26 Long-press menu** — long-press a message, confirm bottom-sheet appears with Reply / React / Thread / Copy / View raw.
+- [ ] **#28 Members button** — `@` button on right of top bar opens member list overlay.
+- [ ] **#29 Profile edit** — tap avatar at bottom of space strip, tap `[edit profile]`, confirm: status field pre-fills, dialog appears at centre without jumping, save persists across relaunch.
+- [ ] Member-list overlay has an opaque background (no timeline bleeding through).
+- [ ] Drawer slide-out: edge-swipe from left ~32px feels responsive.
+- [ ] Drawer drop-shadow only blooms when drawer is open.
+
+### Android (needs build)
+Run `make android-build` then sideload. All of the above iOS items apply, plus:
+- [ ] **#27 OS notifications** — on first launch after install, accept POST_NOTIFICATIONS prompt. Background the app and have someone message you in an unmuted room. Verify the notification fires. (Settings → Notifications → `[test notification]` is a quicker round-trip.)
+- [ ] **#30 Theme save** — Settings → Themes → pick a different theme. Confirm no "error" toast and the theme persists across relaunch. *Used to fail because `directories::ProjectDirs` returns None on Android.*
+- [ ] **#31 Back button** — with an overlay open, back closes it. With drawer open, back closes drawer. With nothing open, back **opens** the drawer (per the issue's request — confirm this matches your intent; if it should exit instead, say the word and I'll flip it).
+- [ ] **#32 Edge swipe** — confirm easier than 0.7.0 but doesn't fight the system back-gesture.
+- [ ] **#33 Login flow** — fresh install, log in, confirm the room list populates within ~8s without needing to relaunch.
+
+### Desktop (macOS — verified login works)
+- [ ] Settings file is still at `~/Library/Application Support/quark/config.toml` (not the temporary `zone.derg.quark/quark/` from 0.8.0).
+- [ ] Media cache still at `~/Library/Caches/quark/media_cache/` — confirm cached avatars persist across relaunch.
+- [ ] Browser-style back-button gesture (mouse 4/5, trackpad swipe): closes overlays via popstate. If this was a no-op before and now feels weird, file it.
+- [ ] Profile button at bottom of space strip opens the profile dialog with `[edit profile]` visible.
+- [ ] `Thread` entry in the right-click message context menu works.
+- [ ] All existing tests still passing: `pnpm test` (currently 317).
+
+### Cross-platform regression watch
+- [ ] First-login `_pollUntilRoomsLoaded` runs everywhere now; should be invisible on desktop. Watch for unnecessary re-renders or flicker.
+- [ ] Context menu now also listens to `touchstart` for outside-dismiss — touchscreen laptops on desktop might dismiss menus on touches that previously didn't.
+- [ ] `ProfileDialog.show()` rewrote DM/edit button visibility independently. Sanity check that the dialog for *other* users (sender of a message, member-list focus) still hides the edit button and shows the message button.
+
+---
+
 ## Overview
 
 Quark is a keyboard-driven, CLI-aesthetic Matrix client that renders in a GUI window (not a raw terminal) to support inline images, custom emoji, and stickers. It uses vim-style navigation throughout and offers deep theme customization.
