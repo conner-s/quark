@@ -335,6 +335,12 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return { user_id: "@you:matrix.org", display_name: "You", avatar_url: null };
     case "set_presence_status":
       return;
+    case "get_presence_status":
+      return {
+        user_id: (args?.userId as string) ?? "@you:matrix.org",
+        presence: "online",
+        status_msg: "mock status — working on quark",
+      };
     case "get_notification_config":
       return { enabled: true, show_body: true, show_sender: true, mute_rooms: [], quiet_hours: null };
 

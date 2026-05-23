@@ -1179,6 +1179,39 @@ pub async fn set_presence_status(
     Ok(())
 }
 
+/// Presence state for a user, returned by `get_presence_status`.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PresenceInfo {
+    pub user_id: String,
+    pub presence: String,
+    pub status_msg: Option<String>,
+}
+
+#[tauri::command]
+pub async fn get_presence_status(
+    state: State<'_, MatrixState>,
+    user_id: String,
+) -> Result<PresenceInfo, String> {
+    use matrix_sdk::ruma::{
+        api::client::presence::get_presence::v3::Request as GetPresenceRequest,
+        OwnedUserId,
+    };
+    let client = get_client(&state)?;
+    let uid: OwnedUserId = user_id
+        .parse()
+        .map_err(|e| format!("Invalid user ID: {e}"))?;
+    let req = GetPresenceRequest::new(uid);
+    let resp = client
+        .send(req, None)
+        .await
+        .map_err(|e| format!("Failed to fetch presence: {e}"))?;
+    Ok(PresenceInfo {
+        user_id,
+        presence: resp.presence.to_string(),
+        status_msg: resp.status_msg,
+    })
+}
+
 // ─── Thread Commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]

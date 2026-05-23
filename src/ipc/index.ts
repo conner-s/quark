@@ -36,7 +36,8 @@ export type {
 } from "./types.js";
 
 // ─── Client (auth) ────────────────────────────────────────────────────────────
-export { login, restoreSession, logout, getOwnProfile, setPresenceStatus, setDisplayName } from "./client.js";
+export { login, restoreSession, logout, getOwnProfile, setPresenceStatus, getPresenceStatus, setDisplayName } from "./client.js";
+export type { PresenceInfo } from "./client.js";
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────
 export { getRooms, joinRoom, leaveRoom, createRoom, getRoomMembers, markRoomRead, getPinnedEvents, searchRoomDirectory, inviteUser, kickUser, banUser, unbanUser } from "./rooms.js";

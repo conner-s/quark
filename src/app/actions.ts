@@ -11,6 +11,7 @@ import {
   logout as ipcLogout,
   getOwnProfile,
   setPresenceStatus as ipcSetPresenceStatus,
+  getPresenceStatus as ipcGetPresenceStatus,
   getRooms,
   getRoomMembers,
   getTimeline,
@@ -1789,6 +1790,26 @@ async function _loadStickersIntoUnifiedPicker(): Promise<void> {
 }
 
 /**
+ * Resolve a user's presence status — cached if known, otherwise fetched
+ * actively from the homeserver. Sync-driven presence events arrive
+ * opportunistically, so on cold start or for users who haven't recently
+ * changed presence the cache may be empty; this fills that gap.
+ */
+async function resolveUserStatus(userId: string): Promise<string | null> {
+  const cached = AppState.getUserStatus(userId);
+  if (cached !== null) return cached;
+  try {
+    const info = await ipcGetPresenceStatus(userId);
+    const status = info.status_msg ?? null;
+    AppState.cacheUserStatus(userId, status);
+    if (info.presence) AppState.cacheUserPresence(userId, info.presence);
+    return status;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Open the profile dialog for a specific user ID.
  */
 export async function openProfileForUser(userId: string): Promise<void> {
@@ -1811,7 +1832,7 @@ export async function openProfileForUser(userId: string): Promise<void> {
     const onMessage = userId !== ownUserId
       ? () => { void openOrCreateDm(userId); }
       : undefined;
-    const statusMessage = AppState.getUserStatus(userId);
+    const statusMessage = await resolveUserStatus(userId);
     profileDialog.show({ userId, displayName, avatarUrl, statusMessage, onMessage });
   } catch (err) {
     showError(`Failed to load profile: ${err instanceof Error ? err.message : String(err)}`);
@@ -1895,7 +1916,8 @@ export async function openProfileDialog(): Promise<void> {
         const onMessage = focused.userId !== ownUserId
           ? () => { void openOrCreateDm(focused.userId); }
           : undefined;
-        profileDialog.show({ userId: focused.userId, displayName: focused.name, avatarUrl, onMessage });
+        const statusMessage = await resolveUserStatus(focused.userId);
+        profileDialog.show({ userId: focused.userId, displayName: focused.name, avatarUrl, statusMessage, onMessage });
         return;
       }
     }
@@ -1924,7 +1946,8 @@ export async function openProfileDialog(): Promise<void> {
         const onMessage = evt.sender !== ownUserId
           ? () => { void openOrCreateDm(evt.sender); }
           : undefined;
-        profileDialog.show({ userId: evt.sender, displayName, avatarUrl, onMessage });
+        const statusMessage = await resolveUserStatus(evt.sender);
+        profileDialog.show({ userId: evt.sender, displayName, avatarUrl, statusMessage, onMessage });
         return;
       }
     }
@@ -1953,12 +1976,12 @@ export async function openOwnProfile(): Promise<void> {
         avatarUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
       } catch { /* non-critical */ }
     }
-    const cachedStatus = AppState.getUserStatus(profile.user_id);
+    const statusMessage = await resolveUserStatus(profile.user_id);
     profileDialog.show({
       userId: profile.user_id,
       displayName: profile.display_name,
       avatarUrl,
-      statusMessage: cachedStatus,
+      statusMessage,
       onEdit: () => openProfileEdit(),
     });
   } catch (err) {
@@ -1980,13 +2003,13 @@ export async function openProfileEdit(): Promise<void> {
     showError(`Failed to load profile: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
-  // The presence event handler caches own-user status into AppState now,
-  // but on cold launch — before the first sync — that cache is empty. The
-  // status bar is the only other place the value lives in the UI, and it's
-  // either fresh from the user's last edit or freshly populated by the
-  // homeserver's presence push. Read from there as a fallback.
-  const cachedStatus = AppState.getUserStatus(profile.user_id);
-  const currentStatus = cachedStatus ?? statusBar.getStatusMessage() ?? null;
+  // The presence event handler caches own-user status into AppState, but on
+  // cold launch — before the first sync — that cache is empty. resolveUserStatus
+  // falls back to an active fetch; if even that fails (e.g. offline), read the
+  // status bar as a last resort — it's either fresh from the user's last edit
+  // or from the homeserver's previous presence push.
+  const fetchedStatus = await resolveUserStatus(profile.user_id);
+  const currentStatus = fetchedStatus ?? statusBar.getStatusMessage() ?? null;
   profileEditDialog.show(
     {
       userId: profile.user_id,

@@ -129,6 +129,7 @@ pub fn run() {
             commands::get_own_profile,
             commands::set_display_name,
             commands::set_presence_status,
+            commands::get_presence_status,
             // Member management
             commands::invite_user,
             commands::kick_user,

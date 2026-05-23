@@ -57,6 +57,21 @@ export async function setPresenceStatus(statusMsg: string): Promise<void> {
   return invoke<void>("set_presence_status", { statusMsg });
 }
 
+export interface PresenceInfo {
+  user_id: string;
+  /** "online" | "unavailable" | "offline" — string-typed for forward compat. */
+  presence: string;
+  status_msg: string | null;
+}
+
+/**
+ * Fetch a user's current presence + status message from the homeserver.
+ * Used as a fallback when the sync-driven cache has no entry yet.
+ */
+export async function getPresenceStatus(userId: string): Promise<PresenceInfo> {
+  return invoke<PresenceInfo>("get_presence_status", { userId });
+}
+
 /**
  * Set the current user's display name.
  * Matches the Rust `set_display_name` command.

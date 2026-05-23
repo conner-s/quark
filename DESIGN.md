@@ -5,7 +5,7 @@
 Branch `fix/mobile-issues-25-33`. 0.8.2 needs a fresh iPhone install (re-run `xcrun devicectl`); Android still needs `make android-build` + sideload to verify. Delete this section once everything's confirmed.
 
 ### iOS (needs reinstall for 0.8.2)
-- [ ] **#17 Link tap** — open a message with an http(s) link, tap it, confirm Safari opens. *0.8.2 fix: shell plugin's iOS Swift handler does `parseArgs(String)` but the standard JS wrapper sends `{path, with}` — silently failed to decode. Now routed through a Rust `open_external_url` command that calls `Shell::open` directly (which serializes the URL as a raw string for the mobile plugin to parse).*
+- [x] **#17 Link tap** — open a message with an http(s) link, tap it, confirm Safari opens. *0.8.2 fix: shell plugin's iOS Swift handler does `parseArgs(String)` but the standard JS wrapper sends `{path, with}` — silently failed to decode. Now routed through a Rust `open_external_url` command that calls `Shell::open` directly (which serializes the URL as a raw string for the mobile plugin to parse).*
 - [x] **#26 Long-press menu** — long-press a message, confirm bottom-sheet appears with Reply / React / Thread / Copy / View raw.
 - [x] **#28 Members button** — `@` button on right of top bar opens member list overlay.
 - [x] **#29 Profile edit** — tap avatar at bottom of space strip, tap `[edit profile]`, confirm: status field pre-fills, dialog appears at centre without jumping, save persists across relaunch.
@@ -26,7 +26,7 @@ Run `make android-build` then sideload. All of the above iOS items apply, plus:
 - [x] Settings file is still at `~/Library/Application Support/quark/config.toml` (not the temporary `zone.derg.quark/quark/` from 0.8.0).
 - [x] Media cache still at `~/Library/Caches/quark/media_cache/` — confirm cached avatars persist across relaunch.
 - [x] Browser-style back-button gesture (mouse 4/5, trackpad swipe): closes overlays via popstate. If this was a no-op before and now feels weird, file it.
-- [ ] Profile button at bottom of space strip (now **below** the settings cog as of 0.8.2) opens the profile dialog with `[edit profile]` visible. Bottom margin bumped to 12px so the avatar isn't crammed against the status bar.
+- [x] Profile button at bottom of space strip (now **below** the settings cog as of 0.8.2) opens the profile dialog with `[edit profile]` visible. Bottom margin bumped to 12px so the avatar isn't crammed against the status bar.
 - [x] `Thread` entry in the right-click message context menu works.
 - [x] All existing tests still passing: `pnpm test` (currently 317).
 
