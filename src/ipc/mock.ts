@@ -479,6 +479,12 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     case "get_url_preview":
       return null;
 
+    case "open_external_url": {
+      const url = args?.url as string | undefined;
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+      return null;
+    }
+
     default:
       console.warn(`[mock] unhandled command: ${cmd}`, args);
       return null;

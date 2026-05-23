@@ -7,22 +7,23 @@ import { isAnimatedUrl } from "../app/animated_urls.js";
 import { hashColor } from "./avatarColors.js";
 
 /**
- * Open an external URL via the Tauri shell plugin (`UIApplication.shared.open`
- * on iOS, `Intent.ACTION_VIEW` on Android, the OS default browser everywhere
- * else). Falls back to `window.open` only when the plugin invoke errors —
- * normally a non-Tauri environment (browser dev mode).
+ * Open an external URL in the system browser.
  *
- * Earlier iterations split the iOS path off to a synchronous `window.open` on
- * the assumption that the async shell invoke would lose user-gesture
- * eligibility, but iOS WKWebView doesn't have Safari's popup-blocker rule —
- * the shell plugin works regardless of when it runs. `window.open` itself
- * doesn't work in WKWebView at all without a `createWebViewWith` delegate
- * (Tauri sets none), so the iOS-only path silently no-op'd taps.
+ * We route through our own `open_external_url` backend command rather than
+ * `plugin:shell|open` directly because the shell plugin's mobile JS surface
+ * is broken on iOS and Android — the Swift/Kotlin handlers call
+ * `parseArgs(String)` expecting a raw JSON string, but the standard JS
+ * invocation sends `{ path, with }`, which fails to decode and silently
+ * no-ops every tap. The Rust-side `Shell::open` API serializes the URL
+ * correctly, so we wrap it.
+ *
+ * Falls back to `window.open` only when not running under Tauri (browser
+ * dev mode).
  */
 function openExternalUrl(url: string): void {
   if (!(url.startsWith("http://") || url.startsWith("https://"))) return;
-  void invoke("plugin:shell|open", { path: url }).catch((err) => {
-    console.warn("shell|open failed, falling back to window.open:", err);
+  void invoke("open_external_url", { url }).catch((err) => {
+    console.warn("open_external_url failed, falling back to window.open:", err);
     window.open(url, "_blank", "noopener,noreferrer");
   });
 }

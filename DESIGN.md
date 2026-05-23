@@ -2,16 +2,17 @@
 
 ## Verification queue — 0.8.x mobile batch
 
-Branch `fix/mobile-issues-25-33`. 0.8.1 installed on iPhone via `xcrun devicectl`; Android needs `make android-build` + sideload to verify. Delete this section once everything's confirmed.
+Branch `fix/mobile-issues-25-33`. 0.8.2 needs a fresh iPhone install (re-run `xcrun devicectl`); Android still needs `make android-build` + sideload to verify. Delete this section once everything's confirmed.
 
-### iOS (installed 0.8.1)
-- [ ] **#17 Link tap** — open a message with an http(s) link, tap it, confirm Safari opens. *Plugin scope was unset until 0.8.1.*
-- [ ] **#26 Long-press menu** — long-press a message, confirm bottom-sheet appears with Reply / React / Thread / Copy / View raw.
-- [ ] **#28 Members button** — `@` button on right of top bar opens member list overlay.
-- [ ] **#29 Profile edit** — tap avatar at bottom of space strip, tap `[edit profile]`, confirm: status field pre-fills, dialog appears at centre without jumping, save persists across relaunch.
-- [ ] Member-list overlay has an opaque background (no timeline bleeding through).
-- [ ] Drawer slide-out: edge-swipe from left ~32px feels responsive.
-- [ ] Drawer drop-shadow only blooms when drawer is open.
+### iOS (needs reinstall for 0.8.2)
+- [ ] **#17 Link tap** — open a message with an http(s) link, tap it, confirm Safari opens. *0.8.2 fix: shell plugin's iOS Swift handler does `parseArgs(String)` but the standard JS wrapper sends `{path, with}` — silently failed to decode. Now routed through a Rust `open_external_url` command that calls `Shell::open` directly (which serializes the URL as a raw string for the mobile plugin to parse).*
+- [x] **#26 Long-press menu** — long-press a message, confirm bottom-sheet appears with Reply / React / Thread / Copy / View raw.
+- [x] **#28 Members button** — `@` button on right of top bar opens member list overlay.
+- [x] **#29 Profile edit** — tap avatar at bottom of space strip, tap `[edit profile]`, confirm: status field pre-fills, dialog appears at centre without jumping, save persists across relaunch.
+    - [ ] **Status on profile view wraps long text** — 0.8.2 added `overflow-wrap: anywhere` + `min-width: 0` to `.profile-dialog__value--status` so a long status doesn't overflow the dialog.
+- [x] Member-list overlay has an opaque background (no timeline bleeding through).
+- [x] Drawer slide-out: edge-swipe from left ~32px feels responsive.
+- [x] Drawer drop-shadow only blooms when drawer is open.
 
 ### Android (needs build)
 Run `make android-build` then sideload. All of the above iOS items apply, plus:
@@ -22,17 +23,17 @@ Run `make android-build` then sideload. All of the above iOS items apply, plus:
 - [ ] **#33 Login flow** — fresh install, log in, confirm the room list populates within ~8s without needing to relaunch.
 
 ### Desktop (macOS — verified login works)
-- [ ] Settings file is still at `~/Library/Application Support/quark/config.toml` (not the temporary `zone.derg.quark/quark/` from 0.8.0).
-- [ ] Media cache still at `~/Library/Caches/quark/media_cache/` — confirm cached avatars persist across relaunch.
-- [ ] Browser-style back-button gesture (mouse 4/5, trackpad swipe): closes overlays via popstate. If this was a no-op before and now feels weird, file it.
-- [ ] Profile button at bottom of space strip opens the profile dialog with `[edit profile]` visible.
-- [ ] `Thread` entry in the right-click message context menu works.
-- [ ] All existing tests still passing: `pnpm test` (currently 317).
+- [x] Settings file is still at `~/Library/Application Support/quark/config.toml` (not the temporary `zone.derg.quark/quark/` from 0.8.0).
+- [x] Media cache still at `~/Library/Caches/quark/media_cache/` — confirm cached avatars persist across relaunch.
+- [x] Browser-style back-button gesture (mouse 4/5, trackpad swipe): closes overlays via popstate. If this was a no-op before and now feels weird, file it.
+- [ ] Profile button at bottom of space strip (now **below** the settings cog as of 0.8.2) opens the profile dialog with `[edit profile]` visible. Bottom margin bumped to 12px so the avatar isn't crammed against the status bar.
+- [x] `Thread` entry in the right-click message context menu works.
+- [x] All existing tests still passing: `pnpm test` (currently 317).
 
 ### Cross-platform regression watch
 - [ ] First-login `_pollUntilRoomsLoaded` runs everywhere now; should be invisible on desktop. Watch for unnecessary re-renders or flicker.
-- [ ] Context menu now also listens to `touchstart` for outside-dismiss — touchscreen laptops on desktop might dismiss menus on touches that previously didn't.
-- [ ] `ProfileDialog.show()` rewrote DM/edit button visibility independently. Sanity check that the dialog for *other* users (sender of a message, member-list focus) still hides the edit button and shows the message button.
+- [x] Context menu now also listens to `touchstart` for outside-dismiss — touchscreen laptops on desktop might dismiss menus on touches that previously didn't.
+- [x] `ProfileDialog.show()` rewrote DM/edit button visibility independently. Sanity check that the dialog for *other* users (sender of a message, member-list focus) still hides the edit button and shows the message button.
 
 ---
 

@@ -221,16 +221,18 @@ body {
   outline: none;
 }
 
-/* Profile button sits above settings at the bottom of the strip. Same
- * footprint as a space item but renders either the user's avatar or a
- * coloured initial. Acts as the universal "my profile" entry point. */
+/* Profile button sits at the very bottom of the strip, below settings.
+ * Same footprint as a space item but renders either the user's avatar or
+ * a coloured initial. Acts as the universal "my profile" entry point.
+ * The 12px bottom margin gives visible breathing room above the status
+ * bar overlay (or the iOS home indicator on mobile). */
 .space-strip__profile-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 40px;
   height: 40px;
-  margin: 2px auto 4px;
+  margin: 2px auto 12px;
   border-radius: var(--icon-radius);
   cursor: pointer;
   flex-shrink: 0;
@@ -3612,6 +3614,16 @@ a:hover {
 .profile-dialog__value--muted {
   color: var(--roomlist-muted);
   font-size: calc(var(--font-size) - 1px);
+}
+
+/* The status value can be arbitrary user text (including long URLs or
+ * languages without spaces). Without word-break + min-width: 0 the flex
+ * row would push past the dialog and clip horizontally. */
+.profile-dialog__value--status {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .profile-dialog__copy-btn {

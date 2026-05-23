@@ -155,6 +155,8 @@ pub fn run() {
             commands::mute_room,
             commands::unmute_room,
             commands::test_notification,
+            // Shell
+            commands::open_external_url,
         ])
         .setup(|app| {
             eprintln!("[quark] setup callback running...");

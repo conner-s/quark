@@ -156,15 +156,32 @@ export class SpaceStrip {
       this._el.appendChild(this._createItem({ id: ps.id, name: ps.label }, ps.icon));
     }
 
-    // Spacer pushes the profile + settings buttons to the bottom
+    // Spacer pushes the settings + profile buttons to the bottom
     const spacer = document.createElement("div");
     spacer.className = "space-strip__spacer";
     spacer.setAttribute("aria-hidden", "true");
     this._el.appendChild(spacer);
 
-    // Profile button — sits just above settings. The avatar (or coloured
-    // initial fallback) is the universal entry point to "my profile" on both
-    // desktop and mobile.
+    // Settings button — sits above the profile button so the profile (your
+    // identity) is the very last item, closest to the screen edge / thumb.
+    const settingsBtn = document.createElement("div");
+    settingsBtn.className = "space-strip__settings-btn";
+    settingsBtn.setAttribute("role", "button");
+    settingsBtn.setAttribute("tabindex", "0");
+    settingsBtn.setAttribute("aria-label", "Settings");
+    settingsBtn.title = "Settings (?)";
+    settingsBtn.textContent = "⚙";
+    settingsBtn.addEventListener("click", () => this._onSettings?.());
+    settingsBtn.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        this._onSettings?.();
+      }
+    });
+    this._el.appendChild(settingsBtn);
+
+    // Profile button — the avatar (or coloured initial fallback) is the
+    // universal entry point to "my profile" on both desktop and mobile.
     const profileBtn = document.createElement("div");
     profileBtn.className = "space-strip__profile-btn";
     profileBtn.setAttribute("role", "button");
@@ -189,23 +206,6 @@ export class SpaceStrip {
       }
     });
     this._el.appendChild(profileBtn);
-
-    // Settings button always at the bottom
-    const settingsBtn = document.createElement("div");
-    settingsBtn.className = "space-strip__settings-btn";
-    settingsBtn.setAttribute("role", "button");
-    settingsBtn.setAttribute("tabindex", "0");
-    settingsBtn.setAttribute("aria-label", "Settings");
-    settingsBtn.title = "Settings (?)";
-    settingsBtn.textContent = "⚙";
-    settingsBtn.addEventListener("click", () => this._onSettings?.());
-    settingsBtn.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        this._onSettings?.();
-      }
-    });
-    this._el.appendChild(settingsBtn);
 
     this._updateActive();
   }

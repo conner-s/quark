@@ -1531,3 +1531,20 @@ pub async fn test_notification(app_handle: AppHandle) -> Result<(), String> {
         .show()
         .map_err(|e| format!("Failed to send test notification: {e}"))
 }
+
+// ─── Shell Commands ──────────────────────────────────────────────────────────
+
+/// Open an http(s) URL in the system browser.
+///
+/// Wraps `tauri-plugin-shell`'s `Shell::open` because the plugin's mobile JS
+/// surface (`plugin:shell|open`) is broken on iOS and Android: the Swift /
+/// Kotlin plugins call `parseArgs(String)` expecting a raw JSON string, but
+/// `@tauri-apps/plugin-shell` (and the equivalent raw `invoke`) sends
+/// `{ path, with }`, which fails to decode. Going through the Rust API
+/// serializes the URL as a raw string, which the mobile plugins accept.
+#[tauri::command]
+pub async fn open_external_url(app_handle: AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_shell::ShellExt;
+    #[allow(deprecated)]
+    app_handle.shell().open(url, None).map_err(|e| e.to_string())
+}
