@@ -13,6 +13,7 @@ Branch `fix/mobile-issues-25-33`. 0.8.2 needs a fresh iPhone install (re-run `xc
 - [x] Member-list overlay has an opaque background (no timeline bleeding through).
 - [x] Drawer slide-out: edge-swipe from left ~32px feels responsive.
 - [x] Drawer drop-shadow only blooms when drawer is open.
+- [ ] **Image viewer touch (0.8.4)** — open an image. Pinch to zoom (stays anchored under the fingers), drag with one finger to pan, double-tap to toggle fit ↔ 2.5×. Confirm the zoom +/- / 1:1 buttons are gone but `⬇ download` and `✕ close` remain. Tap the backdrop to close.
 
 ### Android (needs build)
 Run `make android-build` then sideload. All of the above iOS items apply, plus:
@@ -28,6 +29,7 @@ Run `make android-build` then sideload. All of the above iOS items apply, plus:
 - [x] Browser-style back-button gesture (mouse 4/5, trackpad swipe): closes overlays via popstate. If this was a no-op before and now feels weird, file it.
 - [x] Profile button at bottom of space strip (now **below** the settings cog as of 0.8.2) opens the profile dialog with `[edit profile]` visible. Bottom margin bumped to 12px so the avatar isn't crammed against the status bar.
 - [x] `Thread` entry in the right-click message context menu works.
+- [ ] **Image viewer pan bounds (0.8.4)** — open an image, zoom in past fit, drag hard in every direction. The image can no longer be flung off-screen; an edge always stops at the viewport centre. Zoom back out and confirm it re-centres.
 - [x] All existing tests still passing: `pnpm test` (currently 317).
 
 ### Cross-platform regression watch

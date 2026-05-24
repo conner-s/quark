@@ -2690,6 +2690,8 @@ span.reaction__emoji {
   overflow: hidden;
   position: relative;
   width: 100%;
+  /* Own all touch gestures so pinch/pan don't trigger native page zoom/scroll. */
+  touch-action: none;
 }
 
 .image-lightbox__img {
@@ -5815,6 +5817,12 @@ body.quark-mobile .status-bar {
 /* Hover-driven message action bar is meaningless on touch; replaced by
  * long-press → context menu wired up in Timeline.ts. */
 body.quark-mobile .message:hover .message__actions {
+  display: none;
+}
+
+/* Image lightbox: pinch-to-zoom, drag-to-pan and double-tap-to-reset replace
+ * the zoom buttons on touch, so only download + close remain in the toolbar. */
+body.quark-mobile .image-lightbox__zoom-ctl {
   display: none;
 }
 

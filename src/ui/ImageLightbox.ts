@@ -98,12 +98,17 @@ export class ImageLightbox {
     const toolbar = document.createElement("div");
     toolbar.className = "image-lightbox__toolbar";
 
+    // Zoom controls are hidden on mobile (see base.css) — pinch + double-tap
+    // cover them there — so they share a class the mobile rules can target.
     const zoomInBtn = this._makeBtn("zoom +", () => this._zoom(0.25));
     const zoomOutBtn = this._makeBtn("zoom -", () => this._zoom(-0.25));
     const resetBtn = this._makeBtn("1:1", () => this._setScale(1));
+    zoomInBtn.classList.add("image-lightbox__zoom-ctl");
+    zoomOutBtn.classList.add("image-lightbox__zoom-ctl");
+    resetBtn.classList.add("image-lightbox__zoom-ctl");
 
     this._zoomLabel = document.createElement("span");
-    this._zoomLabel.className = "image-lightbox__zoom-label";
+    this._zoomLabel.className = "image-lightbox__zoom-label image-lightbox__zoom-ctl";
     this._zoomLabel.textContent = "100%";
 
     const downloadBtn = this._makeBtn("⬇ download", () => this._download());
@@ -120,6 +125,121 @@ export class ImageLightbox {
 
     // Keyboard handler
     this._el.addEventListener("keydown", (e) => this._handleKey(e));
+
+    // Touch: pinch-to-zoom, one-finger pan, double-tap to toggle zoom.
+    this._initTouch();
+  }
+
+  // Pinch-to-zoom + one-finger pan for touch devices. Driven by the events
+  // themselves (not the mobile breakpoint), so it also works on touch laptops.
+  private _initTouch(): void {
+    const wrap = this._imgWrap;
+    let mode: "none" | "pan" | "pinch" = "none";
+    // Pan baseline.
+    let panStartTouchX = 0;
+    let panStartTouchY = 0;
+    let panStartX = 0;
+    let panStartY = 0;
+    // Pinch baseline: wrap geometry + the content point pinned under the
+    // gesture centroid, so zoom stays anchored where the fingers are.
+    let startDist = 0;
+    let startScale = 1;
+    let rectLeft = 0;
+    let rectTop = 0;
+    let centreX = 0;
+    let centreY = 0;
+    let contentX = 0;
+    let contentY = 0;
+    let lastTapTime = 0;
+
+    const dist = (a: Touch, b: Touch): number =>
+      Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+
+    const beginPan = (t: Touch): void => {
+      mode = "pan";
+      panStartTouchX = t.clientX;
+      panStartTouchY = t.clientY;
+      panStartX = this._panX;
+      panStartY = this._panY;
+      this._imgEl.style.transition = "none";
+    };
+
+    const beginPinch = (e: TouchEvent): void => {
+      mode = "pinch";
+      const rect = wrap.getBoundingClientRect();
+      rectLeft = rect.left;
+      rectTop = rect.top;
+      centreX = rect.width / 2;
+      centreY = rect.height / 2;
+      startDist = dist(e.touches[0], e.touches[1]);
+      startScale = this._scale;
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rectLeft;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rectTop;
+      // Transform origin is the image centre, so content offset = (point − centre − pan) / scale.
+      contentX = (cx - centreX - this._panX) / this._scale;
+      contentY = (cy - centreY - this._panY) / this._scale;
+      this._dragging = true; // suppress backdrop-close after the gesture
+      this._imgEl.style.transition = "none";
+    };
+
+    wrap.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        beginPinch(e);
+        return;
+      }
+      if (e.touches.length === 1) {
+        const now = Date.now();
+        if (now - lastTapTime < 300) {
+          e.preventDefault();
+          this._setScale(this._scale > 1 ? 1 : 2.5);
+          lastTapTime = 0;
+          mode = "none";
+          return;
+        }
+        lastTapTime = now;
+        this._dragging = false;
+        beginPan(e.touches[0]);
+      }
+    }, { passive: false });
+
+    wrap.addEventListener("touchmove", (e) => {
+      if (mode === "pinch" && e.touches.length === 2) {
+        e.preventDefault();
+        const ratio = dist(e.touches[0], e.touches[1]) / startDist;
+        this._scale = Math.min(5, Math.max(0.25, startScale * ratio));
+        const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rectLeft;
+        const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rectTop;
+        // Keep the pinned content point under the (possibly moved) centroid.
+        this._panX = cx - centreX - contentX * this._scale;
+        this._panY = cy - centreY - contentY * this._scale;
+        this._zoomLabel.textContent = `${Math.round(this._scale * 100)}%`;
+        this._applyTransform();
+      } else if (mode === "pan" && e.touches.length === 1) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - panStartTouchX;
+        const dy = e.touches[0].clientY - panStartTouchY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) this._dragging = true;
+        this._panX = panStartX + dx;
+        this._panY = panStartY + dy;
+        this._applyTransform();
+      }
+    }, { passive: false });
+
+    const end = (e: TouchEvent): void => {
+      if (e.touches.length === 0) {
+        this._imgEl.style.transition = "";
+        // A pinch can leave scale ≤ 1; _setScale re-centres and refreshes the label.
+        if (this._scale <= 1) this._setScale(this._scale);
+        mode = "none";
+        requestAnimationFrame(() => { this._dragging = false; });
+      } else if (e.touches.length === 1) {
+        // Lifting one finger of a pinch → continue as a one-finger pan.
+        beginPan(e.touches[0]);
+      }
+    };
+    wrap.addEventListener("touchend", end);
+    wrap.addEventListener("touchcancel", end);
   }
 
   private _imgWrap!: HTMLElement;
@@ -178,8 +298,25 @@ export class ImageLightbox {
   }
 
   private _applyTransform(): void {
+    this._clampPan();
     this._imgEl.style.transform =
       `translate(${this._panX}px, ${this._panY}px) scale(${this._scale})`;
+  }
+
+  // Keep the image from being dragged off-screen. Once it's larger than its
+  // container (zoomed past fit) pan is bounded so an edge can't cross the
+  // viewport centre; while it still fits, pan is pinned to 0 (centred).
+  private _clampPan(): void {
+    const wrapW = this._imgWrap.clientWidth;
+    const wrapH = this._imgWrap.clientHeight;
+    // offsetWidth/Height are the laid-out size before transform, so scale here.
+    const imgW = this._imgEl.offsetWidth * this._scale;
+    const imgH = this._imgEl.offsetHeight * this._scale;
+    if (!imgW || !imgH) return; // image not laid out yet
+    const maxX = Math.max(0, (imgW - wrapW) / 2);
+    const maxY = Math.max(0, (imgH - wrapH) / 2);
+    this._panX = Math.min(maxX, Math.max(-maxX, this._panX));
+    this._panY = Math.min(maxY, Math.max(-maxY, this._panY));
   }
 
   private _download(): void {
