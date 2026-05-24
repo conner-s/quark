@@ -52,17 +52,19 @@ variables:
       - $HOME/.cargo/git/db/
       - src-tauri/target/
 
+# Windows is now cross-compiled from Linux (cargo-xwin), so this caches the
+# Linux host's cargo dirs under a separate prefix from build:linux.
 .cache_rust_windows: &cache_rust_windows
   cache:
     key:
       files:
         - src-tauri/Cargo.lock
-      prefix: rust-windows
+      prefix: rust-windows-cross
     paths:
-      - C:\Users\gitlab-runner\.cargo\registry\index\
-      - C:\Users\gitlab-runner\.cargo\registry\cache\
-      - C:\Users\gitlab-runner\.cargo\git\db\
-      - src-tauri\target\
+      - $HOME/.cargo/registry/index/
+      - $HOME/.cargo/registry/cache/
+      - $HOME/.cargo/git/db/
+      - src-tauri/target/
 
 .cache_rust_macos: &cache_rust_macos
   cache:
@@ -165,6 +167,7 @@ build:linux:
         patchelf
         libxdo-dev
         libayatana-appindicator3-dev
+        xdg-utils
     - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
     - . "$HOME/.cargo/env"
     - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
@@ -238,42 +241,53 @@ build:flatpak:
       - quark.flatpak
     expire_in: 30 days
 
-# ─── build: Windows ─────────────────────────────────────────────────────────
+# ─── build: Windows (cross-compiled from Linux) ─────────────────────────────
 #
-# Requires a Windows shell-executor runner tagged "windows" with Rust,
-# Node 20, pnpm, MSVC Build Tools, and WebView2 pre-installed.
-# Produces: .msi, .exe (NSIS installer).
+# No Windows runner: this cross-compiles to x86_64-pc-windows-msvc on a Linux
+# Docker runner via cargo-xwin, and bundles only the NSIS .exe installer.
+# (MSI/WiX can't be produced off-Windows; non-Android deps use native-tls →
+# SChannel and bundled-sqlite, so no OpenSSL/system libs are needed.)
+# Produces: .exe (NSIS installer).
 
 build:windows:
   stage: build
-  tags:
-    - windows
+  image: ubuntu:22.04
   <<: *cache_rust_windows
+  variables:
+    DEBIAN_FRONTEND: noninteractive
   before_script:
-    - rustup update stable
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends
+        ca-certificates
+        curl
+        file
+        build-essential
+        pkg-config
+        clang
+        llvm
+        lld
+        nsis
+    - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+    - . "$HOME/.cargo/env"
+    - rustup target add x86_64-pc-windows-msvc
+    # cargo-xwin downloads the MSVC CRT/SDK headers and drives the cross-link.
+    - cargo install --locked cargo-xwin
+    - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    - apt-get install -y nodejs
+    - corepack enable
+    # Honour the "packageManager" field in package.json (pnpm 10.x — pnpm 11
+    # requires Node 22.13+, which this image doesn't ship).
+    - corepack install
     - pnpm install --frozen-lockfile
   script:
-    - pnpm tauri build
-    # Upload bundles to the Generic Package Registry. PowerShell, not bash.
-    - |
-      $msi = Get-ChildItem -Path "src-tauri\target\release\bundle\msi\*.msi" | Select-Object -First 1
-      $exe = Get-ChildItem -Path "src-tauri\target\release\bundle\nsis\*.exe" | Select-Object -First 1
-      $headers = @{ "JOB-TOKEN" = "$env:CI_JOB_TOKEN" }
-      if ($msi) {
-        $dest = "$env:PACKAGE_REGISTRY_URL/quark-$env:CI_COMMIT_TAG-windows-x64.msi"
-        Write-Host "Uploading $($msi.FullName) -> $dest"
-        Invoke-WebRequest -Method Put -Headers $headers -InFile $msi.FullName -Uri $dest
-      }
-      if ($exe) {
-        $dest = "$env:PACKAGE_REGISTRY_URL/quark-$env:CI_COMMIT_TAG-windows-x64.exe"
-        Write-Host "Uploading $($exe.FullName) -> $dest"
-        Invoke-WebRequest -Method Put -Headers $headers -InFile $exe.FullName -Uri $dest
-      }
+    - *upload_helper
+    - . "$HOME/.cargo/env"
+    - pnpm tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis
+    - upload_to_registry "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe" "quark-${CI_COMMIT_TAG}-windows-x64.exe"
   artifacts:
     name: "quark-windows-$CI_COMMIT_SHORT_SHA"
     paths:
-      - src-tauri/target/release/bundle/msi/*.msi
-      - src-tauri/target/release/bundle/nsis/*.exe
+      - src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
     expire_in: 30 days
 
 # ─── build: macOS ───────────────────────────────────────────────────────────
@@ -287,9 +301,15 @@ build:windows:
 # build succeeds but the .app is not notarised.
 #
 # Produces: .dmg, .app (inside a .tar.gz).
+#
+# DISABLED: no macOS runner is available — macOS bundles are built manually on
+# the MacBook. To re-enable, drop the `rules: when: never` below (and restore
+# the macOS asset links in the `release` job).
 
 build:macos:
   stage: build
+  rules:
+    - when: never
   tags:
     - macos
   <<: *cache_rust_macos
@@ -310,7 +330,9 @@ build:macos:
 
 # ─── build: Android ─────────────────────────────────────────────────────────
 #
-# Builds a universal release APK via `pnpm tauri android build --apk`.
+# Builds an arm64-only release APK via `pnpm tauri android build --apk`.
+# (arm64-v8a covers all modern physical devices; a universal APK packing all
+# four ABIs ran ~600 MB and exceeded the package-registry proxy's upload limit.)
 # Signing: if ANDROID_KEYSTORE_BASE64 + related vars are set, the APK is
 # signed for release with apksigner; otherwise it falls back to a debug-signed
 # APK (installable on dev devices, NOT suitable for public distribution).
@@ -380,7 +402,9 @@ build:android:
     # Rust + Android targets.
     - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
     - . "$HOME/.cargo/env"
-    - rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+    # arm64-only — covers all modern physical Android devices and keeps the APK
+    # small enough to clear the package-registry upload limit (see header note).
+    - rustup target add aarch64-linux-android
     # Node + pnpm.
     - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     - apt-get install -y nodejs
@@ -400,7 +424,7 @@ build:android:
     - |
       if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
         echo "Building release APK (release-signed)…"
-        pnpm tauri android build --apk
+        pnpm tauri android build --apk --target aarch64
         UNSIGNED=$(find src-tauri/gen/android/app/build/outputs/apk -name "*-release-unsigned.apk" | head -n1)
         if [ -z "$UNSIGNED" ]; then
           # Some Tauri versions emit *-release.apk (still unsigned without a signingConfig).
@@ -420,7 +444,7 @@ build:android:
       else
         echo "No ANDROID_KEYSTORE_BASE64 set — building DEBUG-signed APK."
         echo "  (Installable on dev devices, but NOT suitable for public release.)"
-        pnpm tauri android build --apk --debug
+        pnpm tauri android build --apk --debug --target aarch64
         DEBUG_APK=$(find src-tauri/gen/android/app/build/outputs/apk -name "*-debug.apk" | head -n1)
         cp "$DEBUG_APK" quark-android.apk
       fi
@@ -444,8 +468,6 @@ release:
     - job: build:linux
       artifacts: false
     - job: build:windows
-      artifacts: false
-    - job: build:macos
       artifacts: false
     - job: build:flatpak
       artifacts: false
@@ -471,17 +493,8 @@ release:
         - name: "Linux (Flatpak)"
           url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}.flatpak"
           link_type: package
-        - name: "Windows (.msi, x64)"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-windows-x64.msi"
-          link_type: package
         - name: "Windows (.exe NSIS, x64)"
           url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-windows-x64.exe"
-          link_type: package
-        - name: "macOS (.dmg)"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-macos.dmg"
-          link_type: package
-        - name: "macOS (.app.tar.gz)"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-macos.app.tar.gz"
           link_type: package
         - name: "Android (.apk)"
           url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}/quark-${CI_COMMIT_TAG}-android.apk"
