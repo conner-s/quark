@@ -295,6 +295,14 @@ function dispatchAction(action: string, components: AppComponents): void {
       editStatus();
       break;
 
+    case "help":
+      components.helpDialog.show();
+      break;
+
+    case "open-quick-nav":
+      components.quickNavPalette.show();
+      break;
+
     case "close":
       AppState.close();
       break;

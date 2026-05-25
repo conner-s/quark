@@ -202,14 +202,17 @@ export function mountApp(container: HTMLElement): AppComponents {
 
   // ── Mobile mode bootstrap ─────────────────────────────────────────────────
   initMobile();
+  // Now that mobile state is known, re-apply the compose field's soft-keyboard
+  // assist attributes (constructor ran before initMobile with the desktop default).
+  input.applyTextAssist();
   setupTouchGestures(mainLayout, roomList.getElement(), {
     scrollEl: roomList.getScrollElement(),
-    // Command mode (`:`) is keyboard-only and unreachable by touch. Pulling down
-    // from the top of the room list opens the command palette; close the drawer
-    // first so the command input is visible and focused. (mobile command access)
+    // The quick-nav palette (Ctrl+K on desktop) is unreachable by touch. Pulling
+    // down from the top of the room list opens it; close the drawer first so the
+    // palette is visible and focused. (mobile quick-nav access)
     onPullDown: () => {
       closeDrawer();
-      document.dispatchEvent(new CustomEvent("quark:action", { detail: { action: "mode-command" } }));
+      document.dispatchEvent(new CustomEvent("quark:action", { detail: { action: "open-quick-nav" } }));
     },
   });
   mobileTopBar.onHamburgerClick(() => toggleDrawer());

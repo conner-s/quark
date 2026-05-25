@@ -1443,18 +1443,21 @@ body {
   color: var(--bg);
 }
 
-/* Visual-mode override: while extending a selection, fall back to the
-   theme's standard selection palette (muted) so the user can tell the
-   difference between "this is my cursor" (cursor color) and "this is what
-   I've selected" (selection color). Class is toggled on Normal↔Visual. */
+/* Visual-mode override: while extending a selection, use the secondary accent
+   (with --bg as text for an inverse-video read) so the user can tell the
+   difference between "this is my cursor" (--cursor, the block above) and "this
+   is what I've selected" (a distinct, still high-contrast colour). The old
+   --selection-bg was nearly invisible on most themes, and --cursor equals
+   --accent-primary in every built-in theme, so the secondary accent is the
+   readable colour that stays distinct from the block cursor. Toggled Normal↔Visual. */
 .message__body--text-select-visual::selection,
 .message__body--text-select-visual *::selection {
-  background-color: var(--selection-bg);
-  color: var(--selection-fg);
+  background-color: var(--accent-secondary);
+  color: var(--bg);
 }
 .input-bar__field--text-select-visual::selection {
-  background-color: var(--selection-bg);
-  color: var(--selection-fg);
+  background-color: var(--accent-secondary);
+  color: var(--bg);
 }
 
 .message--system .message__body {

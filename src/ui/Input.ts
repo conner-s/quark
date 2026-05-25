@@ -236,6 +236,17 @@ export class Input {
     this._fieldEl.setAttribute("autocomplete", mobile ? "on" : "off");
   }
 
+  /**
+   * Re-apply the soft-keyboard assist attributes now that mobile state is known.
+   * The constructor runs before initMobile(), so on a device that boots straight
+   * into mobile it would otherwise keep the desktop (assist-off) attributes —
+   * onMobileChange only fires when the breakpoint is *crossed*, which never
+   * happens on a real phone. Call this once after initMobile().
+   */
+  applyTextAssist(): void {
+    this._applyTextAssistAttributes();
+  }
+
   /** Register a callback invoked when the field is clicked to enter insert mode. */
   onFocusEnterInsert(handler: () => void): void {
     this._onFocusEnterInsert = handler;
