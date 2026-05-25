@@ -1,7 +1,7 @@
 // GIF search overlay
 
 import type { GifResult } from "../ipc/types.js";
-import { keymapManager } from "../vim/keybindings.js";
+import { PickerBase, SelectionList } from "./PickerBase.js";
 export type { GifResult };
 
 type GifSelectCallback = (gif: GifResult) => void;
@@ -11,8 +11,7 @@ type GifLoadMoreCallback = () => void;
 const GIF_COLS = 3;
 
 /** GIF search popup with keyboard-navigable grid. */
-export class GifPicker {
-  private _el: HTMLElement;        // backdrop
+export class GifPicker extends PickerBase {
   private _panelEl: HTMLElement;   // floating panel
   private _searchEl: HTMLInputElement;
   private _statusEl: HTMLElement;
@@ -21,20 +20,18 @@ export class GifPicker {
   private _poweredByEl: HTMLElement;
 
   private _results: GifResult[] = [];
-  private _focusIndex = 0;
+  private _list: SelectionList;
 
   private _onSelect: GifSelectCallback | null = null;
   private _onSearch: GifSearchCallback | null = null;
   private _onLoadMore: GifLoadMoreCallback | null = null;
 
   constructor() {
-    // ── Backdrop ─────────────────────────────────────────────────────────
-    this._el = document.createElement("div");
-    this._el.className = "gif-picker";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "GIF search");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.style.display = "none";
+    super({
+      className: "gif-picker",
+      ariaLabel: "GIF search",
+      displayValue: "flex",
+    });
 
     // Close on backdrop click (outside panel)
     this._el.addEventListener("click", (e) => {
@@ -110,12 +107,17 @@ export class GifPicker {
     this._statusEl.textContent = "Enter to search · j/k/h/l navigate · Tab more · Esc close";
     this._panelEl.appendChild(this._statusEl);
 
+    // ── Navigation model ─────────────────────────────────────────────────
+    this._list = new SelectionList({
+      columns: GIF_COLS,
+      highlight: { kind: "tabindex" },
+      getItems: () =>
+        Array.from(this._gridEl.querySelectorAll<HTMLElement>(".gif-picker__cell")),
+      onSelect: (i) => this._selectIndex(i),
+    });
+
     // ── Keyboard handling ────────────────────────────────────────────────
     this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
-  }
-
-  getElement(): HTMLElement {
-    return this._el;
   }
 
   onSelect(cb: GifSelectCallback): void {
@@ -130,29 +132,21 @@ export class GifPicker {
     this._onLoadMore = cb;
   }
 
-  isVisible(): boolean {
-    return this._el.style.display !== "none";
-  }
-
   show(): void {
-    this._el.style.display = "flex";
+    this.reveal();
     this._searchEl.focus();
-  }
-
-  hide(): void {
-    this._el.style.display = "none";
-    keymapManager.resetSequence();
   }
 
   setResults(results: GifResult[]): void {
     this._results = results;
-    this._focusIndex = 0;
     this._renderGrid();
+    this._list.setFocus(0);
   }
 
   appendResults(results: GifResult[]): void {
     this._results = [...this._results, ...results];
     this._renderGrid();
+    this._list.refresh();
   }
 
   setStatus(text: string): void {
@@ -183,7 +177,7 @@ export class GifPicker {
       cell.className = "gif-picker__cell";
       cell.type = "button";
       cell.setAttribute("role", "gridcell");
-      cell.setAttribute("tabindex", i === this._focusIndex ? "0" : "-1");
+      cell.setAttribute("tabindex", i === this._list.focusIndex ? "0" : "-1");
       cell.setAttribute("aria-label", gif.title || `GIF ${i + 1}`);
       cell.title = gif.title;
       cell.dataset.index = String(i);
@@ -203,16 +197,6 @@ export class GifPicker {
       cell.addEventListener("click", () => this._selectIndex(i));
       this._gridEl.appendChild(cell);
     }
-  }
-
-  private _focusCell(index: number): void {
-    const cells = this._gridEl.querySelectorAll<HTMLElement>(".gif-picker__cell");
-    if (cells.length === 0) return;
-    this._focusIndex = Math.max(0, Math.min(index, cells.length - 1));
-    for (let i = 0; i < cells.length; i++) {
-      cells[i].setAttribute("tabindex", i === this._focusIndex ? "0" : "-1");
-    }
-    cells[this._focusIndex]?.focus();
   }
 
   private _selectIndex(index: number): void {
@@ -235,8 +219,6 @@ export class GifPicker {
       return;
     }
 
-    const total = this._results.length;
-
     // Escape, Tab, Enter, / are hardcoded (overlay-specific or not remappable)
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
       e.preventDefault();
@@ -250,41 +232,14 @@ export class GifPicker {
       return;
     }
 
-    if (e.key === "Enter") {
-      e.preventDefault();
-      this._selectIndex(this._focusIndex);
-      return;
-    }
-
     if (e.key === "/") {
       e.preventDefault();
       this._searchEl.focus();
       return;
     }
 
-    const result = keymapManager.resolveKey(e.key, "picker");
-
-    if (result.kind === "action") {
-      switch (result.action) {
-        case "nav-down":
-          e.preventDefault();
-          if (total > 0) this._focusCell(Math.min(this._focusIndex + GIF_COLS, total - 1));
-          break;
-        case "nav-up":
-          e.preventDefault();
-          if (total > 0) this._focusCell(Math.max(this._focusIndex - GIF_COLS, 0));
-          break;
-        case "nav-right":
-          e.preventDefault();
-          if (total > 0) this._focusCell(Math.min(this._focusIndex + 1, total - 1));
-          break;
-        case "nav-left":
-          e.preventDefault();
-          if (total > 0) this._focusCell(Math.max(this._focusIndex - 1, 0));
-          break;
-      }
-    } else if (result.kind === "partial") {
-      e.preventDefault();
-    }
+    // Navigation + select route through the keymap (honours rebindings).
+    const { consumed, partial } = this._list.handleKey(e.key);
+    if (consumed || partial) e.preventDefault();
   }
 }

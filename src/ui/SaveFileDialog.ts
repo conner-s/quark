@@ -5,6 +5,8 @@
 // are installed" on misconfigured systems). A small terminal-styled modal
 // avoids that whole stack and works the same everywhere.
 
+import { modalManager, type Modal } from "./ModalManager.js";
+
 export interface SaveFilePromptOptions {
   /** Suggested filename (no path). Falls back to "file" if empty. */
   suggestedFilename?: string;
@@ -97,9 +99,18 @@ export function promptSaveFilePath(opts: SaveFilePromptOptions): Promise<string 
 
     // ── Wiring ─────────────────────────────────────────────────────────────
     let settled = false;
+    // Register with the modal manager so the global Escape / Android back
+    // switchyard treats this transient dialog like any other overlay.
+    // `hide()` maps to a cancel, matching Escape and backdrop dismissal.
+    const modal: Modal = {
+      getElement: () => backdrop,
+      isVisible: () => !settled,
+      hide: () => finish(null),
+    };
     const cleanup = () => {
       backdrop.remove();
       document.removeEventListener("keydown", onKeyDown, true);
+      modalManager.remove(modal);
     };
     const finish = (result: string | null) => {
       if (settled) return;
@@ -149,6 +160,7 @@ export function promptSaveFilePath(opts: SaveFilePromptOptions): Promise<string 
     document.addEventListener("keydown", onKeyDown, true);
 
     document.body.appendChild(backdrop);
+    modalManager.push(modal);
     // Defer focus + select until next paint so the dialog is positioned.
     requestAnimationFrame(() => {
       nameInput.focus();

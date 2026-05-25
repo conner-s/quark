@@ -5,51 +5,25 @@ import { keymapManager } from "../vim/keybindings.js";
 import { AppState } from "../app/state.js";
 import { getRoomStateEvents, getRawEvent } from "../ipc/room_settings.js";
 import type { RawStateEvent } from "../ipc/room_settings.js";
+import { DialogBase } from "./DialogBase.js";
 
 export type DebugSubject =
   | { kind: "room"; roomId: string }
   | { kind: "event"; roomId: string; eventId: string }
   | { kind: "profile"; userId: string; data: object };
 
-export class DebugViewer {
-  private _el: HTMLElement;
+export class DebugViewer extends DialogBase {
   private _panelEl: HTMLElement;
   private _titleEl: HTMLElement;
   private _bodyEl: HTMLElement;
 
   constructor() {
-    this._el = document.createElement("div");
-    this._el.className = "debug-viewer";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Debug Viewer");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.style.display = "none";
+    super({ prefix: "debug-viewer", ariaLabel: "Debug Viewer" });
+    this._panelEl = this.content;
 
-    this._el.addEventListener("click", (e) => {
-      if (e.target === this._el) this.hide();
-    });
-
-    this._panelEl = document.createElement("div");
-    this._panelEl.className = "debug-viewer__panel";
-    this._panelEl.tabIndex = -1;
-    this._el.appendChild(this._panelEl);
-
-    // Header
-    const header = document.createElement("div");
-    header.className = "debug-viewer__header";
-
-    this._titleEl = document.createElement("span");
-    this._titleEl.className = "debug-viewer__title";
-    this._titleEl.textContent = "── debug viewer ──";
-    header.appendChild(this._titleEl);
-
-    const closeHint = document.createElement("span");
-    closeHint.className = "debug-viewer__close-hint";
-    closeHint.textContent = "Esc · q";
-    closeHint.setAttribute("aria-hidden", "true");
-    header.appendChild(closeHint);
-
-    this._panelEl.appendChild(header);
+    // Header — standard chrome (title + [× Esc] close button).
+    this.buildHeader("── debug viewer ──", "Close debug viewer");
+    this._titleEl = this.titleEl!;
 
     // Toolbar
     const toolbar = document.createElement("div");
@@ -85,12 +59,7 @@ export class DebugViewer {
     this._bodyEl = document.createElement("pre");
     this._bodyEl.className = "debug-viewer__body";
     this._panelEl.appendChild(this._bodyEl);
-
-    this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
   }
-
-  getElement(): HTMLElement { return this._el; }
-  isVisible(): boolean { return this._el.style.display !== "none"; }
 
   /** Show the viewer for the current room's state events. */
   async showCurrentRoom(): Promise<void> {
@@ -104,7 +73,7 @@ export class DebugViewer {
 
   /** Show the viewer for a specific subject. */
   async show(subject: DebugSubject): Promise<void> {
-    this._el.style.display = "flex";
+    this.reveal();
     this._bodyEl.textContent = "Loading…";
 
     switch (subject.kind) {
@@ -141,18 +110,12 @@ export class DebugViewer {
     this._panelEl.focus();
   }
 
-  hide(): void {
-    this._el.style.display = "none";
-    keymapManager.resetSequence();
-  }
-
   // ── Private ──────────────────────────────────────────────────────────────────
 
   private _show(title: string, body: string): void {
-    this._el.style.display = "flex";
+    this.reveal();
     this._titleEl.textContent = title;
     this._bodyEl.textContent = body;
-    this._panelEl.focus();
   }
 
   private _formatStateEvents(events: RawStateEvent[]): string {
@@ -169,10 +132,10 @@ export class DebugViewer {
     return lines.join("\n").trimEnd();
   }
 
-  private _handleKeydown(e: KeyboardEvent): void {
+  protected override handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
-    if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
+    if (this.isEscape(e)) {
       e.preventDefault();
       this.hide();
       return;

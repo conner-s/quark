@@ -1,4 +1,4 @@
-use crate::gif::{GifProvider, GifResult};
+use crate::gif::{self, GifProvider, GifResult};
 use reqwest::Client;
 use serde::Deserialize;
 
@@ -92,21 +92,12 @@ impl GifProvider for KlipyClient {
         let url = format!(
             "https://api.klipy.com/api/v1/{}/gifs/search?q={}&per_page={}&rating={}",
             self.api_key,
-            encode_query(query),
+            gif::encode_query(query),
             limit,
             klipy_rating,
         );
 
-        let response = self
-            .http
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| format!("Klipy API request failed: {e}"))?;
-
-        if !response.status().is_success() {
-            return Err(format!("Klipy API error: HTTP {}", response.status()));
-        }
+        let response = gif::fetch_response(&self.http, "Klipy", &url).await?;
 
         let klipy_resp: KlipyResponse = response
             .json()
@@ -163,25 +154,6 @@ impl GifProvider for KlipyClient {
     }
 }
 
-fn encode_query(s: &str) -> String {
-    let mut encoded = String::new();
-    for c in s.chars() {
-        match c {
-            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => {
-                encoded.push(c);
-            }
-            ' ' => encoded.push('+'),
-            c => {
-                for byte in c.to_string().as_bytes() {
-                    encoded.push('%');
-                    encoded.push_str(&format!("{:02X}", byte));
-                }
-            }
-        }
-    }
-    encoded
-}
-
 /// Build a Klipy search URL from parts (without making an HTTP request).
 pub(crate) fn build_search_url(query: &str, api_key: &str, limit: u32, rating: &str) -> String {
     let klipy_rating = match rating {
@@ -191,7 +163,7 @@ pub(crate) fn build_search_url(query: &str, api_key: &str, limit: u32, rating: &
     format!(
         "https://api.klipy.com/api/v1/{}/gifs/search?q={}&per_page={}&rating={}",
         api_key,
-        encode_query(query),
+        gif::encode_query(query),
         limit,
         klipy_rating,
     )
@@ -249,16 +221,16 @@ mod tests {
 
     #[test]
     fn test_encode_query_safe_chars_unchanged() {
-        assert_eq!(encode_query("hello-world_test.~"), "hello-world_test.~");
+        assert_eq!(crate::gif::encode_query("hello-world_test.~"), "hello-world_test.~");
     }
 
     #[test]
     fn test_encode_query_space_becomes_plus() {
-        assert_eq!(encode_query("hello world"), "hello+world");
+        assert_eq!(crate::gif::encode_query("hello world"), "hello+world");
     }
 
     #[test]
     fn test_encode_query_empty() {
-        assert_eq!(encode_query(""), "");
+        assert_eq!(crate::gif::encode_query(""), "");
     }
 }

@@ -1,6 +1,5 @@
 // Room Settings Dialog — General, Access, Permissions tabs
 
-import { keymapManager } from "../vim/keybindings.js";
 import { AppState } from "../app/state.js";
 import type { RoomInfo } from "../ipc/types.js";
 import type { PowerLevels } from "../ipc/room_settings.js";
@@ -12,49 +11,24 @@ import {
   setRoomJoinRule,
   setRoomHistoryVisibility,
 } from "../ipc/room_settings.js";
+import { DialogBase } from "./DialogBase.js";
+import { applyLocalRoomMeta } from "../app/actions.js";
 
 type RoomSettingsTab = "general" | "access" | "permissions";
 
-export class RoomSettingsDialog {
-  private _el: HTMLElement;
+export class RoomSettingsDialog extends DialogBase {
   private _panelEl: HTMLElement;
   private _contentEl: HTMLElement;
   private _activeTab: RoomSettingsTab = "general";
   private _tabEls: Record<RoomSettingsTab, HTMLElement> = {} as Record<RoomSettingsTab, HTMLElement>;
 
   constructor() {
-    this._el = document.createElement("div");
-    this._el.className = "settings-dialog";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Room Settings");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.style.display = "none";
-
-    this._el.addEventListener("click", (e) => {
-      if (e.target === this._el) this.hide();
-    });
-
-    this._panelEl = document.createElement("div");
-    this._panelEl.className = "settings-dialog__panel";
-    this._panelEl.tabIndex = -1;
-    this._el.appendChild(this._panelEl);
+    // Spaces and rooms share the `settings-dialog` styling.
+    super({ prefix: "settings-dialog", ariaLabel: "Room Settings" });
+    this._panelEl = this.content;
 
     // Header
-    const header = document.createElement("div");
-    header.className = "settings-dialog__header";
-    const title = document.createElement("span");
-    title.className = "settings-dialog__title";
-    title.textContent = "── room settings ──";
-    header.appendChild(title);
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "settings-dialog__close-hint dialog-close-btn";
-    closeBtn.textContent = "[× Esc]";
-    closeBtn.setAttribute("aria-label", "Close room settings");
-    closeBtn.tabIndex = -1;
-    closeBtn.addEventListener("click", () => this.hide());
-    header.appendChild(closeBtn);
-    this._panelEl.appendChild(header);
+    this.buildHeader("── room settings ──", "Close room settings");
 
     // Tabs
     const tabs = document.createElement("div");
@@ -76,22 +50,11 @@ export class RoomSettingsDialog {
     footer.textContent = "Tab switch section · Esc close";
     footer.setAttribute("aria-hidden", "true");
     this._panelEl.appendChild(footer);
-
-    this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
   }
-
-  getElement(): HTMLElement { return this._el; }
-  isVisible(): boolean { return this._el.style.display !== "none"; }
 
   async show(): Promise<void> {
-    this._el.style.display = "flex";
+    this.reveal();
     await this._switchTab("general");
-    this._panelEl.focus();
-  }
-
-  hide(): void {
-    this._el.style.display = "none";
-    keymapManager.resetSequence();
   }
 
   // ── Private ──────────────────────────────────────────────────────────────────
@@ -142,6 +105,9 @@ export class RoomSettingsDialog {
     return el;
   }
 
+  // The following row builders delegate to DialogBase but keep the
+  // section-appending signatures the tab builders rely on.
+
   private _makeTextRow(
     section: HTMLElement,
     label: string,
@@ -149,19 +115,7 @@ export class RoomSettingsDialog {
     placeholder: string,
     onChange: (v: string) => void,
   ): HTMLInputElement {
-    const row = document.createElement("div");
-    row.className = "settings-dialog__row";
-    const lbl = document.createElement("span");
-    lbl.className = "settings-dialog__label";
-    lbl.textContent = label;
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "settings-dialog__text-input room-settings-dialog__wide-input";
-    input.value = value;
-    input.placeholder = placeholder;
-    input.addEventListener("input", () => onChange(input.value));
-    row.appendChild(lbl);
-    row.appendChild(input);
+    const { row, input } = this.makeTextRow(label, value, placeholder, onChange, "room-settings-dialog__wide-input");
     section.appendChild(row);
     return input;
   }
@@ -173,24 +127,7 @@ export class RoomSettingsDialog {
     options: [string, string][],
     onChange: (v: string) => void,
   ): void {
-    const row = document.createElement("div");
-    row.className = "settings-dialog__row";
-    const lbl = document.createElement("span");
-    lbl.className = "settings-dialog__label";
-    lbl.textContent = label;
-    const sel = document.createElement("select");
-    sel.className = "settings-dialog__select";
-    for (const [val, display] of options) {
-      const opt = document.createElement("option");
-      opt.value = val;
-      opt.textContent = display;
-      if (val === value) opt.selected = true;
-      sel.appendChild(opt);
-    }
-    sel.addEventListener("change", () => onChange(sel.value));
-    row.appendChild(lbl);
-    row.appendChild(sel);
-    section.appendChild(row);
+    section.appendChild(this.makeSelectRow(label, value, options, onChange));
   }
 
   private _makeNumberRow(
@@ -199,25 +136,7 @@ export class RoomSettingsDialog {
     value: number,
     onChange: (v: number) => void,
   ): void {
-    const row = document.createElement("div");
-    row.className = "settings-dialog__row";
-    const lbl = document.createElement("span");
-    lbl.className = "settings-dialog__label";
-    lbl.textContent = label;
-    const input = document.createElement("input");
-    input.type = "number";
-    input.className = "settings-dialog__number-input";
-    input.value = String(value);
-    input.min = "-100";
-    input.max = "100";
-    input.step = "10";
-    input.addEventListener("change", () => {
-      const v = parseInt(input.value, 10);
-      if (!isNaN(v)) onChange(v);
-    });
-    row.appendChild(lbl);
-    row.appendChild(input);
-    section.appendChild(row);
+    section.appendChild(this.makeNumberRow(label, value, onChange, { min: -100, max: 100, step: 10 }));
   }
 
   private _makeSaveButton(label: string, onClick: () => Promise<void>): HTMLButtonElement {
@@ -301,6 +220,11 @@ export class RoomSettingsDialog {
         tasks.push(setRoomTopic(roomId, draft.topic));
       }
       await Promise.all(tasks);
+      // Reflect the change in the cache + header immediately (don't wait for the
+      // next sync round-trip).
+      if (tasks.length > 0) {
+        applyLocalRoomMeta(roomId, { name: draft.name, topic: draft.topic });
+      }
     }));
   }
 
@@ -481,7 +405,7 @@ export class RoomSettingsDialog {
 
   // ── Keyboard handler ──────────────────────────────────────────────────────────
 
-  private _handleKeydown(e: KeyboardEvent): void {
+  protected override handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
     if (e.key === "Tab" && !e.shiftKey) {
@@ -492,18 +416,12 @@ export class RoomSettingsDialog {
       return;
     }
 
-    if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
+    if (this.isEscape(e)) {
       e.preventDefault();
       this.hide();
       return;
     }
 
-    const result = keymapManager.resolveKey(e.key, "picker");
-    if (result.kind === "action" && result.action === "close") {
-      e.preventDefault();
-      this.hide();
-    } else if (result.kind === "partial") {
-      e.preventDefault();
-    }
+    this.routeKey(e);
   }
 }

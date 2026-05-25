@@ -1,6 +1,6 @@
 // Keyboard-navigable emoji / sticker / GIF tab picker
 
-import { keymapManager } from "../vim/keybindings.js";
+import { PickerBase, SelectionList } from "./PickerBase.js";
 
 export type PickerTab = "emoji" | "sticker" | "gif";
 
@@ -41,8 +41,7 @@ const COLS = 8;
 const STICKER_COLS = 4;
 
 /** Keyboard-navigable emoji / sticker / GIF picker overlay. */
-export class EmojiPicker {
-  private _el: HTMLElement;
+export class EmojiPicker extends PickerBase {
   private _tabBarEl: HTMLElement;
   private _currentTab: PickerTab = "emoji";
 
@@ -51,12 +50,12 @@ export class EmojiPicker {
   private _categoryBarEl: HTMLElement;
   private _searchEl: HTMLInputElement;
   private _gridEl: HTMLElement;
+  private _emojiList: SelectionList;
 
   private _categories: EmojiPickerCategory[] = [];
   private _activeCategoryId: string | null = null;
   private _allEntries: EmojiEntry[] = [];
   private _filteredEntries: EmojiEntry[] = [];
-  private _focusIndex = 0;
   private _searchActive = false;
 
   // ── Sticker section ────────────────────────────────────────────────────
@@ -64,10 +63,10 @@ export class EmojiPicker {
   private _stickerSearchEl: HTMLInputElement;
   private _stickerPackLabelEl: HTMLElement;
   private _stickerGridEl: HTMLElement;
+  private _stickerList: SelectionList;
 
   private _stickerAllEntries: StickerEntry[] = [];
   private _stickerFilteredEntries: StickerEntry[] = [];
-  private _stickerFocusIndex = 0;
   private _stickerSearchActive = false;
 
   // ── Callbacks ──────────────────────────────────────────────────────────
@@ -77,13 +76,11 @@ export class EmojiPicker {
   private _onStickerTabActivated: StickerTabActivatedCallback | null = null;
 
   constructor() {
-    this._el = document.createElement("div");
-    this._el.className = "emoji-picker";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Emoji picker");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.setAttribute("tabindex", "-1");
-    this._el.style.display = "none";
+    super({
+      className: "emoji-picker",
+      ariaLabel: "Emoji picker",
+      focusable: true,
+    });
 
     // ── Tab bar ──────────────────────────────────────────────────────────
     this._tabBarEl = document.createElement("div");
@@ -162,23 +159,29 @@ export class EmojiPicker {
     this._stickerGridEl.setAttribute("aria-label", "Sticker grid");
     this._stickerSectionEl.appendChild(this._stickerGridEl);
 
+    // ── Navigation models (one per grid) ─────────────────────────────────
+    // Both route through `keymapManager.resolveKey(key, "picker")` so user
+    // rebindings apply uniformly; the column count differs per grid.
+    this._emojiList = new SelectionList({
+      columns: COLS,
+      highlight: { kind: "tabindex" },
+      getItems: () =>
+        Array.from(this._gridEl.querySelectorAll<HTMLElement>(".emoji-picker__cell")),
+      onSelect: (i) => this._selectIndex(i),
+    });
+    this._stickerList = new SelectionList({
+      columns: STICKER_COLS,
+      highlight: { kind: "tabindex" },
+      getItems: () =>
+        Array.from(this._stickerGridEl.querySelectorAll<HTMLElement>(".sticker-picker__cell")),
+      onSelect: (i) => this._selectStickerIndex(i),
+    });
+
     // ── Keyboard handling ────────────────────────────────────────────────
     this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
 
-    // ── Click outside closes ─────────────────────────────────────────────
-    // Listen for both mousedown (desktop) and touchstart (iOS WebView, where
-    // a tap on non-interactive chrome doesn't always synthesise mousedown).
-    const outsideHandler = (e: Event): void => {
-      if (this.isVisible() && !this._el.contains(e.target as Node)) {
-        this.hide();
-      }
-    };
-    document.addEventListener("mousedown", outsideHandler);
-    document.addEventListener("touchstart", outsideHandler, { passive: true });
-  }
-
-  getElement(): HTMLElement {
-    return this._el;
+    // ── Click outside closes (mousedown + touchstart, for the iOS WebView) ─
+    this.registerOutsideClose();
   }
 
   onSelect(cb: SelectCallback): void {
@@ -198,12 +201,8 @@ export class EmojiPicker {
     this._onStickerTabActivated = cb;
   }
 
-  isVisible(): boolean {
-    return this._el.style.display !== "none";
-  }
-
   show(tab?: PickerTab): void {
-    this._el.style.display = "";
+    this.reveal();
     if (tab && tab !== this._currentTab) {
       this._switchTab(tab);
     } else {
@@ -216,7 +215,7 @@ export class EmojiPicker {
   }
 
   hide(): void {
-    this._el.style.display = "none";
+    this.conceal(); // hides + deregisters modal + keymapManager.resetSequence()
     // Reset emoji search
     this._searchEl.style.display = "none";
     this._searchEl.value = "";
@@ -227,7 +226,6 @@ export class EmojiPicker {
     this._stickerSearchEl.value = "";
     this._stickerSearchActive = false;
     this._applyStickerFilter("");
-    keymapManager.resetSequence();
   }
 
   /** Set categorised emoji entries for the emoji tab. Builds the category bar. */
@@ -270,7 +268,7 @@ export class EmojiPicker {
     this._allEntries = entries;
     this._applyFilter(this._searchEl.value);
     if (this.isVisible() && document.activeElement === this._el) {
-      this._focusCell(0);
+      this._emojiList.setFocus(0);
     }
   }
 
@@ -309,10 +307,9 @@ export class EmojiPicker {
     if (this._currentTab === "sticker") {
       this._focusStickerCell(0);
     } else {
-      this._focusIndex = 0;
       const cells = this._gridEl.querySelectorAll<HTMLElement>(".emoji-picker__cell");
       if (cells.length > 0) {
-        this._focusCell(0);
+        this._emojiList.setFocus(0);
       } else {
         this._el.focus();
       }
@@ -359,7 +356,7 @@ export class EmojiPicker {
     this._updateCategoryHighlight();
     this._allEntries = cat.entries;
     this._applyFilter(this._searchEl.value);
-    if (focusGrid) this._focusCell(0);
+    if (focusGrid) this._emojiList.setFocus(0);
   }
 
   private _updateCategoryHighlight(): void {
@@ -395,7 +392,7 @@ export class EmojiPicker {
       this._stickerSectionEl.style.display = "none";
       this._emojiSectionEl.style.display = "";
       const cells = this._gridEl.querySelectorAll<HTMLElement>(".emoji-picker__cell");
-      if (cells.length > 0) this._focusCell(0);
+      if (cells.length > 0) this._emojiList.setFocus(0);
       else this._el.focus();
     }
   }
@@ -413,7 +410,7 @@ export class EmojiPicker {
       this._filteredEntries = this._allEntries;
     }
     this._renderGrid();
-    this._focusIndex = 0;
+    this._emojiList.resetIndex();
   }
 
   private _renderGrid(): void {
@@ -425,7 +422,7 @@ export class EmojiPicker {
       cell.className = "emoji-picker__cell";
       cell.type = "button";
       cell.setAttribute("role", "gridcell");
-      cell.setAttribute("tabindex", i === this._focusIndex ? "0" : "-1");
+      cell.setAttribute("tabindex", i === this._emojiList.focusIndex ? "0" : "-1");
       cell.setAttribute("aria-label", entry.shortcode);
       cell.title = `:${entry.shortcode}:`;
       cell.dataset.index = String(i);
@@ -451,11 +448,7 @@ export class EmojiPicker {
       this._el.focus();
       return;
     }
-    this._focusIndex = Math.max(0, Math.min(index, cells.length - 1));
-    for (let i = 0; i < cells.length; i++) {
-      cells[i].setAttribute("tabindex", i === this._focusIndex ? "0" : "-1");
-    }
-    cells[this._focusIndex]?.focus();
+    this._emojiList.setFocus(index);
   }
 
   private _selectIndex(index: number): void {
@@ -491,7 +484,7 @@ export class EmojiPicker {
         )
       : this._stickerAllEntries;
     this._renderStickerGrid();
-    this._stickerFocusIndex = 0;
+    this._stickerList.resetIndex();
     this._updateStickerPackLabel();
   }
 
@@ -519,7 +512,7 @@ export class EmojiPicker {
       cell.className = "sticker-picker__cell";
       cell.type = "button";
       cell.setAttribute("role", "gridcell");
-      cell.setAttribute("tabindex", i === this._stickerFocusIndex ? "0" : "-1");
+      cell.setAttribute("tabindex", i === this._stickerList.focusIndex ? "0" : "-1");
       cell.setAttribute("aria-label", sticker.name);
       cell.title = sticker.name;
       cell.dataset.index = String(i);
@@ -547,11 +540,7 @@ export class EmojiPicker {
       this._el.focus();
       return;
     }
-    this._stickerFocusIndex = Math.max(0, Math.min(index, cells.length - 1));
-    for (let i = 0; i < cells.length; i++) {
-      cells[i].setAttribute("tabindex", i === this._stickerFocusIndex ? "0" : "-1");
-    }
-    cells[this._stickerFocusIndex]?.focus();
+    this._stickerList.setFocus(index);
   }
 
   private _selectStickerIndex(index: number): void {
@@ -620,56 +609,20 @@ export class EmojiPicker {
 
     if (e.key === "Enter") {
       e.preventDefault();
-      this._selectIndex(this._focusIndex);
+      this._selectIndex(this._emojiList.focusIndex);
       return;
     }
 
-    const cells = this._gridEl.querySelectorAll<HTMLElement>(".emoji-picker__cell");
-    const total = cells.length;
+    const total = this._gridEl.querySelectorAll(".emoji-picker__cell").length;
     if (total === 0) return;
 
-    const result = keymapManager.resolveKey(e.key, "picker");
-
-    if (result.kind === "action") {
-      let next = this._focusIndex;
-      switch (result.action) {
-        case "nav-down":
-          e.preventDefault();
-          next = Math.min(this._focusIndex + COLS, total - 1);
-          break;
-        case "nav-up":
-          e.preventDefault();
-          next = Math.max(this._focusIndex - COLS, 0);
-          break;
-        case "nav-right":
-          e.preventDefault();
-          next = Math.min(this._focusIndex + 1, total - 1);
-          break;
-        case "nav-left":
-          e.preventDefault();
-          next = Math.max(this._focusIndex - 1, 0);
-          break;
-        case "jump-top":
-          e.preventDefault();
-          next = 0;
-          break;
-        case "jump-bottom":
-          e.preventDefault();
-          next = total - 1;
-          break;
-        default:
-          return;
-      }
-      this._focusCell(next);
-    } else if (result.kind === "partial") {
-      e.preventDefault();
-    }
+    // Movement routes through the keymap (honours user rebindings). Select is
+    // handled above as a literal Enter so it isn't shadowed here.
+    const { consumed, partial } = this._emojiList.handleKey(e.key);
+    if (consumed || partial) e.preventDefault();
   }
 
   private _handleStickerKeydown(e: KeyboardEvent, isEscape: boolean): void {
-    const cells = this._stickerGridEl.querySelectorAll<HTMLElement>(".sticker-picker__cell");
-    const total = cells.length;
-
     if (this._stickerSearchActive && isEscape) {
       e.preventDefault();
       this._stickerSearchActive = false;
@@ -704,39 +657,16 @@ export class EmojiPicker {
 
     if (e.key === "Enter") {
       e.preventDefault();
-      this._selectStickerIndex(this._stickerFocusIndex);
+      this._selectStickerIndex(this._stickerList.focusIndex);
       return;
     }
 
+    const total = this._stickerGridEl.querySelectorAll(".sticker-picker__cell").length;
     if (total === 0) return;
 
-    let next = this._stickerFocusIndex;
-
-    switch (e.key) {
-      case "j":
-      case "ArrowDown":
-        e.preventDefault();
-        next = Math.min(this._stickerFocusIndex + STICKER_COLS, total - 1);
-        break;
-      case "k":
-      case "ArrowUp":
-        e.preventDefault();
-        next = Math.max(this._stickerFocusIndex - STICKER_COLS, 0);
-        break;
-      case "l":
-      case "ArrowRight":
-        e.preventDefault();
-        next = Math.min(this._stickerFocusIndex + 1, total - 1);
-        break;
-      case "h":
-      case "ArrowLeft":
-        e.preventDefault();
-        next = Math.max(this._stickerFocusIndex - 1, 0);
-        break;
-      default:
-        return;
-    }
-
-    this._focusStickerCell(next);
+    // Movement routes through the keymap so user rebindings of the nav keys
+    // apply to the sticker grid too (previously hard-coded to j/k/h/l/arrows).
+    const { consumed, partial } = this._stickerList.handleKey(e.key);
+    if (consumed || partial) e.preventDefault();
   }
 }

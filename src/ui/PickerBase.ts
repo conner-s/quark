@@ -1,0 +1,267 @@
+// Shared machinery for keyboard-navigable picker / selection-list overlays.
+//
+// Before this file existed, every picker (emoji, gif, device, quick-react,
+// quick-nav) re-implemented the same scaffolding: an overlay element that
+// implements the `Modal` contract, outside-click dismissal, show/hide/isVisible,
+// a focus-index, grid/list rendering with active-item highlighting, and
+// arrow-key navigation. The navigation in particular was handled five different
+// ways — and two pickers (DevicePicker, QuickReactPicker) HARDCODED j/k/arrows
+// instead of routing through the keymap, so user `quarkrc` rebindings silently
+// didn't work there.
+//
+// `PickerBase` owns the overlay + Modal registration. `SelectionList` owns the
+// focus model and keymap-driven navigation, so EVERY picker honours rebindings:
+// keys are resolved through `keymapManager.resolveKey(key, "picker")`, which
+// falls back to the global ("nmap") map where j→nav-down, k→nav-up,
+// h/l→nav-left/right, the arrows, gg→jump-top, G→jump-bottom, Enter/o→select and
+// Escape→close are registered (see app/keyboard.ts).
+
+import { keymapManager } from "../vim/keybindings.js";
+import { modalManager, attachOutsideClose, type Modal } from "./ModalManager.js";
+
+// ── PickerBase ───────────────────────────────────────────────────────────────
+
+export interface PickerBaseOptions {
+  /** Root overlay class name (e.g. "emoji-picker", "gif-picker"). */
+  className: string;
+  /** aria-label for the overlay's `role="dialog"`. */
+  ariaLabel: string;
+  /** Add `aria-modal="true"`. Default true. */
+  ariaModal?: boolean;
+  /** Add `tabindex="-1"` so the root can hold focus. Default false. */
+  focusable?: boolean;
+  /** `display` value to use when shown (e.g. "" or "flex"). Default "". */
+  displayValue?: string;
+}
+
+/**
+ * Base class for picker overlays. Provides the `Modal` contract, show/hide that
+ * register with `modalManager`, and a hook (`registerOutsideClose`) for the
+ * standard click/tap-outside dismissal.
+ *
+ * Subclasses build their own DOM into `this._el` and call the lifecycle helpers.
+ */
+export abstract class PickerBase implements Modal {
+  protected _el: HTMLElement;
+  private _displayValue: string;
+
+  constructor(opts: PickerBaseOptions) {
+    this._displayValue = opts.displayValue ?? "";
+
+    this._el = document.createElement("div");
+    this._el.className = opts.className;
+    this._el.setAttribute("role", "dialog");
+    this._el.setAttribute("aria-label", opts.ariaLabel);
+    if (opts.ariaModal ?? true) this._el.setAttribute("aria-modal", "true");
+    if (opts.focusable) this._el.setAttribute("tabindex", "-1");
+    this._el.style.display = "none";
+  }
+
+  getElement(): HTMLElement {
+    return this._el;
+  }
+
+  isVisible(): boolean {
+    return this._el.style.display !== "none";
+  }
+
+  /**
+   * Make the overlay visible and register it as the active modal. Subclasses
+   * that need to seed state / focus should override `show(...)`, do their own
+   * work, then call `this.reveal()` (or call this directly).
+   */
+  protected reveal(): void {
+    this._el.style.display = this._displayValue;
+    modalManager.push(this);
+  }
+
+  /**
+   * Hide the overlay, deregister it, and reset any pending key sequence so a
+   * half-typed `g` (from `gg`) doesn't leak into the next context.
+   *
+   * Subclasses override `hide()` to add their own teardown but should call
+   * `super.hide()` (or `this.conceal()`) to run this.
+   */
+  hide(): void {
+    this.conceal();
+  }
+
+  protected conceal(): void {
+    this._el.style.display = "none";
+    modalManager.remove(this);
+    keymapManager.resetSequence();
+  }
+
+  /**
+   * Wire the standard "click / tap outside closes" behaviour. `panel` is the
+   * element that should NOT trigger a close (defaults to the overlay root).
+   * Returns the disposer from `attachOutsideClose`.
+   */
+  protected registerOutsideClose(panel: HTMLElement = this._el): () => void {
+    return attachOutsideClose(panel, {
+      isVisible: () => this.isVisible(),
+      close: () => this.hide(),
+    });
+  }
+}
+
+// ── SelectionList ──────────────────────────────────────────────────────────────
+
+/** Logical navigation directions a resolved keymap action maps to. */
+export type NavAction =
+  | "nav-up"
+  | "nav-down"
+  | "nav-left"
+  | "nav-right"
+  | "jump-top"
+  | "jump-bottom"
+  | "select"
+  | "close";
+
+/** How the active item is visually marked. */
+export type HighlightStrategy =
+  | { kind: "tabindex" } // roving tabindex + .focus() (grids: emoji, gif, sticker)
+  | { kind: "class"; activeClass: string }; // toggle a CSS class (lists)
+
+export interface SelectionListOptions {
+  /** Column count. 1 ⇒ vertical list; >1 ⇒ grid (up/down jump by this many). */
+  columns: number;
+  /** How to mark the active item. */
+  highlight: HighlightStrategy;
+  /** Live cell/item elements at navigation time. */
+  getItems: () => HTMLElement[];
+  /** Invoked when the active item should be activated (Enter / select). */
+  onSelect: (index: number) => void;
+  /**
+   * Optional: called whenever the focused index changes, after highlighting.
+   * Use e.g. to `scrollIntoView`. (For tabindex strategy, focusing already
+   * scrolls; this still fires so callers can do extra work.)
+   */
+  onFocusChange?: (index: number) => void;
+  /**
+   * Optional override of how nav keys are resolved. Defaults to
+   * `keymapManager.resolveKey(key, "picker")`. Exposed for testing.
+   */
+  resolve?: (key: string) => ReturnType<typeof keymapManager.resolveKey>;
+}
+
+/**
+ * Shared focus-index + keymap-driven navigation for a one- or multi-column list
+ * of items. Holds no DOM of its own — it asks `getItems()` for the current
+ * elements and applies the configured highlight strategy.
+ *
+ * All navigation goes through the keymap so user rebindings are honoured
+ * uniformly across every picker. `handleKey` returns true when it consumed the
+ * event (the caller should then `preventDefault`), false otherwise.
+ */
+export class SelectionList {
+  private _focusIndex = 0;
+  private readonly _opts: SelectionListOptions;
+  private readonly _resolve: (key: string) => ReturnType<typeof keymapManager.resolveKey>;
+
+  constructor(opts: SelectionListOptions) {
+    this._opts = opts;
+    this._resolve = opts.resolve ?? ((key) => keymapManager.resolveKey(key, "picker"));
+  }
+
+  get focusIndex(): number {
+    return this._focusIndex;
+  }
+
+  /** Reset focus to a given index (clamped) and re-apply highlighting. */
+  setFocus(index: number): void {
+    const items = this._opts.getItems();
+    if (items.length === 0) {
+      this._focusIndex = 0;
+      return;
+    }
+    this._focusIndex = Math.max(0, Math.min(index, items.length - 1));
+    this._applyHighlight(items, this._focusIndex);
+    this._opts.onFocusChange?.(this._focusIndex);
+  }
+
+  /**
+   * Reset the stored focus index to 0 WITHOUT moving DOM focus or re-applying
+   * highlight. Use after a re-render where the caller will (or already did)
+   * paint the initial active marker itself — mirrors the old `_focusIndex = 0`
+   * post-render reset some pickers relied on.
+   */
+  resetIndex(): void {
+    this._focusIndex = 0;
+  }
+
+  /** Re-apply highlight without moving (e.g. after a re-render). */
+  refresh(): void {
+    const items = this._opts.getItems();
+    if (items.length === 0) return;
+    this._focusIndex = Math.max(0, Math.min(this._focusIndex, items.length - 1));
+    this._applyHighlight(items, this._focusIndex);
+  }
+
+  /**
+   * Resolve a keydown through the keymap and move/select accordingly.
+   * Returns true if the event was a navigation/select action (consumed).
+   */
+  handleKey(key: string): { consumed: boolean; partial: boolean } {
+    const result = this._resolve(key);
+    if (result.kind === "partial") {
+      return { consumed: true, partial: true };
+    }
+    if (result.kind !== "action") {
+      return { consumed: false, partial: false };
+    }
+    return { consumed: this.dispatch(result.action as NavAction), partial: false };
+  }
+
+  /** Apply a resolved nav action by name. Returns true if it was a known action. */
+  dispatch(action: NavAction): boolean {
+    const items = this._opts.getItems();
+    const total = items.length;
+    const cols = Math.max(1, this._opts.columns);
+
+    switch (action) {
+      case "nav-down":
+        if (total > 0) this.setFocus(Math.min(this._focusIndex + cols, total - 1));
+        return true;
+      case "nav-up":
+        if (total > 0) this.setFocus(Math.max(this._focusIndex - cols, 0));
+        return true;
+      case "nav-right":
+        if (total > 0) this.setFocus(Math.min(this._focusIndex + 1, total - 1));
+        return true;
+      case "nav-left":
+        if (total > 0) this.setFocus(Math.max(this._focusIndex - 1, 0));
+        return true;
+      case "jump-top":
+        if (total > 0) this.setFocus(0);
+        return true;
+      case "jump-bottom":
+        if (total > 0) this.setFocus(total - 1);
+        return true;
+      case "select":
+        this._opts.onSelect(this._focusIndex);
+        return true;
+      case "close":
+        // Close is handled by the picker itself (it knows its teardown). The
+        // caller checks for this action explicitly; report unhandled here so it
+        // can route to hide().
+        return false;
+      default:
+        return false;
+    }
+  }
+
+  private _applyHighlight(items: HTMLElement[], index: number): void {
+    const strat = this._opts.highlight;
+    if (strat.kind === "tabindex") {
+      for (let i = 0; i < items.length; i++) {
+        items[i].setAttribute("tabindex", i === index ? "0" : "-1");
+      }
+      items[index]?.focus();
+    } else {
+      for (let i = 0; i < items.length; i++) {
+        items[i].classList.toggle(strat.activeClass, i === index);
+      }
+    }
+  }
+}

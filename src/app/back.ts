@@ -23,47 +23,16 @@
 import { isMobile, isDrawerOpen, openDrawer, closeDrawer } from "./mobile.js";
 import { AppState } from "./state.js";
 import { closeThread, toggleMemberList } from "./actions.js";
+import { modalManager } from "../ui/ModalManager.js";
 import type { AppComponents } from "../ui/App.js";
 
 const BACK_STATE_TAG = "quark-back";
-
-function _isHandlingDialog(c: AppComponents): boolean {
-  const overlays = [
-    c.contextMenu,
-    c.quickReactPicker,
-    c.emojiPicker,
-    c.gifPicker,
-    c.verification,
-    c.devicePicker,
-    c.helpDialog,
-    c.profileDialog,
-    c.profileEditDialog,
-    c.settingsDialog,
-    c.roomInfoDialog,
-    c.pinnedMessagesDialog,
-    c.roomDirectoryDialog,
-    c.imageLightbox,
-    c.quickNavPalette,
-    c.roomSettingsDialog,
-    c.spaceSettingsDialog,
-    c.debugViewer,
-    c.revisionHistoryDialog,
-  ];
-  // Close in order — only the topmost visible overlay handles the back press.
-  for (const o of overlays) {
-    if (o.isVisible()) {
-      o.hide();
-      return true;
-    }
-  }
-  return false;
-}
 
 /**
  * Wire up Android back-button handling. Safe to call on iOS / desktop —
  * popstate just never fires there.
  */
-export function setupBackButton(components: AppComponents): void {
+export function setupBackButton(_components: AppComponents): void {
   // Seed one history entry so the back-press has somewhere to go.
   history.pushState({ tag: BACK_STATE_TAG }, "");
 
@@ -72,7 +41,8 @@ export function setupBackButton(components: AppComponents): void {
     // of falling through to the system back (which would exit the app).
     history.pushState({ tag: BACK_STATE_TAG }, "");
 
-    if (_isHandlingDialog(components)) return;
+    // Any open overlay handles the back press — close the topmost one.
+    if (modalManager.closeTopMost()) return;
 
     if (AppState.get("memberListVisible")) {
       toggleMemberList();

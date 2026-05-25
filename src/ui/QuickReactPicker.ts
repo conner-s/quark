@@ -2,6 +2,8 @@
 
 import { BUILTIN_EMOJI, EMOJI_CATEGORIES } from "../data/unicode-emoji.js";
 import { isMobile } from "../app/mobile.js";
+import { keymapManager } from "../vim/keybindings.js";
+import { PickerBase } from "./PickerBase.js";
 
 /** Build reaction data from the full built-in emoji set, with a set of pinned
  *  common reactions shown first so frequently-used emoji are always at the top. */
@@ -51,8 +53,7 @@ type ReactCallback = (eventId: string, key: string) => void;
  *   - Shift-Tab or Esc-while-in-grid returns focus to the input.
  *   - Esc-while-input-focused closes the picker.
  */
-export class QuickReactPicker {
-  private _el: HTMLElement;
+export class QuickReactPicker extends PickerBase {
   private _inputEl: HTMLInputElement;
   private _categoryBarEl: HTMLElement;
   private _customCatBtnEl!: HTMLButtonElement;
@@ -69,11 +70,12 @@ export class QuickReactPicker {
   private _activeCategoryId: string | null = null;
 
   constructor() {
-    this._el = document.createElement("div");
-    this._el.className = "quick-react-picker";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Add reaction");
-    this._el.style.display = "none";
+    super({
+      className: "quick-react-picker",
+      ariaLabel: "Add reaction",
+      ariaModal: false,
+      displayValue: "flex",
+    });
 
     // ── Input row ─────────────────────────────────────────────────────────
     const inputRow = document.createElement("div");
@@ -159,20 +161,8 @@ export class QuickReactPicker {
     this._inputEl.addEventListener("input", () => this._applyFilter(this._inputEl.value));
     this._gridEl.addEventListener("keydown", (e) => this._handleGridKeydown(e));
 
-    // Click/tap outside closes. Listen for both mousedown (desktop) and
-    // touchstart (iOS WebView, where mousedown on a non-interactive element
-    // isn't always synthesised from a tap).
-    const outsideHandler = (e: Event): void => {
-      if (this.isVisible() && !this._el.contains(e.target as Node)) {
-        this.hide();
-      }
-    };
-    document.addEventListener("mousedown", outsideHandler);
-    document.addEventListener("touchstart", outsideHandler, { passive: true });
-  }
-
-  getElement(): HTMLElement {
-    return this._el;
+    // Click/tap outside closes (mousedown + touchstart, for the iOS WebView).
+    this.registerOutsideClose();
   }
 
   onReact(cb: ReactCallback): void {
@@ -194,10 +184,6 @@ export class QuickReactPicker {
     }
     this._rebuildButtons();
     this._applyFilter(this._inputEl.value);
-  }
-
-  isVisible(): boolean {
-    return this._el.style.display !== "none";
   }
 
   /**
@@ -250,7 +236,7 @@ export class QuickReactPicker {
       }
     }
 
-    this._el.style.display = "flex";
+    this.reveal();
     // Defer focus so the element is rendered first; also check for overflow.
     requestAnimationFrame(() => {
       if (!isMobile() && anchor) {
@@ -272,7 +258,7 @@ export class QuickReactPicker {
   }
 
   hide(): void {
-    this._el.style.display = "none";
+    this.conceal();
     this._el.style.transform = "";
     this._el.style.top = "";
     this._el.style.bottom = "";
@@ -426,6 +412,50 @@ export class QuickReactPicker {
     this._buttons[visible]?.focus();
   }
 
+  /**
+   * Move focus one visual row up/down. The grid is `flex-wrap`, so its column
+   * count varies with width and the visible buttons repack when a filter hides
+   * some — a fixed "+N columns" jump lands diagonally. Instead navigate by
+   * geometry: among visible buttons in the adjacent row (next distinct
+   * `offsetTop` in the travel direction), pick the one whose `offsetLeft` is
+   * closest to the current column. Moving up off the top row returns to the
+   * input.
+   */
+  private _moveByRow(dir: 1 | -1): void {
+    const cur = this._buttons[this._focusedBtnIndex];
+    if (!cur) {
+      if (dir > 0) {
+        const first = this._nextVisible(0, 1);
+        if (first >= 0) this._focusGrid(first);
+      }
+      return;
+    }
+    const visible = this._buttons.filter((b) => b.style.display !== "none");
+    const curTop = cur.offsetTop;
+    const curLeft = cur.offsetLeft;
+    const adjacent = visible.filter((b) => (dir > 0 ? b.offsetTop > curTop : b.offsetTop < curTop));
+    if (adjacent.length === 0) {
+      if (dir < 0) this._returnToInput();
+      return;
+    }
+    const targetTop =
+      dir > 0
+        ? Math.min(...adjacent.map((b) => b.offsetTop))
+        : Math.max(...adjacent.map((b) => b.offsetTop));
+    let best = adjacent[0];
+    let bestDist = Infinity;
+    for (const b of adjacent) {
+      if (b.offsetTop !== targetTop) continue;
+      const dist = Math.abs(b.offsetLeft - curLeft);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = b;
+      }
+    }
+    const idx = this._buttons.indexOf(best);
+    if (idx >= 0) this._focusGrid(idx);
+  }
+
   private _returnToInput(): void {
     this._focusedBtnIndex = -1;
     this._updateBtnFocus();
@@ -460,6 +490,8 @@ export class QuickReactPicker {
   private _handleGridKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
+    // Escape / Ctrl+[ close; Shift-Tab returns to the input (overlay-specific,
+    // not remappable).
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[") || (e.key === "Tab" && e.shiftKey)) {
       e.preventDefault();
       if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
@@ -480,41 +512,72 @@ export class QuickReactPicker {
       }
       return;
     }
-    if (e.key === "h" || e.key === "ArrowLeft") {
+    // Space sends the focused emoji (kept as a literal — not a keymap action).
+    if (e.key === " ") {
       e.preventDefault();
-      const prev = this._nextVisible(this._focusedBtnIndex - 1, -1);
-      if (prev >= 0) this._focusGrid(prev);
+      this._pickFocused();
       return;
     }
-    if (e.key === "l" || e.key === "ArrowRight") {
+
+    // `/` jumps back to the search input (parity with the emoji picker).
+    if (e.key === "/") {
       e.preventDefault();
-      const next = this._nextVisible(this._focusedBtnIndex + 1, 1);
-      if (next >= 0) this._focusGrid(next);
+      this._returnToInput();
       return;
     }
-    if (e.key === "j" || e.key === "ArrowDown") {
+
+    // Movement + select route through the keymap so user `quarkrc` rebindings
+    // (e.g. remapping j/k or the arrows) apply here too. The grid is sparse
+    // (buttons may be hidden by the active filter / category), so we resolve the
+    // logical action then apply the visible-aware movement that this picker
+    // needs — up from the top row falls back to the input field.
+    const result = keymapManager.resolveKey(e.key, "picker");
+    if (result.kind === "partial") {
       e.preventDefault();
-      const next = this._nextVisible(this._focusedBtnIndex + 6, 1);
-      if (next >= 0) this._focusGrid(next);
       return;
     }
-    if (e.key === "k" || e.key === "ArrowUp") {
-      e.preventDefault();
-      const prev = this._nextVisible(this._focusedBtnIndex - 6, -1);
-      if (prev < 0 || prev === this._focusedBtnIndex) {
-        // Already on top row (or no previous visible) — go back to input
-        this._returnToInput();
-      } else {
-        this._focusGrid(prev);
+    if (result.kind !== "action") return;
+
+    switch (result.action) {
+      case "nav-left": {
+        e.preventDefault();
+        const prev = this._nextVisible(this._focusedBtnIndex - 1, -1);
+        if (prev >= 0) this._focusGrid(prev);
+        break;
       }
-      return;
+      case "nav-right": {
+        e.preventDefault();
+        const next = this._nextVisible(this._focusedBtnIndex + 1, 1);
+        if (next >= 0) this._focusGrid(next);
+        break;
+      }
+      case "nav-down": {
+        e.preventDefault();
+        this._moveByRow(1);
+        break;
+      }
+      case "nav-up": {
+        e.preventDefault();
+        this._moveByRow(-1);
+        break;
+      }
+      case "select": {
+        e.preventDefault();
+        this._pickFocused();
+        break;
+      }
+      case "close": {
+        e.preventDefault();
+        this.hide();
+        break;
+      }
     }
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      const btn = this._buttons[this._focusedBtnIndex];
-      const key = btn?.dataset.key ?? btn?.textContent ?? "";
-      if (key) this._pick(key);
-      return;
-    }
+  }
+
+  /** Send the currently focused grid button's emoji. */
+  private _pickFocused(): void {
+    const btn = this._buttons[this._focusedBtnIndex];
+    const key = btn?.dataset.key ?? btn?.textContent ?? "";
+    if (key) this._pick(key);
   }
 }

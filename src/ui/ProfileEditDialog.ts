@@ -3,6 +3,7 @@
 // (needs a file picker → mxc:// upload → set_avatar_url pipeline).
 
 import { keymapManager } from "../vim/keybindings.js";
+import { DialogBase } from "./DialogBase.js";
 
 export interface ProfileEditInitial {
   /** Read-only display of the user's MXID for context. */
@@ -24,9 +25,7 @@ export interface ProfileEditSubmit {
   statusChanged: boolean;
 }
 
-export class ProfileEditDialog {
-  private _el: HTMLElement;
-  private _panelEl: HTMLElement;
+export class ProfileEditDialog extends DialogBase {
   private _userIdEl: HTMLElement;
   private _displayNameInput: HTMLInputElement;
   private _statusInput: HTMLInputElement;
@@ -36,40 +35,11 @@ export class ProfileEditDialog {
   private _initial: ProfileEditInitial | null = null;
 
   constructor() {
-    // Backdrop
-    this._el = document.createElement("div");
-    this._el.className = "profile-edit-dialog";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Edit profile");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.style.display = "none";
+    // Original did not reset the key sequence on hide; it cleared its
+    // submit/initial state instead.
+    super({ prefix: "profile-edit-dialog", ariaLabel: "Edit profile", resetSequenceOnHide: false });
 
-    this._el.addEventListener("click", (e) => {
-      if (e.target === this._el) this.hide();
-    });
-
-    // Panel
-    this._panelEl = document.createElement("div");
-    this._panelEl.className = "profile-edit-dialog__panel";
-    this._panelEl.tabIndex = -1;
-    this._el.appendChild(this._panelEl);
-
-    // Header
-    const header = document.createElement("div");
-    header.className = "profile-edit-dialog__header";
-    const title = document.createElement("span");
-    title.className = "profile-edit-dialog__title";
-    title.textContent = "── edit profile ──";
-    header.appendChild(title);
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "profile-edit-dialog__close dialog-close-btn";
-    closeBtn.textContent = "[× Esc]";
-    closeBtn.setAttribute("aria-label", "Close");
-    closeBtn.tabIndex = -1;
-    closeBtn.addEventListener("click", () => this.hide());
-    header.appendChild(closeBtn);
-    this._panelEl.appendChild(header);
+    this.buildHeader("── edit profile ──", "Close");
 
     // User ID context line — read-only display so the user knows which
     // account they're editing if they're juggling multiple homeservers.
@@ -82,7 +52,7 @@ export class ProfileEditDialog {
     this._userIdEl.className = "profile-edit-dialog__value";
     ctxRow.appendChild(ctxLabel);
     ctxRow.appendChild(this._userIdEl);
-    this._panelEl.appendChild(ctxRow);
+    this.content.appendChild(ctxRow);
 
     // Display name input
     const nameRow = document.createElement("div");
@@ -99,7 +69,7 @@ export class ProfileEditDialog {
     this._displayNameInput.maxLength = 256;
     nameLabel.appendChild(this._displayNameInput);
     nameRow.appendChild(nameLabel);
-    this._panelEl.appendChild(nameRow);
+    this.content.appendChild(nameRow);
 
     // Status message input
     const statusRow = document.createElement("div");
@@ -116,12 +86,12 @@ export class ProfileEditDialog {
     this._statusInput.maxLength = 256;
     statusLabel.appendChild(this._statusInput);
     statusRow.appendChild(statusLabel);
-    this._panelEl.appendChild(statusRow);
+    this.content.appendChild(statusRow);
 
     // Status / error line
     this._statusEl = document.createElement("div");
     this._statusEl.className = "profile-edit-dialog__status";
-    this._panelEl.appendChild(this._statusEl);
+    this.content.appendChild(this._statusEl);
 
     // Footer
     const footer = document.createElement("div");
@@ -141,33 +111,7 @@ export class ProfileEditDialog {
     this._saveBtn.addEventListener("click", () => void this._submit());
     footer.appendChild(this._saveBtn);
 
-    this._panelEl.appendChild(footer);
-
-    // Keyboard handling
-    this._el.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
-        e.preventDefault();
-        this.hide();
-        return;
-      }
-      if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) {
-        e.preventDefault();
-        void this._submit();
-        return;
-      }
-      // Block global vim shortcuts while typing in inputs.
-      const result = keymapManager.resolveKey(e.key, "picker");
-      if (result.kind === "partial") e.preventDefault();
-    });
-  }
-
-  getElement(): HTMLElement {
-    return this._el;
-  }
-
-  isVisible(): boolean {
-    return this._el.style.display !== "none";
+    this.content.appendChild(footer);
   }
 
   show(initial: ProfileEditInitial, onSubmit: (data: ProfileEditSubmit) => Promise<void> | void): void {
@@ -178,15 +122,37 @@ export class ProfileEditDialog {
     this._statusInput.value = initial.statusMessage ?? "";
     this._setStatus("", "neutral");
     this._setSaving(false);
-    this._el.style.display = "flex";
-    // Focus the display-name field after layout settles.
-    requestAnimationFrame(() => this._displayNameInput.focus());
+    this.reveal();
   }
 
-  hide(): void {
-    this._el.style.display = "none";
+  // Focus the display-name field after layout settles.
+  protected override focusTarget(): HTMLElement {
+    requestAnimationFrame(() => this._displayNameInput.focus());
+    return this.content;
+  }
+
+  protected override onHide(): void {
     this._initial = null;
     this._onSubmit = null;
+  }
+
+  // Adds Enter-to-submit on top of the standard Escape close; only consumes
+  // partial vim sequences while typing (does not route a close action).
+  protected override handleKeydown(e: KeyboardEvent): void {
+    e.stopPropagation();
+    if (this.isEscape(e)) {
+      e.preventDefault();
+      this.hide();
+      return;
+    }
+    if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) {
+      e.preventDefault();
+      void this._submit();
+      return;
+    }
+    // Block global vim shortcuts while typing in inputs.
+    const result = keymapManager.resolveKey(e.key, "picker");
+    if (result.kind === "partial") e.preventDefault();
   }
 
   private async _submit(): Promise<void> {

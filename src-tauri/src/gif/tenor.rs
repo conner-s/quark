@@ -1,4 +1,4 @@
-use crate::gif::{GifProvider, GifResult};
+use crate::gif::{self, GifProvider, GifResult};
 use reqwest::Client;
 use serde::Deserialize;
 
@@ -57,22 +57,13 @@ impl GifProvider for TenorClient {
 
         let url = format!(
             "https://tenor.googleapis.com/v2/search?q={}&key={}&limit={}&contentfilter={}&media_filter=gif,tinygif",
-            urlencoding::encode(query),
+            gif::encode_query(query),
             self.api_key,
             limit,
             content_filter,
         );
 
-        let response = self
-            .http
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| format!("Tenor API request failed: {e}"))?;
-
-        if !response.status().is_success() {
-            return Err(format!("Tenor API error: HTTP {}", response.status()));
-        }
+        let response = gif::fetch_response(&self.http, "Tenor", &url).await?;
 
         let tenor_resp: TenorResponse = response
             .json()
@@ -111,28 +102,6 @@ impl GifProvider for TenorClient {
     }
 }
 
-// Helper module for URL encoding (we use reqwest's built-in)
-mod urlencoding {
-    pub fn encode(s: &str) -> String {
-        let mut encoded = String::new();
-        for c in s.chars() {
-            match c {
-                'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => {
-                    encoded.push(c);
-                }
-                ' ' => encoded.push('+'),
-                c => {
-                    for byte in c.to_string().as_bytes() {
-                        encoded.push('%');
-                        encoded.push_str(&format!("{:02X}", byte));
-                    }
-                }
-            }
-        }
-        encoded
-    }
-}
-
 /// Map a rating string to the Tenor contentfilter parameter value.
 pub(crate) fn rating_to_content_filter(rating: &str) -> &'static str {
     match rating {
@@ -149,7 +118,7 @@ pub(crate) fn build_search_url(query: &str, api_key: &str, limit: u32, rating: &
     let content_filter = rating_to_content_filter(rating);
     format!(
         "https://tenor.googleapis.com/v2/search?q={}&key={}&limit={}&contentfilter={}&media_filter=gif,tinygif",
-        urlencoding::encode(query),
+        gif::encode_query(query),
         api_key,
         limit,
         content_filter,
@@ -231,33 +200,33 @@ mod tests {
         assert!(url.contains("key=APIKEY123"));
     }
 
-    // --- urlencoding helper ---
+    // --- encode_query helper (shared in gif::mod) ---
 
     #[test]
     fn test_urlencoding_safe_chars_unchanged() {
-        let result = urlencoding::encode("hello-world_test.~");
+        let result = crate::gif::encode_query("hello-world_test.~");
         assert_eq!(result, "hello-world_test.~");
     }
 
     #[test]
     fn test_urlencoding_space_becomes_plus() {
-        assert_eq!(urlencoding::encode("hello world"), "hello+world");
+        assert_eq!(crate::gif::encode_query("hello world"), "hello+world");
     }
 
     #[test]
     fn test_urlencoding_special_chars_percent_encoded() {
-        let result = urlencoding::encode("a=b&c=d");
+        let result = crate::gif::encode_query("a=b&c=d");
         assert!(result.contains("%3D") || result.contains("%3d")); // '='
         assert!(result.contains("%26")); // '&'
     }
 
     #[test]
     fn test_urlencoding_empty_string() {
-        assert_eq!(urlencoding::encode(""), "");
+        assert_eq!(crate::gif::encode_query(""), "");
     }
 
     #[test]
     fn test_urlencoding_alphanumeric_unchanged() {
-        assert_eq!(urlencoding::encode("abc123XYZ"), "abc123XYZ");
+        assert_eq!(crate::gif::encode_query("abc123XYZ"), "abc123XYZ");
     }
 }

@@ -1,7 +1,7 @@
 // Profile dialog — shows the current user's own profile
 
-import { keymapManager } from "../vim/keybindings.js";
 import { isAnimatedUrl } from "../app/animated_urls.js";
+import { DialogBase } from "./DialogBase.js";
 
 export interface ProfileData {
   userId: string;
@@ -20,8 +20,7 @@ export interface ProfileData {
  * Modal overlay showing the current user's profile.
  * Opened via :profile command or P keybind; closed with Escape.
  */
-export class ProfileDialog {
-  private _el: HTMLElement;
+export class ProfileDialog extends DialogBase {
   private _avatarEl: HTMLElement;
   private _displayNameEl: HTMLElement;
   private _userIdEl: HTMLElement;
@@ -34,12 +33,14 @@ export class ProfileDialog {
   private _actionsEl: HTMLElement;
 
   constructor() {
-    this._el = document.createElement("div");
-    this._el.className = "profile-dialog";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Your profile");
-    this._el.setAttribute("tabindex", "-1");
-    this._el.style.display = "none";
+    // Profile dialog's root is the box itself, and historically did NOT reset
+    // the key sequence on hide.
+    super({
+      prefix: "profile-dialog",
+      ariaLabel: "Your profile",
+      panel: false,
+      resetSequenceOnHide: false,
+    });
 
     // ── Header ────────────────────────────────────────────────────────────
     const header = document.createElement("div");
@@ -50,21 +51,13 @@ export class ProfileDialog {
     title.textContent = "── profile ──";
     header.appendChild(title);
 
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "profile-dialog__close";
-    closeBtn.textContent = "[x]";
-    closeBtn.setAttribute("aria-label", "Close profile");
-    closeBtn.setAttribute("tabindex", "-1");
-    closeBtn.addEventListener("click", () => this.hide());
-    header.appendChild(closeBtn);
-
-    this._el.appendChild(header);
+    header.appendChild(this.makeCloseButton("Close profile"));
+    this.root.appendChild(header);
 
     // ── Avatar ────────────────────────────────────────────────────────────
     this._avatarEl = document.createElement("div");
     this._avatarEl.className = "profile-dialog__avatar";
-    this._el.appendChild(this._avatarEl);
+    this.root.appendChild(this._avatarEl);
 
     // ── Info rows ─────────────────────────────────────────────────────────
     const info = document.createElement("div");
@@ -131,7 +124,7 @@ export class ProfileDialog {
     this._statusMsgRow.style.display = "none";
     info.appendChild(this._statusMsgRow);
 
-    this._el.appendChild(info);
+    this.root.appendChild(info);
 
     // ── Actions ───────────────────────────────────────────────────────────
     this._actionsEl = document.createElement("div");
@@ -157,49 +150,13 @@ export class ProfileDialog {
     this._actionsEl.appendChild(this._editBtn);
 
     this._actionsEl.style.display = "none";
-    this._el.appendChild(this._actionsEl);
+    this.root.appendChild(this._actionsEl);
 
     // ── Hint ──────────────────────────────────────────────────────────────
     const hint = document.createElement("div");
     hint.className = "profile-dialog__hint";
     hint.textContent = "Esc: close";
-    this._el.appendChild(hint);
-
-    // Click/tap outside closes — both mousedown and touchstart for iOS.
-    const outsideHandler = (e: Event): void => {
-      if (this.isVisible() && !this._el.contains(e.target as Node)) {
-        this.hide();
-      }
-    };
-    document.addEventListener("mousedown", outsideHandler);
-    document.addEventListener("touchstart", outsideHandler, { passive: true });
-
-    // Keyboard handling — block global handler and support close action
-    this._el.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-
-      if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
-        e.preventDefault();
-        this.hide();
-        return;
-      }
-
-      const result = keymapManager.resolveKey(e.key, "picker");
-      if (result.kind === "action" && result.action === "close") {
-        e.preventDefault();
-        this.hide();
-      } else if (result.kind === "partial") {
-        e.preventDefault();
-      }
-    });
-  }
-
-  getElement(): HTMLElement {
-    return this._el;
-  }
-
-  isVisible(): boolean {
-    return this._el.style.display !== "none";
+    this.root.appendChild(hint);
   }
 
   show(data: ProfileData): void {
@@ -263,11 +220,6 @@ export class ProfileDialog {
       this._avatarEl.className = "profile-dialog__avatar profile-dialog__avatar--fallback";
     }
 
-    this._el.style.display = "flex";
-    this._el.focus();
-  }
-
-  hide(): void {
-    this._el.style.display = "none";
+    this.reveal();
   }
 }

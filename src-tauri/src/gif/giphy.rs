@@ -1,4 +1,4 @@
-use crate::gif::{GifProvider, GifResult};
+use crate::gif::{self, GifProvider, GifResult};
 use reqwest::Client;
 use serde::Deserialize;
 
@@ -61,22 +61,13 @@ impl GifProvider for GiphyClient {
 
         let url = format!(
             "https://api.giphy.com/v1/gifs/search?q={}&api_key={}&limit={}&rating={}",
-            encode_query(query),
+            gif::encode_query(query),
             self.api_key,
             limit,
             giphy_rating,
         );
 
-        let response = self
-            .http
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| format!("Giphy API request failed: {e}"))?;
-
-        if !response.status().is_success() {
-            return Err(format!("Giphy API error: HTTP {}", response.status()));
-        }
+        let response = gif::fetch_response(&self.http, "Giphy", &url).await?;
 
         let giphy_resp: GiphyResponse = response
             .json()
@@ -105,25 +96,6 @@ impl GifProvider for GiphyClient {
     }
 }
 
-fn encode_query(s: &str) -> String {
-    let mut encoded = String::new();
-    for c in s.chars() {
-        match c {
-            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => {
-                encoded.push(c);
-            }
-            ' ' => encoded.push('+'),
-            c => {
-                for byte in c.to_string().as_bytes() {
-                    encoded.push('%');
-                    encoded.push_str(&format!("{:02X}", byte));
-                }
-            }
-        }
-    }
-    encoded
-}
-
 /// Map a generic rating string to Giphy's rating parameter.
 pub(crate) fn rating_to_giphy_rating(rating: &str) -> &'static str {
     match rating {
@@ -140,7 +112,7 @@ pub(crate) fn build_search_url(query: &str, api_key: &str, limit: u32, rating: &
     let giphy_rating = rating_to_giphy_rating(rating);
     format!(
         "https://api.giphy.com/v1/gifs/search?q={}&api_key={}&limit={}&rating={}",
-        encode_query(query),
+        gif::encode_query(query),
         api_key,
         limit,
         giphy_rating,
@@ -225,31 +197,31 @@ mod tests {
         assert!(url.contains("api_key=SECRETKEY"));
     }
 
-    // --- encode_query helper ---
+    // --- encode_query helper (shared in gif::mod) ---
 
     #[test]
     fn test_encode_query_safe_chars_unchanged() {
-        assert_eq!(encode_query("hello-world_test.~"), "hello-world_test.~");
+        assert_eq!(crate::gif::encode_query("hello-world_test.~"), "hello-world_test.~");
     }
 
     #[test]
     fn test_encode_query_space_becomes_plus() {
-        assert_eq!(encode_query("hello world"), "hello+world");
+        assert_eq!(crate::gif::encode_query("hello world"), "hello+world");
     }
 
     #[test]
     fn test_encode_query_empty() {
-        assert_eq!(encode_query(""), "");
+        assert_eq!(crate::gif::encode_query(""), "");
     }
 
     #[test]
     fn test_encode_query_alphanumeric_unchanged() {
-        assert_eq!(encode_query("abc123XYZ"), "abc123XYZ");
+        assert_eq!(crate::gif::encode_query("abc123XYZ"), "abc123XYZ");
     }
 
     #[test]
     fn test_encode_query_percent_encodes_special() {
-        let result = encode_query("a=b");
+        let result = crate::gif::encode_query("a=b");
         // '=' is not in the safe set
         assert!(result.contains('%'));
     }

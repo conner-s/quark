@@ -1,33 +1,34 @@
 // Device picker overlay — keyboard-navigable list of devices for verification
 
 import type { VerificationStatus } from "../ipc/types.js";
+import { PickerBase, SelectionList } from "./PickerBase.js";
 
 type PickCallback = (device: VerificationStatus) => void;
 type CancelCallback = () => void;
 
 /**
  * Floating overlay that lists a user's devices and lets the user pick one
- * with j/k + Enter navigation. Used before starting a SAS verification.
+ * with keyboard navigation + Enter. Used before starting a SAS verification.
+ *
+ * Navigation routes through `keymapManager` (via SelectionList) so user
+ * `quarkrc` rebindings of the movement keys apply here too.
  */
-export class DevicePicker {
-  private _el: HTMLElement;
+export class DevicePicker extends PickerBase {
   private _titleEl: HTMLElement;
   private _listEl: HTMLElement;
 
   private _devices: VerificationStatus[] = [];
-  private _selectedIndex = 0;
+  private _list: SelectionList;
 
   private _onPick: PickCallback | null = null;
   private _onCancel: CancelCallback | null = null;
 
   constructor() {
-    this._el = document.createElement("div");
-    this._el.className = "device-picker";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Choose device to verify");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.setAttribute("tabindex", "-1");
-    this._el.style.display = "none";
+    super({
+      className: "device-picker",
+      ariaLabel: "Choose device to verify",
+      focusable: true,
+    });
 
     // Header row: title + close button so touch users can dismiss without Esc.
     const header = document.createElement("div");
@@ -62,11 +63,20 @@ export class DevicePicker {
     this._listEl.setAttribute("role", "listbox");
     this._el.appendChild(this._listEl);
 
-    this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
-  }
+    this._list = new SelectionList({
+      columns: 1,
+      highlight: { kind: "class", activeClass: "device-picker__item--selected" },
+      getItems: () =>
+        Array.from(this._listEl.querySelectorAll<HTMLElement>(".device-picker__item")),
+      onSelect: () => this._confirm(),
+      onFocusChange: (i) => {
+        // Keep aria-selected in sync with the highlighted item.
+        const items = this._listEl.querySelectorAll<HTMLElement>(".device-picker__item");
+        items.forEach((el, idx) => el.setAttribute("aria-selected", String(idx === i)));
+      },
+    });
 
-  getElement(): HTMLElement {
-    return this._el;
+    this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
   }
 
   onPick(cb: PickCallback): void {
@@ -79,19 +89,11 @@ export class DevicePicker {
 
   show(devices: VerificationStatus[], targetUserId: string): void {
     this._devices = devices;
-    this._selectedIndex = 0;
     this._titleEl.textContent = `Choose device for ${targetUserId}`;
     this._render();
-    this._el.style.display = "";
+    this.reveal();
+    this._list.setFocus(0);
     this._el.focus();
-  }
-
-  isVisible(): boolean {
-    return this._el.style.display !== "none";
-  }
-
-  hide(): void {
-    this._el.style.display = "none";
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
@@ -103,11 +105,7 @@ export class DevicePicker {
       const item = document.createElement("li");
       item.className = "device-picker__item";
       item.setAttribute("role", "option");
-      item.setAttribute("aria-selected", String(i === this._selectedIndex));
-
-      if (i === this._selectedIndex) {
-        item.classList.add("device-picker__item--selected");
-      }
+      item.setAttribute("aria-selected", "false");
 
       const idSpan = document.createElement("span");
       idSpan.className = "device-picker__device-id";
@@ -120,7 +118,7 @@ export class DevicePicker {
       item.appendChild(trustSpan);
 
       item.addEventListener("click", () => {
-        this._selectedIndex = i;
+        this._list.setFocus(i);
         this._confirm();
       });
 
@@ -128,16 +126,8 @@ export class DevicePicker {
     });
   }
 
-  private _moveCursor(delta: number): void {
-    this._selectedIndex = Math.max(
-      0,
-      Math.min(this._devices.length - 1, this._selectedIndex + delta),
-    );
-    this._render();
-  }
-
   private _confirm(): void {
-    const device = this._devices[this._selectedIndex];
+    const device = this._devices[this._list.focusIndex];
     if (device) {
       this.hide();
       this._onPick?.(device);
@@ -146,33 +136,17 @@ export class DevicePicker {
 
   private _handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
-    // Ctrl+[ is the vim equivalent of Escape — cancel the picker.
-    if (e.ctrlKey && e.key === "[") {
+
+    // Escape / Ctrl+[ cancel the picker (overlay-specific teardown + callback).
+    if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
       e.preventDefault();
       this.hide();
       this._onCancel?.();
       return;
     }
-    switch (e.key) {
-      case "j":
-      case "ArrowDown":
-        e.preventDefault();
-        this._moveCursor(1);
-        break;
-      case "k":
-      case "ArrowUp":
-        e.preventDefault();
-        this._moveCursor(-1);
-        break;
-      case "Enter":
-        e.preventDefault();
-        this._confirm();
-        break;
-      case "Escape":
-        e.preventDefault();
-        this.hide();
-        this._onCancel?.();
-        break;
-    }
+
+    // Navigation + select route through the keymap (honours rebindings).
+    const { consumed, partial } = this._list.handleKey(e.key);
+    if (consumed || partial) e.preventDefault();
   }
 }
