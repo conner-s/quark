@@ -48,9 +48,15 @@ body {
 
 /* ── Selection ───────────────────────────────────────────────────────────── */
 
+/* Use the vivid accent (with the page background as the text colour) rather
+   than the theme's `selection_bg`. Most palettes set a selection background only
+   a hair lighter than the page, so highlighted text was nearly invisible on many
+   themes. The accent guarantees a high-contrast, readable highlight everywhere.
+   The vim text-select rules further down override this locally for their own
+   cursor/visual model, so this only affects ordinary text selection. */
 ::selection {
-  background-color: var(--selection-bg);
-  color: var(--selection-fg);
+  background-color: var(--accent-primary);
+  color: var(--bg);
 }
 
 /* ── Scrollbars ──────────────────────────────────────────────────────────── */
@@ -2530,6 +2536,11 @@ span.reaction__emoji {
   outline: none;
   caret-color: var(--cursor);
   resize: none;
+  /* Textarea: one row by default, auto-grown in JS (Shift+Enter newlines) up to
+     ~6 lines, then it scrolls. border-box keeps the JS scrollHeight math stable. */
+  box-sizing: border-box;
+  overflow-y: auto;
+  max-height: calc(var(--font-size) * var(--line-height) * 6 + 12px);
 }
 
 .input-bar__field::placeholder {
@@ -2563,6 +2574,14 @@ span.reaction__emoji {
   opacity: 1;
   border-color: var(--border-color);
   background-color: var(--selection-bg);
+}
+
+/* GIF button is a text label, not a glyph — render it as a compact badge so it
+   sits at the same visual weight as the emoji/attach icons beside it. */
+.input-bar__action-btn--gif {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 /* ── Send animations ─────────────────────────────────────────────────────── */

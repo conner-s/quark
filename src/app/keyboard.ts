@@ -948,6 +948,12 @@ export function setupKeyboard(components: AppComponents): void {
     openEmojiPicker();
   });
 
+  input.onGifPickerClick(() => {
+    modeManager.transition(Mode.Insert);
+    input.focus();
+    openGifPicker();
+  });
+
   input.onAttachClick(() => {
     input.openFilePicker();
   });

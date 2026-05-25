@@ -299,7 +299,7 @@ export class Verification {
   private _handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
-    if (e.key === "Escape") {
+    if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
       e.preventDefault();
       this._onDeny?.();
       this.hide();

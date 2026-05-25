@@ -20,7 +20,7 @@ const MODE_CSS_CLASS: Record<string, string> = {
 export class Input {
   private _el: HTMLElement;
   private _modeEl: HTMLElement;
-  private _fieldEl: HTMLInputElement;
+  private _fieldEl: HTMLTextAreaElement;
   private _composeBoxEl: HTMLElement;
   private _pastePreviewEl: HTMLElement;
   private _pastePreviewImg: HTMLImageElement;
@@ -28,6 +28,7 @@ export class Input {
   private _pendingPasteBlob: Blob | null = null;
   private _currentMode: string = "Normal";
   private _onEmojiClick: (() => void) | null = null;
+  private _onGifClick: (() => void) | null = null;
   private _onAttachClick: (() => void) | null = null;
   private _onImagePaste: ((blob: Blob) => void) | null = null;
   private _onFilePick: ((file: File) => void) | null = null;
@@ -91,11 +92,11 @@ export class Input {
     this._composeBoxEl = document.createElement("div");
     this._composeBoxEl.className = "input-bar__compose-box";
 
-    // Text field
-    this._fieldEl = document.createElement("input");
-    this._fieldEl.type = "text";
+    // Text field — a textarea (not an <input>) so Shift+Enter can insert a
+    // newline. It starts one row tall and auto-grows with content (#45).
+    this._fieldEl = document.createElement("textarea");
+    this._fieldEl.rows = 1;
     this._fieldEl.className = "input-bar__field";
-    this._fieldEl.setAttribute("autocomplete", "off");
     // Autocorrect/autocapitalise/spellcheck are off on desktop (the terminal
     // aesthetic, and vim navigation lives in this field), but on mobile the
     // field is a plain text box with vim disabled — there, users expect the
@@ -109,6 +110,10 @@ export class Input {
 
     // Clicking the field while not in insert mode should switch to insert mode
     this._fieldEl.addEventListener("click", () => this._onFocusEnterInsert?.());
+
+    // Grow with content as the user adds lines (Shift+Enter); capped by the
+    // CSS max-height, beyond which the textarea scrolls.
+    this._fieldEl.addEventListener("input", () => this._autoGrow());
 
     // Image paste handler. clipboardData.items is standard; .files is an
     // alternative that some Linux clipboard managers populate instead.
@@ -186,6 +191,18 @@ export class Input {
     emojiBtn.addEventListener("click", () => this._onEmojiClick?.());
     actionsEl.appendChild(emojiBtn);
 
+    // GIF picker — the emoji picker has a button but the GIF picker was only
+    // reachable via Ctrl+G, so it had no mouse/touch affordance.
+    const gifBtn = document.createElement("button");
+    gifBtn.type = "button";
+    gifBtn.className = "input-bar__action-btn input-bar__action-btn--gif";
+    gifBtn.setAttribute("title", "GIF picker (Ctrl+G)");
+    gifBtn.setAttribute("aria-label", "Open GIF picker");
+    gifBtn.setAttribute("tabindex", "-1");
+    gifBtn.textContent = "GIF";
+    gifBtn.addEventListener("click", () => this._onGifClick?.());
+    actionsEl.appendChild(gifBtn);
+
     const attachBtn = document.createElement("button");
     attachBtn.type = "button";
     attachBtn.className = "input-bar__action-btn";
@@ -212,6 +229,11 @@ export class Input {
     this._fieldEl.setAttribute("autocorrect", mobile ? "on" : "off");
     this._fieldEl.setAttribute("autocapitalize", mobile ? "sentences" : "off");
     this._fieldEl.setAttribute("spellcheck", mobile ? "true" : "false");
+    // iOS/WKWebView suppresses the QuickType predictive-text bar (and typing
+    // suggestions generally) whenever autocomplete="off" — so even with the
+    // attributes above, suggestions never appeared on mobile. Desktop keeps it
+    // off for the terminal aesthetic and to avoid autofill in vim navigation. (#40)
+    this._fieldEl.setAttribute("autocomplete", mobile ? "on" : "off");
   }
 
   /** Register a callback invoked when the field is clicked to enter insert mode. */
@@ -222,6 +244,11 @@ export class Input {
   /** Register a callback for the emoji picker button. */
   onEmojiPickerClick(handler: () => void): void {
     this._onEmojiClick = handler;
+  }
+
+  /** Register a callback for the GIF picker button. */
+  onGifPickerClick(handler: () => void): void {
+    this._onGifClick = handler;
   }
 
   /** Register a callback for the attach file button. */
@@ -255,7 +282,7 @@ export class Input {
   }
 
   /** Returns the text input field element (for precise text position measurement). */
-  getFieldElement(): HTMLInputElement {
+  getFieldElement(): HTMLTextAreaElement {
     return this._fieldEl;
   }
 
@@ -286,6 +313,17 @@ export class Input {
 
   setValue(text: string): void {
     this._fieldEl.value = text;
+    this._autoGrow();
+  }
+
+  /** Resize the textarea to fit its content, up to the CSS max-height. */
+  private _autoGrow(): void {
+    // Reset first so scrollHeight reflects the content, not the previous height.
+    this._fieldEl.style.height = "auto";
+    const h = this._fieldEl.scrollHeight;
+    // scrollHeight is 0 before the element is laid out (e.g. setValue during
+    // init) — leave the rows-based height in that case rather than collapsing.
+    if (h > 0) this._fieldEl.style.height = `${h}px`;
   }
 
   focus(): void {

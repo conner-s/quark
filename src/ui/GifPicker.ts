@@ -228,7 +228,7 @@ export class GifPicker {
 
     // Allow normal typing in search box — only intercept Escape
     if (document.activeElement === this._searchEl) {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
         e.preventDefault();
         this.hide();
       }
@@ -238,7 +238,7 @@ export class GifPicker {
     const total = this._results.length;
 
     // Escape, Tab, Enter, / are hardcoded (overlay-specific or not remappable)
-    if (e.key === "Escape") {
+    if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
       e.preventDefault();
       this.hide();
       return;

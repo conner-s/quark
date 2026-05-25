@@ -329,6 +329,12 @@ export class ImageLightbox {
 
   private _handleKey(e: KeyboardEvent): void {
     e.stopPropagation();
+    // Ctrl+[ is the vim equivalent of Escape — close the lightbox.
+    if (e.ctrlKey && e.key === "[") {
+      e.preventDefault();
+      this.hide();
+      return;
+    }
     switch (e.key) {
       case "Escape":
         e.preventDefault();

@@ -63,6 +63,12 @@ export class RoomList {
     return this._el;
   }
 
+  /** Scrollable list container — exposed so the mobile pull-down gesture can
+   *  gate on scroll position (only pull-to-reveal when already at the top). */
+  getScrollElement(): HTMLElement {
+    return this._scrollEl;
+  }
+
   onSelect(handler: (id: string) => void): void {
     this._onSelect = handler;
   }

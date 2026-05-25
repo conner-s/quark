@@ -1,5 +1,27 @@
 # Quark — A CLI-Styled Matrix Client
 
+## Verification queue — 0.9.1 consistency + patch batch
+
+Branch `v0.9.1`. A consistency pass (every vim feature reachable by mouse/touch; every overlay dismissable via UI, Esc, **and** Ctrl+[) plus patch fixes for #33/#40/#43/#45/#49/#52/#53. `pnpm test` green (319). Mobile items need a fresh iOS/Android build to verify.
+
+### Consistency pass — cross-platform
+- [ ] **Overlay dismissal via Ctrl+[** — open each and confirm Ctrl+[ closes it (the vim twin of Esc), matching Esc and the close button: GIF picker, device picker, command bar, reply preview, mention/shortcode autocomplete, image lightbox, verification dialog. *Fix: these handled Esc but not Ctrl+[, and the global keydown handler early-returns while they're visible, so each must handle it itself.*
+- [ ] **Help reachable by mouse** — Settings → General → **[keybindings & help]** opens the help/keybindings screen. *Previously only `?` / `:help`.*
+- [ ] **GIF button** — a **GIF** button sits beside 🙂 in the compose bar and opens the GIF picker. *Previously Ctrl+G only.*
+
+### Mobile (needs build)
+- [ ] **Command palette (pull-down)** — open the room-list drawer and pull down from the top of the list → the command palette (`:`) opens and focuses. Only fires when the list is scrolled to the top. *Command mode was keyboard-only and unreachable by touch; desktop still uses `:`.*
+- [ ] **#52 Start in room list** — a fresh launch on mobile lands on the room list (drawer open), not an empty timeline. Selecting a room closes the drawer.
+- [ ] **#49 Re-tap current room closes drawer** — with a room open, open the drawer and tap that same room: the drawer dismisses. *Re-selecting didn't change `currentRoomId`, so the close-on-change listener never fired; `selectRoom` now closes the drawer directly.*
+- [ ] **#40 iOS autocorrect (follow-up to 0.9.0)** — compose field shows QuickType suggestions, sentence-casing, and spellcheck on iOS. *0.9.0 enabled the assist attributes but left `autocomplete="off"`, which suppresses QuickType on WKWebView; `autocomplete` is now toggled with the others (on for mobile, off on desktop).*
+- [ ] **#33/#43 First-login room list** — fresh install, log in: the list populates without a relaunch even on a slow first sync. *Poll window extended from ~8s to ~30s with backoff, and it now also runs on session restore.*
+
+### Cross-platform
+- [ ] **#53 Selection contrast** — select message text under each built-in theme; the highlight is clearly visible and the text readable. *`::selection` now uses `--accent-primary` with the page `--bg` as text, instead of the near-invisible per-theme `selection_bg`. Vim text-select rules override it locally and are unaffected.*
+- [ ] **#45 Shift+Enter newline** — in the compose box, Shift+Enter inserts a newline; Enter still sends. The box auto-grows with content up to ~6 lines, then scrolls. *Compose field is now a `<textarea>` (was an `<input>`); watch the send-fly animation and vim visual-select on the compose field.*
+
+---
+
 ## Verification queue — 0.9.0 mobile/formatting batch
 
 Branch `fix/mobile-formatting-issues`. Covers issues #34, #37, #38, #40, #42. iOS needs a fresh install to pick up the new Info.plist permission keys.

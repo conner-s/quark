@@ -146,6 +146,13 @@ export class DevicePicker {
 
   private _handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
+    // Ctrl+[ is the vim equivalent of Escape — cancel the picker.
+    if (e.ctrlKey && e.key === "[") {
+      e.preventDefault();
+      this.hide();
+      this._onCancel?.();
+      return;
+    }
     switch (e.key) {
       case "j":
       case "ArrowDown":

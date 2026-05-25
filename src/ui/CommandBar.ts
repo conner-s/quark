@@ -97,6 +97,12 @@ export class CommandBar {
   // ── Private ─────────────────────────────────────────────────────────────────
 
   private _handleKeydown(e: KeyboardEvent): void {
+    // Ctrl+[ is the vim equivalent of Escape — cancel command entry.
+    if (e.ctrlKey && e.key === "[") {
+      e.preventDefault();
+      this._cancel();
+      return;
+    }
     switch (e.key) {
       case "Enter": {
         e.preventDefault();

@@ -349,6 +349,24 @@ export class SettingsDialog {
       (v) => { draft = { ...draft, sync: { ...draft.sync, timeline_limit: v } }; },
     ));
 
+    // Help — the keybindings/help screen is otherwise only reachable via `?`
+    // or `:help`, which mouse/touch users can't discover. Surface it here.
+    section.appendChild(this._makeSectionTitle("Help"));
+    const helpRow = document.createElement("div");
+    helpRow.className = "settings-dialog__row";
+    const helpBtn = document.createElement("button");
+    helpBtn.type = "button";
+    helpBtn.className = "settings-dialog__btn";
+    helpBtn.textContent = "[keybindings & help]";
+    helpBtn.setAttribute("aria-label", "Open keybindings and help");
+    helpBtn.addEventListener("click", () => {
+      // One overlay at a time: close settings, then open the help dialog.
+      this.hide();
+      document.dispatchEvent(new CustomEvent("quark:action", { detail: { action: "help" } }));
+    });
+    helpRow.appendChild(helpBtn);
+    section.appendChild(helpRow);
+
     const actions = document.createElement("div");
     actions.className = "settings-dialog__section settings-dialog__actions";
     actions.appendChild(this._makeSaveButton(async () => {

@@ -67,7 +67,7 @@ export function enterMessageTextSelect(bodyEl: HTMLElement): void {
  * already focused the field — this just records the submode and ensures the
  * vim mode is Normal (so j/k etc. don't get typed into the input).
  */
-export function enterComposeTextSelect(composeField?: HTMLInputElement): void {
+export function enterComposeTextSelect(composeField?: HTMLTextAreaElement): void {
   // Don't blow away an active message-target selection silently.
   if (AppState.get("textSelectMode") === "message") exitTextSelect();
   AppState.set("textSelectMode", "compose");
@@ -125,7 +125,7 @@ export function exitTextSelect(): void {
  * selection highlight (kept at least one character wide by the keymap layer)
  * reads as a vim-style block.
  */
-export function setBlockCursor(on: boolean, composeField?: HTMLInputElement): void {
+export function setBlockCursor(on: boolean, composeField?: HTMLTextAreaElement): void {
   const target = AppState.get("textSelectMode");
   if (target === "message" && _messageBodyEl) {
     _messageBodyEl.classList.toggle("message__body--text-select-block", on);
@@ -140,7 +140,7 @@ export function setBlockCursor(on: boolean, composeField?: HTMLInputElement): vo
  * instead of the bright cursor color — distinguishing "this is what I've
  * selected" from "this is my cursor".
  */
-export function setVisualModeClass(on: boolean, composeField?: HTMLInputElement): void {
+export function setVisualModeClass(on: boolean, composeField?: HTMLTextAreaElement): void {
   const target = AppState.get("textSelectMode");
   if (target === "message" && _messageBodyEl) {
     _messageBodyEl.classList.toggle("message__body--text-select-visual", on);
@@ -159,7 +159,7 @@ export function setVisualModeClass(on: boolean, composeField?: HTMLInputElement)
  * back to extending backward so the block lands on the previous character
  * rather than disappearing past the end.
  */
-export function primeBlockSelection(composeField?: HTMLInputElement): void {
+export function primeBlockSelection(composeField?: HTMLTextAreaElement): void {
   const target = AppState.get("textSelectMode");
 
   if (target === "message" && _messageBodyEl) {
@@ -214,7 +214,7 @@ export function collapseMessageSelectionToStart(): void {
  * moving towards in Visual mode. Used on Visual → Normal so the resulting
  * block cursor lands where vim would put it.
  */
-export function collapseToFocus(composeField?: HTMLInputElement): void {
+export function collapseToFocus(composeField?: HTMLTextAreaElement): void {
   const target = AppState.get("textSelectMode");
 
   if (target === "message") {
@@ -245,7 +245,7 @@ export function collapseToFocus(composeField?: HTMLInputElement): void {
  * For "compose" target we read from the input element's selection range so
  * the result is unaffected by anything else focused on the page.
  */
-export function getSelectedText(input: HTMLInputElement): string {
+export function getSelectedText(input: HTMLTextAreaElement): string {
   const target = AppState.get("textSelectMode");
   if (target === "message") {
     return window.getSelection()?.toString() ?? "";
@@ -334,7 +334,7 @@ export function modifyMessageSelection(
  * Used in compose-box text-select mode for keyboard movement.
  */
 export function modifyComposeSelection(
-  input: HTMLInputElement,
+  input: HTMLTextAreaElement,
   alter: "move" | "extend",
   direction: "forward" | "backward",
   granularity: "character" | "word"

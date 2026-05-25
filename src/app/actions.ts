@@ -370,15 +370,23 @@ async function _loadOwnProfile(): Promise<void> {
  * rarely — so the EVENT_CONNECTED frontend listener can't be relied on
  * for the initial population on slower mobile networks.
  *
- * We poll instead: ~500ms ticks for 8s should cover most homeserver
- * round-trips, and stops as soon as the first sync lands rooms.
+ * We poll instead, backing off as we go: tight 500ms ticks early (fast networks
+ * land rooms in a second or two), then easing off so a slow first sync — common
+ * on mobile networks and when the initial E2EE/room state is large — still gets
+ * picked up without hammering IPC. The window is ~30s (the old 8s cap gave up
+ * before slow first syncs completed, leaving the list blank until an app
+ * restart, when the persisted store makes getRooms() instant). Stops the moment
+ * rooms appear; after that the sync/connected and sync/rooms listeners take over.
  */
 async function _pollUntilRoomsLoaded(): Promise<void> {
-  const POLL_MS = 500;
-  const MAX_ATTEMPTS = 16; // ~8s
-  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+  const DELAYS_MS = [
+    ...Array<number>(10).fill(500),   // 0–5s
+    ...Array<number>(10).fill(1000),  // 5–15s
+    ...Array<number>(8).fill(2000),   // 15–31s
+  ];
+  for (const delay of DELAYS_MS) {
     if (AppState.get("roomListCache").length > 0) return;
-    await new Promise((r) => setTimeout(r, POLL_MS));
+    await new Promise((r) => setTimeout(r, delay));
     try { await refreshRooms(); } catch { /* keep polling */ }
   }
 }
@@ -430,6 +438,11 @@ export async function attemptSessionRestore(components: import("../ui/App.js").A
     void _loadOwnProfile();
     await loadThemeFromConfig();
     await refreshRooms();
+    // Persisted sync state usually makes getRooms() instant on restore, but if
+    // the store hasn't hydrated yet (cold start) the first call can be empty —
+    // keep retrying in the background so the list isn't blank until a relaunch.
+    // Same race the login path guards against. (#33/#43)
+    void _pollUntilRoomsLoaded();
     return true;
   } catch (err) {
     // Stale/invalid session — clear it and fall through to login form
@@ -462,6 +475,11 @@ export async function selectRoom(roomId: string): Promise<void> {
 
   AppState.set("currentRoomId", roomId);
   AppState.set("activePanel", "timeline");
+  // On mobile, picking a room dismisses the room-list drawer — including when the
+  // tapped room is already the active one. AppState.set skips no-op changes, so the
+  // currentRoomId listener in App.ts that normally closes the drawer won't fire for
+  // a re-tap of the current room; closing here covers that case. (#49)
+  if (isMobile()) closeDrawer();
   if (AppState.get("threadRootEventId")) closeThread();
   // Clear per-room display name cache so stale names from the previous room
   // don't appear in reply previews before the new room's member list loads.
@@ -1058,7 +1076,7 @@ export async function sendMessage(body: string): Promise<void> {
 
       // Clone the compose box with the typed text
       const composeClone = composeBoxEl.cloneNode(true) as HTMLElement;
-      const cloneField2 = composeClone.querySelector<HTMLInputElement>("input");
+      const cloneField2 = composeClone.querySelector<HTMLTextAreaElement>("textarea");
       if (cloneField2) cloneField2.value = body;
       Object.assign(composeClone.style, {
         margin: "0",
@@ -1137,7 +1155,7 @@ export async function sendMessage(body: string): Promise<void> {
       const deltaY = (targetRect?.top ?? composeRect.top - 60) - composeRect.top;
 
       const clone = composeBoxEl.cloneNode(true) as HTMLElement;
-      const cloneField = clone.querySelector<HTMLInputElement>("input");
+      const cloneField = clone.querySelector<HTMLTextAreaElement>("textarea");
       if (cloneField) cloneField.value = body;
       Object.assign(clone.style, {
         position: "fixed",

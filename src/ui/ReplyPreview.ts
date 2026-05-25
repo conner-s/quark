@@ -64,7 +64,7 @@ export class ReplyPreview {
 
     // ── Keyboard handling ─────────────────────────────────────────────────
     this._el.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
         e.preventDefault();
         this._dismiss();
       }

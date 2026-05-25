@@ -61,6 +61,12 @@ export class MentionPreview {
 
   handleKeydown(e: KeyboardEvent): boolean {
     if (!this._visible) return false;
+    // Ctrl+[ is the vim equivalent of Escape — dismiss the autocomplete.
+    if (e.ctrlKey && e.key === "[") {
+      e.preventDefault();
+      this.hide();
+      return true;
+    }
     switch (e.key) {
       case "ArrowDown":
       case "Tab":

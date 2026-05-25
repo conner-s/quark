@@ -113,7 +113,7 @@ describe("text_select", () => {
 
   describe("getSelectedText", () => {
     it("returns the selected substring of the compose input", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "hello world";
       document.body.appendChild(input);
       input.focus();
@@ -124,7 +124,7 @@ describe("text_select", () => {
     });
 
     it("returns empty string when text-select is inactive", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "hello world";
       document.body.appendChild(input);
       input.setSelectionRange(0, 5);
@@ -137,7 +137,7 @@ describe("text_select", () => {
 
   describe("modifyComposeSelection", () => {
     it("moves the caret forward one character", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "abcdef";
       document.body.appendChild(input);
       input.focus();
@@ -149,7 +149,7 @@ describe("text_select", () => {
     });
 
     it("clamps caret movement at the start and end", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "ab";
       document.body.appendChild(input);
       input.focus();
@@ -163,7 +163,7 @@ describe("text_select", () => {
     });
 
     it("extends selection forward by one character", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "abcdef";
       document.body.appendChild(input);
       input.focus();
@@ -175,7 +175,7 @@ describe("text_select", () => {
     });
 
     it("extends selection backward across the anchor", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "abcdef";
       document.body.appendChild(input);
       input.focus();
@@ -193,7 +193,7 @@ describe("text_select", () => {
     });
 
     it("jumps by word", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "hello world from quark";
       document.body.appendChild(input);
       input.focus();
@@ -209,7 +209,7 @@ describe("text_select", () => {
 
   describe("primeBlockSelection (compose target)", () => {
     it("expands a collapsed caret to cover one forward character", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "hello";
       document.body.appendChild(input);
       input.focus();
@@ -223,7 +223,7 @@ describe("text_select", () => {
     });
 
     it("falls back to extending backward at the end of the field", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "hi";
       document.body.appendChild(input);
       input.focus();
@@ -237,7 +237,7 @@ describe("text_select", () => {
     });
 
     it("leaves a non-collapsed selection alone", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "hello";
       document.body.appendChild(input);
       input.focus();
@@ -267,7 +267,7 @@ describe("text_select", () => {
     });
 
     it("toggles the compose input's block-cursor class", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "abc";
       document.body.appendChild(input);
       enterComposeTextSelect(input);
@@ -305,7 +305,7 @@ describe("text_select", () => {
     });
 
     it("toggles the compose input's visual class", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "hi";
       document.body.appendChild(input);
       enterComposeTextSelect(input);
@@ -329,7 +329,7 @@ describe("text_select", () => {
 
   describe("collapseToFocus (compose target)", () => {
     it("collapses a forward-direction selection to its end", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "hello";
       document.body.appendChild(input);
       input.focus();
@@ -343,7 +343,7 @@ describe("text_select", () => {
     });
 
     it("collapses a backward-direction selection to its start", () => {
-      const input = document.createElement("input");
+      const input = document.createElement("textarea");
       input.value = "hello";
       document.body.appendChild(input);
       input.focus();

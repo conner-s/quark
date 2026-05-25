@@ -33,7 +33,7 @@ import { DebugViewer } from "./DebugViewer.js";
 import { RevisionHistoryDialog } from "./RevisionHistoryDialog.js";
 import { ContextMenu } from "./ContextMenu.js";
 import { MobileTopBar } from "./MobileTopBar.js";
-import { initMobile, isMobile, closeDrawer, toggleDrawer, onMobileChange, onDrawerChange } from "../app/mobile.js";
+import { initMobile, isMobile, openDrawer, closeDrawer, toggleDrawer, onMobileChange, onDrawerChange } from "../app/mobile.js";
 import { setupTouchGestures } from "../app/touch.js";
 import { AppState } from "../app/state.js";
 import { toggleMemberList, closeThread } from "../app/actions.js";
@@ -202,7 +202,16 @@ export function mountApp(container: HTMLElement): AppComponents {
 
   // ── Mobile mode bootstrap ─────────────────────────────────────────────────
   initMobile();
-  setupTouchGestures(mainLayout, roomList.getElement());
+  setupTouchGestures(mainLayout, roomList.getElement(), {
+    scrollEl: roomList.getScrollElement(),
+    // Command mode (`:`) is keyboard-only and unreachable by touch. Pulling down
+    // from the top of the room list opens the command palette; close the drawer
+    // first so the command input is visible and focused. (mobile command access)
+    onPullDown: () => {
+      closeDrawer();
+      document.dispatchEvent(new CustomEvent("quark:action", { detail: { action: "mode-command" } }));
+    },
+  });
   mobileTopBar.onHamburgerClick(() => toggleDrawer());
   // The @ button on the right mirrors the desktop `@` keybinding — opens the
   // member list as a full-screen overlay on mobile.
@@ -340,4 +349,9 @@ export function mountApp(container: HTMLElement): AppComponents {
 export function showMainLayout(components: AppComponents): void {
   components.loginScreen.hide();
   components.mainLayout.style.display = "";
+  // On mobile, open the room-list drawer so the user lands on the room list
+  // rather than an empty timeline. Only when no room is active yet (fresh login
+  // or session restore — no room is auto-selected on startup); selecting a room
+  // closes the drawer again (see selectRoom). (#52)
+  if (isMobile() && !AppState.get("currentRoomId")) openDrawer();
 }
