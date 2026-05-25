@@ -5,6 +5,7 @@ import { invoke } from "../ipc/invoke.js";
 import type { ThreadMessageData } from "./ThreadView.js";
 import { isAnimatedUrl } from "../app/animated_urls.js";
 import { hashColor } from "./avatarColors.js";
+import { isMobile } from "../app/mobile.js";
 
 /**
  * Open an external URL in the system browser.
@@ -73,7 +74,11 @@ function appendLinkifiedText(container: HTMLElement, text: string): void {
     const url = match[0].replace(/[.,;:!?]+$/, ""); // strip trailing punctuation
     const a = document.createElement("a");
     a.href = url;
-    a.target = "_blank";
+    // Only the mobile WebView needs target=_blank to register taps as a real
+    // link. On desktop, target=_blank makes wry open the URL in the system
+    // browser itself — which, together with the explicit openExternalUrl()
+    // below, opened every link twice. So set it on mobile only.
+    if (isMobile()) a.target = "_blank";
     a.rel = "noopener noreferrer";
     a.textContent = url;
     a.className = "message__link";
@@ -643,7 +648,9 @@ function buildMessageElement(msg: MessageData): HTMLElement {
       for (const a of body.querySelectorAll<HTMLAnchorElement>("a[href]")) {
         const href = a.getAttribute("href") ?? "";
         if (href.startsWith("http://") || href.startsWith("https://")) {
-          a.target = "_blank";
+          // Mobile-only target=_blank — see appendLinkifiedText: on desktop it
+          // makes wry open the link a second time alongside openExternalUrl().
+          if (isMobile()) a.target = "_blank";
           a.rel = "noopener noreferrer";
           a.addEventListener("click", (e) => {
             e.preventDefault();
