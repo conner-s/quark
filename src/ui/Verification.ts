@@ -1,6 +1,7 @@
 // SAS / QR device verification UI
 
 import { keymapManager } from "../vim/keybindings.js";
+import { DialogBase } from "./DialogBase.js";
 
 export type VerificationState =
   | "incoming"   // Received a request from another device — show accept prompt
@@ -32,8 +33,7 @@ const STATE_MESSAGES: Record<VerificationState, string> = {
  * SAS emoji verification overlay.
  * Displays as a centered modal dialog with backdrop, matching the HelpDialog style.
  */
-export class Verification {
-  private _el: HTMLElement;
+export class Verification extends DialogBase {
   private _panelEl: HTMLElement;
   private _statusEl: HTMLElement;
   private _emojiGridEl: HTMLElement;
@@ -52,25 +52,9 @@ export class Verification {
   private _onDismiss: VerificationCallback | null = null;
 
   constructor() {
-    // ── Backdrop ──────────────────────────────────────────────────────────
-    this._el = document.createElement("div");
-    this._el.className = "verification-dialog";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Device verification");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.style.display = "none";
-
-    this._el.addEventListener("click", (e) => {
-      if (e.target === this._el) {
-        this._onDeny?.();
-        this.hide();
-      }
-    });
-
-    // ── Panel ─────────────────────────────────────────────────────────────
-    this._panelEl = document.createElement("div");
-    this._panelEl.className = "verification-dialog__panel";
-    this._el.appendChild(this._panelEl);
+    // Original did not reset the key sequence on hide.
+    super({ prefix: "verification-dialog", ariaLabel: "Device verification", resetSequenceOnHide: false });
+    this._panelEl = this.content;
 
     // ── Header ────────────────────────────────────────────────────────────
     const header = document.createElement("div");
@@ -82,14 +66,8 @@ export class Verification {
     title.textContent = "verify device";
     header.appendChild(title);
 
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "verification-dialog__close-hint dialog-close-btn";
-    closeBtn.textContent = "[× Esc]";
-    closeBtn.setAttribute("aria-label", "Close verification");
-    closeBtn.tabIndex = -1;
     // Match the Escape-key path: deny the verification and dismiss the dialog.
-    closeBtn.addEventListener("click", () => {
+    const closeBtn = this.makeCloseButton("Close verification", () => {
       this._onDeny?.();
       this.hide();
     });
@@ -165,13 +143,6 @@ export class Verification {
     footer.textContent = "Tab / h/l switch · Enter confirm · Esc cancel";
     footer.setAttribute("aria-hidden", "true");
     this._panelEl.appendChild(footer);
-
-    // ── Keyboard handling ─────────────────────────────────────────────────
-    this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
-  }
-
-  getElement(): HTMLElement {
-    return this._el;
   }
 
   onConfirm(cb: VerificationCallback): void {
@@ -186,17 +157,22 @@ export class Verification {
     this._onDismiss = cb;
   }
 
-  isVisible(): boolean {
-    return this._el.style.display !== "none";
-  }
-
   show(): void {
-    this._el.style.display = "flex";
+    this.reveal();
     this._updateFocus();
   }
 
-  hide(): void {
-    this._el.style.display = "none";
+  // Clicking the backdrop denies the request, matching the close button and
+  // the Escape key.
+  protected override onBackdropClick(): void {
+    this._onDeny?.();
+    this.hide();
+  }
+
+  // The panel is not focusable (no tabindex); real focus is driven by
+  // _updateFocus / the dismiss button after setState.
+  protected override focusTarget(): HTMLElement {
+    return this._panelEl;
   }
 
   setState(state: VerificationState): void {
@@ -296,10 +272,10 @@ export class Verification {
     }
   }
 
-  private _handleKeydown(e: KeyboardEvent): void {
+  protected override handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
-    if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
+    if (this.isEscape(e)) {
       e.preventDefault();
       this._onDeny?.();
       this.hide();

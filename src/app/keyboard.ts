@@ -2,6 +2,7 @@
 
 import { modeManager, Mode } from "../vim/mode.js";
 import { keymapManager } from "../vim/keybindings.js";
+import { modalManager } from "../ui/ModalManager.js";
 import type { AppComponents } from "../ui/App.js";
 import type { ContextMenuEntry } from "../ui/ContextMenu.js";
 import {
@@ -745,11 +746,11 @@ async function applyRcDirectives(rc: ParsedRc): Promise<void> {
 // ── Global keydown handler ────────────────────────────────────────────────────
 
 export function setupKeyboard(components: AppComponents): void {
+  // Overlays no longer need to be referenced here for the keydown guard — they
+  // self-register with modalManager. Only components wired with callbacks below
+  // are destructured.
   const { input, commandBar, shortcodePreview, mentionPreview, timeline,
-          emojiPicker, gifPicker, verification, helpDialog, quickReactPicker,
-          profileDialog, profileEditDialog, devicePicker,
-          settingsDialog, roomInfoDialog, pinnedMessagesDialog, roomDirectoryDialog,
-          roomSettingsDialog, spaceSettingsDialog, debugViewer, revisionHistoryDialog,
+          quickReactPicker, pinnedMessagesDialog, revisionHistoryDialog,
           roomHeader, imageLightbox, quickNavPalette, contextMenu,
           spaceStrip, roomList } = components;
 
@@ -1134,37 +1135,32 @@ export function setupKeyboard(components: AppComponents): void {
   document.addEventListener("keydown", (e) => {
     const mode = modeManager.current;
 
-    // Modal overlays with their own input (QuickReactPicker, etc.) handle all
-    // their own keys with stopPropagation. The check here is a belt-and-
-    // suspenders guard for the case where focus escapes the overlay element.
-    if (quickReactPicker.isVisible()) return;
+    // Inline autocomplete popups are not modals — they own their keys while
+    // visible (handled inside Insert-mode routing) but must block global nav.
     if (mentionPreview.isVisible()) return;
-    if (emojiPicker.isVisible()) {
+
+    // Any open modal overlay (dialog / picker / context menu / lightbox) owns
+    // its own keys; each stopPropagation's on its own keydown listener, so this
+    // document-level guard only fires when focus has escaped the overlay. In
+    // that case Escape / Ctrl+[ closes the topmost overlay and every other key
+    // is swallowed. Overlays self-register with modalManager on show/hide, so
+    // adding a new dialog or picker needs no change here.
+    if (modalManager.isAnyOpen) {
       if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
         e.preventDefault();
-        emojiPicker.hide();
+        modalManager.closeTopMost();
       }
       return;
     }
-    if (gifPicker.isVisible() || verification.isVisible() || helpDialog.isVisible() ||
-        profileDialog.isVisible() || profileEditDialog.isVisible() ||
-        devicePicker.isVisible() ||
-        settingsDialog.isVisible() || roomInfoDialog.isVisible() ||
-        pinnedMessagesDialog.isVisible() || roomDirectoryDialog.isVisible() ||
-        roomSettingsDialog.isVisible() || spaceSettingsDialog.isVisible() ||
-        debugViewer.isVisible() || revisionHistoryDialog.isVisible() ||
-        contextMenu.isVisible()) return;
 
-    // Quick nav palette — Ctrl+K opens from any mode (except when already open)
-    if (e.ctrlKey && e.key === "k" && !quickNavPalette.isVisible()) {
+    // Quick nav palette — Ctrl+K opens from any mode (no overlay open here).
+    if (e.ctrlKey && e.key === "k") {
       if (AppState.get("loggedIn")) {
         e.preventDefault();
         quickNavPalette.show();
         return;
       }
     }
-
-    if (quickNavPalette.isVisible()) return;
 
     // Escape (or Ctrl+[) always resets to Normal (if not already) and clears sequences.
     // When vim mode is disabled, Escape just closes overlays — don't leave Insert mode.

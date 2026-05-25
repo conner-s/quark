@@ -7,6 +7,7 @@
 // which is the worst possible spot to anchor a tiny floating popover.
 
 import { isMobile } from "../app/mobile.js";
+import { modalManager, type Modal } from "./ModalManager.js";
 
 export interface ContextMenuItem {
   label: string;
@@ -21,7 +22,7 @@ export interface ContextMenuSeparator {
 
 export type ContextMenuEntry = ContextMenuItem | ContextMenuSeparator;
 
-export class ContextMenu {
+export class ContextMenu implements Modal {
   private _el: HTMLElement;
   private _visible = false;
   private _activeIndex = -1;
@@ -95,6 +96,7 @@ export class ContextMenu {
     this._el.classList.toggle("context-menu--mobile", isMobile());
     this._el.style.display = "block";
     this._visible = true;
+    modalManager.push(this);
 
     if (isMobile()) {
       // Bottom-sheet variant: docks to the viewport edges; coordinates from
@@ -133,6 +135,7 @@ export class ContextMenu {
     this._el.classList.remove("context-menu--mobile");
     this._visible = false;
     this._activeIndex = -1;
+    modalManager.remove(this);
     document.removeEventListener("mousedown", this._outsideHandler, { capture: true });
     document.removeEventListener("touchstart", this._outsideHandler, { capture: true });
     document.removeEventListener("scroll", this._scrollHandler, { capture: true });
@@ -140,6 +143,10 @@ export class ContextMenu {
 
   isVisible(): boolean {
     return this._visible;
+  }
+
+  getElement(): HTMLElement {
+    return this._el;
   }
 
   private _setActive(idx: number): void {

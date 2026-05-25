@@ -1,63 +1,24 @@
 // Room Info dialog — shows details of the current room
 
-import { keymapManager } from "../vim/keybindings.js";
 import { AppState } from "../app/state.js";
 import { muteRoom, unmuteRoom, getConfig } from "../app/notifications.js";
 import type { RoomInfo } from "../ipc/types.js";
+import { DialogBase } from "./DialogBase.js";
 
-export class RoomInfoDialog {
-  private _el: HTMLElement;
-
+export class RoomInfoDialog extends DialogBase {
   constructor() {
-    this._el = document.createElement("div");
-    this._el.className = "room-info-dialog";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Room info");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.setAttribute("tabindex", "-1");
-    this._el.style.display = "none";
-
-    // Click/tap outside to close — touchstart for iOS WebView reliability.
-    const outsideHandler = (e: Event): void => {
-      if (this.isVisible() && !this._el.contains(e.target as Node)) {
-        this.hide();
-      }
-    };
-    document.addEventListener("mousedown", outsideHandler);
-    document.addEventListener("touchstart", outsideHandler, { passive: true });
-
-    // Keyboard
-    this._el.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
-        e.preventDefault();
-        this.hide();
-        return;
-      }
-      const result = keymapManager.resolveKey(e.key, "picker");
-      if (result.kind === "action" && result.action === "close") {
-        e.preventDefault();
-        this.hide();
-      } else if (result.kind === "partial") {
-        e.preventDefault();
-      }
-    });
+    super({ prefix: "room-info-dialog", ariaLabel: "Room info", panel: false });
   }
-
-  getElement(): HTMLElement { return this._el; }
-
-  isVisible(): boolean { return this._el.style.display !== "none"; }
 
   async show(): Promise<void> {
     const state = AppState.snapshot;
     const roomId = state.currentRoomId;
 
-    this._el.innerHTML = "";
+    this.root.innerHTML = "";
 
     if (!roomId) {
       this._buildError("No room selected.");
-      this._el.style.display = "flex";
-      this._el.focus();
+      this.reveal();
       return;
     }
 
@@ -70,15 +31,8 @@ export class RoomInfoDialog {
     titleEl.className = "room-info-dialog__title";
     titleEl.textContent = "── room info ──";
     header.appendChild(titleEl);
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "room-info-dialog__close";
-    closeBtn.textContent = "[x]";
-    closeBtn.setAttribute("aria-label", "Close");
-    closeBtn.setAttribute("tabindex", "-1");
-    closeBtn.addEventListener("click", () => this.hide());
-    header.appendChild(closeBtn);
-    this._el.appendChild(header);
+    header.appendChild(this.makeCloseButton("Close"));
+    this.root.appendChild(header);
 
     // Info body
     const body = document.createElement("div");
@@ -105,14 +59,14 @@ export class RoomInfoDialog {
     addRow("direct", room?.is_direct ? "yes" : "no");
     addRow("room id", roomId, true);
 
-    this._el.appendChild(body);
+    this.root.appendChild(body);
 
     // Actions
     const actions = document.createElement("div");
     actions.className = "room-info-dialog__actions";
 
     // Mute toggle
-    let config = await getConfig().catch(() => null);
+    const config = await getConfig().catch(() => null);
     const isMuted = config?.mute_rooms.includes(roomId) ?? false;
 
     const muteBtn = document.createElement("button");
@@ -174,27 +128,21 @@ export class RoomInfoDialog {
     closeBtnAction.addEventListener("click", () => this.hide());
     actions.appendChild(closeBtnAction);
 
-    this._el.appendChild(actions);
+    this.root.appendChild(actions);
 
     // Hint
     const hint = document.createElement("div");
     hint.className = "room-info-dialog__hint";
     hint.textContent = "Esc: close";
-    this._el.appendChild(hint);
+    this.root.appendChild(hint);
 
-    this._el.style.display = "flex";
-    this._el.focus();
-  }
-
-  hide(): void {
-    this._el.style.display = "none";
-    keymapManager.resetSequence();
+    this.reveal();
   }
 
   private _buildError(msg: string): void {
     const err = document.createElement("div");
     err.style.padding = "16px";
     err.textContent = msg;
-    this._el.appendChild(err);
+    this.root.appendChild(err);
   }
 }

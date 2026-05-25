@@ -1,74 +1,31 @@
 // Pinned Messages dialog — shows pinned events for the current room
 
-import { keymapManager } from "../vim/keybindings.js";
 import { AppState } from "../app/state.js";
 import { getPinnedEvents } from "../ipc/rooms.js";
 import type { PinnedEventInfo } from "../ipc/types.js";
+import { DialogBase } from "./DialogBase.js";
 
-export class PinnedMessagesDialog {
-  private _el: HTMLElement;
-  private _panelEl: HTMLElement;
+export class PinnedMessagesDialog extends DialogBase {
   private _listEl: HTMLElement;
   private _onJumpToMessage: ((eventId: string) => void) | null = null;
 
   constructor() {
-    // Backdrop
-    this._el = document.createElement("div");
-    this._el.className = "pinned-dialog";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Pinned messages");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.style.display = "none";
+    super({ prefix: "pinned-dialog", ariaLabel: "Pinned messages" });
 
-    this._el.addEventListener("click", (e) => {
-      if (e.target === this._el) this.hide();
-    });
-
-    // Panel
-    this._panelEl = document.createElement("div");
-    this._panelEl.className = "pinned-dialog__panel";
-    this._panelEl.setAttribute("tabindex", "-1");
-    this._el.appendChild(this._panelEl);
-
-    // Header
-    const header = document.createElement("div");
-    header.className = "pinned-dialog__header";
-
-    const title = document.createElement("span");
-    title.className = "pinned-dialog__title";
-    title.textContent = "── pinned messages ──";
-    header.appendChild(title);
-
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "pinned-dialog__close-hint dialog-close-btn";
-    closeBtn.textContent = "[× Esc]";
-    closeBtn.setAttribute("aria-label", "Close pinned messages");
-    closeBtn.tabIndex = -1;
-    closeBtn.addEventListener("click", () => this.hide());
-    header.appendChild(closeBtn);
-
-    this._panelEl.appendChild(header);
+    this.buildHeader("── pinned messages ──", "Close pinned messages");
 
     // List
     this._listEl = document.createElement("div");
     this._listEl.className = "pinned-dialog__list";
-    this._panelEl.appendChild(this._listEl);
+    this.content.appendChild(this._listEl);
 
     // Footer
     const footer = document.createElement("div");
     footer.className = "pinned-dialog__footer";
     footer.textContent = "Esc close";
     footer.setAttribute("aria-hidden", "true");
-    this._panelEl.appendChild(footer);
-
-    // Keyboard
-    this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
+    this.content.appendChild(footer);
   }
-
-  getElement(): HTMLElement { return this._el; }
-
-  isVisible(): boolean { return this._el.style.display !== "none"; }
 
   /** Register a callback for when the user clicks a pinned message to jump to it. */
   onJumpToMessage(handler: (eventId: string) => void): void {
@@ -85,8 +42,7 @@ export class PinnedMessagesDialog {
     loading.textContent = "Loading...";
     this._listEl.appendChild(loading);
 
-    this._el.style.display = "flex";
-    this._panelEl.focus();
+    this.reveal();
 
     if (!roomId) {
       loading.textContent = "No room selected.";
@@ -147,29 +103,6 @@ export class PinnedMessagesDialog {
       });
 
       this._listEl.appendChild(item);
-    }
-  }
-
-  hide(): void {
-    this._el.style.display = "none";
-    keymapManager.resetSequence();
-  }
-
-  private _handleKeydown(e: KeyboardEvent): void {
-    e.stopPropagation();
-
-    if (e.ctrlKey && e.key === "[") {
-      e.preventDefault();
-      this.hide();
-      return;
-    }
-
-    const result = keymapManager.resolveKey(e.key, "picker");
-    if (result.kind === "action" && result.action === "close") {
-      e.preventDefault();
-      this.hide();
-    } else if (result.kind === "partial") {
-      e.preventDefault();
     }
   }
 }

@@ -1,6 +1,8 @@
 // Image lightbox — full-screen viewer with zoom, pan, and download
 
-export class ImageLightbox {
+import { modalManager, type Modal } from "./ModalManager.js";
+
+export class ImageLightbox implements Modal {
   private _el: HTMLElement;
   private _imgEl: HTMLImageElement;
   private _zoomLabel: HTMLElement;
@@ -263,12 +265,14 @@ export class ImageLightbox {
     this._el.classList.add("image-lightbox--open");
     this._el.setAttribute("tabindex", "-1");
     this._el.focus();
+    modalManager.push(this);
   }
 
   hide(): void {
     this._el.classList.remove("image-lightbox--open");
     this._imgEl.src = "";
     this._currentSrc = "";
+    modalManager.remove(this);
   }
 
   // ── Private ─────────────────────────────────────────────────────────────────

@@ -588,6 +588,9 @@ quark/
 │   ├── main.ts               # Entry point, Tauri IPC bindings
 │   ├── ui/
 │   │   ├── App.ts            # Root layout (room list + timeline + input)
+│   │   ├── ModalManager.ts   # Open-overlay registry (replaces isVisible switchyards)
+│   │   ├── DialogBase.ts     # Shared dialog chrome: overlay, header, Esc, form rows
+│   │   ├── PickerBase.ts     # Shared picker overlay + keymap-driven SelectionList
 │   │   ├── RoomList.ts       # Room list panel
 │   │   ├── Timeline.ts       # Message rendering
 │   │   ├── MessageRow.ts     # Single message (text, images, emoji)

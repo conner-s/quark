@@ -3,86 +3,34 @@
 import { keymapManager } from "../vim/keybindings.js";
 import { AppState } from "../app/state.js";
 import { getMessageRevisions } from "../ipc/timeline.js";
-import type { TimelineEvent } from "../ipc/types.js";
+import { DialogBase } from "./DialogBase.js";
 
-export class RevisionHistoryDialog {
-  private _el: HTMLElement;
-  private _panelEl: HTMLElement;
+export class RevisionHistoryDialog extends DialogBase {
   private _listEl: HTMLElement;
-  private _titleEl: HTMLElement;
 
   constructor() {
-    // Backdrop
-    this._el = document.createElement("div");
-    this._el.className = "revision-dialog";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Message revision history");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.style.display = "none";
-
-    this._el.addEventListener("click", (e) => {
-      if (e.target === this._el) this.hide();
+    // Original used display:"" on show and did not reset the key sequence on
+    // hide (it cleared the list instead).
+    super({
+      prefix: "revision-dialog",
+      ariaLabel: "Message revision history",
+      showDisplay: "",
+      resetSequenceOnHide: false,
     });
 
-    // Panel
-    this._panelEl = document.createElement("div");
-    this._panelEl.className = "revision-dialog__panel";
-    this._panelEl.setAttribute("tabindex", "-1");
-    this._el.appendChild(this._panelEl);
-
-    this._el.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
-        e.preventDefault();
-        this.hide();
-        return;
-      }
-      const result = keymapManager.resolveKey(e.key, "picker");
-      if (result.kind === "action" && result.action === "close") {
-        e.preventDefault();
-        this.hide();
-      }
-    });
-
-    // Header
-    const header = document.createElement("div");
-    header.className = "revision-dialog__header";
-
-    this._titleEl = document.createElement("span");
-    this._titleEl.className = "revision-dialog__title";
-    this._titleEl.textContent = "── edit history ──";
-    header.appendChild(this._titleEl);
-
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "revision-dialog__close-hint dialog-close-btn";
-    closeBtn.textContent = "[× Esc]";
-    closeBtn.setAttribute("aria-label", "Close edit history");
-    closeBtn.tabIndex = -1;
-    closeBtn.addEventListener("click", () => this.hide());
-    header.appendChild(closeBtn);
-
-    this._panelEl.appendChild(header);
+    this.buildHeader("── edit history ──", "Close edit history");
 
     // List
     this._listEl = document.createElement("div");
     this._listEl.className = "revision-dialog__list";
-    this._panelEl.appendChild(this._listEl);
+    this.content.appendChild(this._listEl);
 
     // Footer
     const footer = document.createElement("div");
     footer.className = "revision-dialog__footer";
     footer.textContent = "Esc close";
     footer.setAttribute("aria-hidden", "true");
-    this._panelEl.appendChild(footer);
-  }
-
-  getElement(): HTMLElement {
-    return this._el;
-  }
-
-  isVisible(): boolean {
-    return this._el.style.display !== "none";
+    this.content.appendChild(footer);
   }
 
   show(eventId: string, originalBody: string): void {
@@ -94,8 +42,7 @@ export class RevisionHistoryDialog {
     const roomId = AppState.get("currentRoomId");
     if (!roomId) return;
 
-    this._el.style.display = "";
-    this._panelEl.focus();
+    this.reveal();
 
     void getMessageRevisions(roomId, eventId).then((revisions) => {
       if (!this.isVisible()) return; // dialog closed while loading
@@ -113,9 +60,24 @@ export class RevisionHistoryDialog {
     });
   }
 
-  hide(): void {
-    this._el.style.display = "none";
+  protected override onHide(): void {
     this._listEl.innerHTML = "";
+  }
+
+  // Original handler did not consume partial sequences, so we route the close
+  // action explicitly instead of using the base `routeKey`.
+  protected override handleKeydown(e: KeyboardEvent): void {
+    e.stopPropagation();
+    if (this.isEscape(e)) {
+      e.preventDefault();
+      this.hide();
+      return;
+    }
+    const result = keymapManager.resolveKey(e.key, "picker");
+    if (result.kind === "action" && result.action === "close") {
+      e.preventDefault();
+      this.hide();
+    }
   }
 
   private _renderRevision(body: string, timestamp: number | null, index: number): void {

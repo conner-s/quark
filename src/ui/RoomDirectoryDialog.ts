@@ -4,10 +4,9 @@ import { keymapManager } from "../vim/keybindings.js";
 import { searchRoomDirectory } from "../ipc/rooms.js";
 import type { PublicRoomInfo } from "../ipc/types.js";
 import { joinRoom } from "../app/actions.js";
+import { DialogBase } from "./DialogBase.js";
 
-export class RoomDirectoryDialog {
-  private _el: HTMLElement;
-  private _panelEl: HTMLElement;
+export class RoomDirectoryDialog extends DialogBase {
   private _searchInput: HTMLInputElement;
   private _listEl: HTMLElement;
   private _items: PublicRoomInfo[] = [];
@@ -15,42 +14,9 @@ export class RoomDirectoryDialog {
   private _debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    // Backdrop
-    this._el = document.createElement("div");
-    this._el.className = "room-dir-dialog";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Room directory");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.style.display = "none";
+    super({ prefix: "room-dir-dialog", ariaLabel: "Room directory" });
 
-    this._el.addEventListener("click", (e) => {
-      if (e.target === this._el) this.hide();
-    });
-
-    // Panel
-    this._panelEl = document.createElement("div");
-    this._panelEl.className = "room-dir-dialog__panel";
-    this._el.appendChild(this._panelEl);
-
-    // Header
-    const header = document.createElement("div");
-    header.className = "room-dir-dialog__header";
-
-    const title = document.createElement("span");
-    title.className = "room-dir-dialog__title";
-    title.textContent = "── room directory ──";
-    header.appendChild(title);
-
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "room-dir-dialog__close-hint dialog-close-btn";
-    closeBtn.textContent = "[× Esc]";
-    closeBtn.setAttribute("aria-label", "Close room directory");
-    closeBtn.tabIndex = -1;
-    closeBtn.addEventListener("click", () => this.hide());
-    header.appendChild(closeBtn);
-
-    this._panelEl.appendChild(header);
+    this.buildHeader("── room directory ──", "Close room directory");
 
     // Search bar
     this._searchInput = document.createElement("input");
@@ -67,40 +33,34 @@ export class RoomDirectoryDialog {
       }
       e.stopPropagation();
     });
-    this._panelEl.appendChild(this._searchInput);
+    this.content.appendChild(this._searchInput);
 
     // List
     this._listEl = document.createElement("div");
     this._listEl.className = "room-dir-dialog__list";
-    this._panelEl.appendChild(this._listEl);
+    this.content.appendChild(this._listEl);
 
     // Footer
     const footer = document.createElement("div");
     footer.className = "room-dir-dialog__footer";
     footer.textContent = "j/k or ↑/↓ navigate · Enter join · Esc close";
     footer.setAttribute("aria-hidden", "true");
-    this._panelEl.appendChild(footer);
-
-    // Keyboard handler on the whole overlay
-    this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
+    this.content.appendChild(footer);
   }
 
-  getElement(): HTMLElement { return this._el; }
-
-  isVisible(): boolean { return this._el.style.display !== "none"; }
-
   show(): void {
-    this._el.style.display = "flex";
     this._searchInput.value = "";
     this._focusIndex = -1;
     this._listEl.innerHTML = "";
     void this._doSearch("");
-    this._searchInput.focus();
+    this.reveal();
   }
 
-  hide(): void {
-    this._el.style.display = "none";
-    keymapManager.resetSequence();
+  protected override focusTarget(): HTMLElement {
+    return this._searchInput;
+  }
+
+  protected override onHide(): void {
     if (this._debounceTimer !== null) {
       clearTimeout(this._debounceTimer);
       this._debounceTimer = null;
@@ -222,7 +182,7 @@ export class RoomDirectoryDialog {
     this._updateFocus();
   }
 
-  private _handleKeydown(e: KeyboardEvent): void {
+  protected override handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
     // ArrowUp / ArrowDown always navigate list

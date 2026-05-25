@@ -1,6 +1,7 @@
 // Help dialog — :commands and vim keybindings reference
 
 import { keymapManager } from "../vim/keybindings.js";
+import { DialogBase } from "./DialogBase.js";
 
 interface CommandEntry {
   name: string;
@@ -71,9 +72,7 @@ const BINDINGS: BindingEntry[] = [
 type Section = "bindings" | "commands";
 
 /** Keyboard-navigable command and keybinding reference overlay. */
-export class HelpDialog {
-  private _el: HTMLElement;
-  private _panelEl: HTMLElement;
+export class HelpDialog extends DialogBase {
   private _titleEl: HTMLElement;
   private _contentEl: HTMLElement;
 
@@ -85,46 +84,17 @@ export class HelpDialog {
   private _rows: HTMLElement[] = [];
 
   constructor() {
-    // ── Backdrop ─────────────────────────────────────────────────────────
-    this._el = document.createElement("div");
-    this._el.className = "help-dialog";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Help");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.style.display = "none";
+    super({ prefix: "help-dialog", ariaLabel: "Help" });
 
-    this._el.addEventListener("click", (e) => {
-      if (e.target === this._el) this.hide();
-    });
-
-    // ── Panel ─────────────────────────────────────────────────────────────
-    this._panelEl = document.createElement("div");
-    this._panelEl.className = "help-dialog__panel";
-    this._el.appendChild(this._panelEl);
-
-    // ── Header ───────────────────────────────────────────────────────────
-    const header = document.createElement("div");
-    header.className = "help-dialog__header";
-    this._panelEl.appendChild(header);
-
-    this._titleEl = document.createElement("span");
-    this._titleEl.className = "help-dialog__title";
-    header.appendChild(this._titleEl);
-
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "help-dialog__close-hint dialog-close-btn";
-    closeBtn.textContent = "[× Esc]";
-    closeBtn.setAttribute("aria-label", "Close help");
-    closeBtn.tabIndex = -1;
-    closeBtn.addEventListener("click", () => this.hide());
-    header.appendChild(closeBtn);
+    // ── Header (title text is set per-section in _switchSection) ───────────
+    this.buildHeader("", "Close help");
+    this._titleEl = this.titleEl!;
 
     // ── Tab bar ───────────────────────────────────────────────────────────
     const tabs = document.createElement("div");
     tabs.className = "help-dialog__tabs";
     tabs.setAttribute("role", "tablist");
-    this._panelEl.appendChild(tabs);
+    this.content.appendChild(tabs);
 
     this._tabBindings = this._makeTab("Keybindings", "Tab for :commands", "bindings", tabs);
     this._tabCommands = this._makeTab(":Commands", "Tab for keybindings", "commands", tabs);
@@ -132,35 +102,19 @@ export class HelpDialog {
     // ── Scrollable content ────────────────────────────────────────────────
     this._contentEl = document.createElement("div");
     this._contentEl.className = "help-dialog__content";
-    this._panelEl.appendChild(this._contentEl);
+    this.content.appendChild(this._contentEl);
 
     // ── Footer ────────────────────────────────────────────────────────────
     const footer = document.createElement("div");
     footer.className = "help-dialog__footer";
     footer.textContent = "j/k navigate · Tab switch section · Esc close";
     footer.setAttribute("aria-hidden", "true");
-    this._panelEl.appendChild(footer);
-
-    // ── Keyboard handling ────────────────────────────────────────────────
-    this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
-  }
-
-  getElement(): HTMLElement {
-    return this._el;
-  }
-
-  isVisible(): boolean {
-    return this._el.style.display !== "none";
+    this.content.appendChild(footer);
   }
 
   show(): void {
-    this._el.style.display = "flex";
+    this.reveal();
     this._switchSection("bindings");
-  }
-
-  hide(): void {
-    this._el.style.display = "none";
-    keymapManager.resetSequence();
   }
 
   // ── Private ─────────────────────────────────────────────────────────────
@@ -327,7 +281,7 @@ export class HelpDialog {
     this._rows[this._focusIndex]?.focus();
   }
 
-  private _handleKeydown(e: KeyboardEvent): void {
+  protected override handleKeydown(e: KeyboardEvent): void {
     // Stop all keys from reaching the global handler while dialog is open
     e.stopPropagation();
 

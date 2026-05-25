@@ -1,6 +1,5 @@
 // Settings dialog — General, Media, GIF, Emoji, Notifications, Themes tabs
 
-import { keymapManager } from "../vim/keybindings.js";
 import { getConfig, setNotificationConfig } from "../app/notifications.js";
 import type { NotificationConfig } from "../app/notifications.js";
 import { testNotification } from "../ipc/notifications.js";
@@ -13,6 +12,7 @@ import { loadTheme } from "../app/actions.js";
 import { listCustomThemes } from "../ipc/config.js";
 import type { CustomThemeEntry } from "../ipc/config.js";
 import { AppState } from "../app/state.js";
+import { DialogBase } from "./DialogBase.js";
 import packageJson from "../../package.json";
 
 type SettingsTab = "general" | "media" | "gif" | "emoji" | "notifications" | "themes";
@@ -36,8 +36,7 @@ export function setCurrentThemeName(name: string): void {
   _currentTheme = name;
 }
 
-export class SettingsDialog {
-  private _el: HTMLElement;
+export class SettingsDialog extends DialogBase {
   private _panelEl: HTMLElement;
   private _contentEl: HTMLElement;
   private _activeTab: SettingsTab = "general";
@@ -45,43 +44,11 @@ export class SettingsDialog {
   private _tabEls: Record<SettingsTab, HTMLElement> = {} as Record<SettingsTab, HTMLElement>;
 
   constructor() {
-    // Backdrop
-    this._el = document.createElement("div");
-    this._el.className = "settings-dialog";
-    this._el.setAttribute("role", "dialog");
-    this._el.setAttribute("aria-label", "Settings");
-    this._el.setAttribute("aria-modal", "true");
-    this._el.style.display = "none";
-
-    this._el.addEventListener("click", (e) => {
-      if (e.target === this._el) this.hide();
-    });
-
-    // Panel
-    this._panelEl = document.createElement("div");
-    this._panelEl.className = "settings-dialog__panel";
-    this._panelEl.tabIndex = -1;
-    this._el.appendChild(this._panelEl);
+    super({ prefix: "settings-dialog", ariaLabel: "Settings" });
+    this._panelEl = this.content;
 
     // Header
-    const header = document.createElement("div");
-    header.className = "settings-dialog__header";
-
-    const title = document.createElement("span");
-    title.className = "settings-dialog__title";
-    title.textContent = "── settings ──";
-    header.appendChild(title);
-
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "settings-dialog__close-hint dialog-close-btn";
-    closeBtn.textContent = "[× Esc]";
-    closeBtn.setAttribute("aria-label", "Close settings");
-    closeBtn.tabIndex = -1;
-    closeBtn.addEventListener("click", () => this.hide());
-    header.appendChild(closeBtn);
-
-    this._panelEl.appendChild(header);
+    this.buildHeader("── settings ──", "Close settings");
 
     // Tab bar
     const tabs = document.createElement("div");
@@ -117,24 +84,11 @@ export class SettingsDialog {
     footer.appendChild(footerVersion);
 
     this._panelEl.appendChild(footer);
-
-    // Keyboard handler
-    this._el.addEventListener("keydown", (e) => this._handleKeydown(e));
   }
-
-  getElement(): HTMLElement { return this._el; }
-
-  isVisible(): boolean { return this._el.style.display !== "none"; }
 
   show(): void {
-    this._el.style.display = "flex";
+    this.reveal();
     this._switchTab("general");
-    this._panelEl.focus();
-  }
-
-  hide(): void {
-    this._el.style.display = "none";
-    keymapManager.resetSequence();
   }
 
   // ── Private ──────────────────────────────────────────────────────────────────
@@ -177,78 +131,24 @@ export class SettingsDialog {
 
   // ── Shared helpers ────────────────────────────────────────────────────────────
 
+  // Row builders delegate to DialogBase's shared implementations (these emit
+  // the same `settings-dialog__*` classes). Thin private wrappers preserve the
+  // existing call signatures used by the tab builders below.
+
   private _makeCheckbox(label: string, checked: boolean, onChange: (v: boolean) => void): HTMLElement {
-    const row = document.createElement("div");
-    row.className = "settings-dialog__row";
-    const lbl = document.createElement("label");
-    lbl.className = "settings-dialog__checkbox-label";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = checked;
-    cb.addEventListener("change", () => onChange(cb.checked));
-    lbl.appendChild(cb);
-    lbl.append(" " + label);
-    row.appendChild(lbl);
-    return row;
+    return this.makeCheckbox(label, checked, onChange);
   }
 
   private _makeNumberRow(label: string, value: number, min: number, max: number, onChange: (v: number) => void): HTMLElement {
-    const row = document.createElement("div");
-    row.className = "settings-dialog__row";
-    const lbl = document.createElement("span");
-    lbl.className = "settings-dialog__label";
-    lbl.textContent = label;
-    const input = document.createElement("input");
-    input.type = "number";
-    input.className = "settings-dialog__number-input";
-    input.value = String(value);
-    input.min = String(min);
-    input.max = String(max);
-    input.addEventListener("change", () => {
-      const v = parseInt(input.value, 10);
-      if (!isNaN(v)) onChange(v);
-    });
-    row.appendChild(lbl);
-    row.appendChild(input);
-    return row;
+    return this.makeNumberRow(label, value, onChange, { min, max });
   }
 
   private _makeSelectRow(label: string, value: string, options: [string, string][], onChange: (v: string) => void): HTMLElement {
-    const row = document.createElement("div");
-    row.className = "settings-dialog__row";
-    const lbl = document.createElement("span");
-    lbl.className = "settings-dialog__label";
-    lbl.textContent = label;
-    const sel = document.createElement("select");
-    sel.className = "settings-dialog__select";
-    for (const [val, display] of options) {
-      const opt = document.createElement("option");
-      opt.value = val;
-      opt.textContent = display;
-      if (val === value) opt.selected = true;
-      sel.appendChild(opt);
-    }
-    sel.addEventListener("change", () => onChange(sel.value));
-    row.appendChild(lbl);
-    row.appendChild(sel);
-    return row;
+    return this.makeSelectRow(label, value, options, onChange);
   }
 
   private _makeTextRow(label: string, value: string, placeholder: string, onChange: (v: string) => void): HTMLElement {
-    const row = document.createElement("div");
-    row.className = "settings-dialog__row";
-    const lbl = document.createElement("span");
-    lbl.className = "settings-dialog__label";
-    lbl.textContent = label;
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "settings-dialog__text-input";
-    input.value = value;
-    input.placeholder = placeholder;
-    input.addEventListener("input", () => onChange(input.value));
-    row.appendChild(lbl);
-    row.appendChild(input);
-    return row;
+    return this.makeTextRow(label, value, placeholder, onChange).row;
   }
 
   private _makeSaveButton(onClick: () => Promise<void>): HTMLButtonElement {
@@ -750,7 +650,7 @@ export class SettingsDialog {
 
   // ── Keyboard handler ──────────────────────────────────────────────────────────
 
-  private _handleKeydown(e: KeyboardEvent): void {
+  protected override handleKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
 
     if (e.key === "Tab") {
@@ -767,12 +667,6 @@ export class SettingsDialog {
       return;
     }
 
-    const result = keymapManager.resolveKey(e.key, "picker");
-    if (result.kind === "action" && result.action === "close") {
-      e.preventDefault();
-      this.hide();
-    } else if (result.kind === "partial") {
-      e.preventDefault();
-    }
+    this.routeKey(e);
   }
 }
