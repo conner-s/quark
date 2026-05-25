@@ -12,6 +12,7 @@ import {
   setRoomHistoryVisibility,
 } from "../ipc/room_settings.js";
 import { DialogBase } from "./DialogBase.js";
+import { applyLocalRoomMeta } from "../app/actions.js";
 
 type RoomSettingsTab = "general" | "access" | "permissions";
 
@@ -219,6 +220,11 @@ export class RoomSettingsDialog extends DialogBase {
         tasks.push(setRoomTopic(roomId, draft.topic));
       }
       await Promise.all(tasks);
+      // Reflect the change in the cache + header immediately (don't wait for the
+      // next sync round-trip).
+      if (tasks.length > 0) {
+        applyLocalRoomMeta(roomId, { name: draft.name, topic: draft.topic });
+      }
     }));
   }
 

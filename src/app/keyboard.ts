@@ -40,6 +40,8 @@ import {
   jumpToLatest,
   loadTheme,
   selectRoom,
+  startVerification,
+  setupCrossSigning,
 } from "./actions.js";
 import { AppState } from "./state.js";
 import {
@@ -298,6 +300,17 @@ function dispatchAction(action: string, components: AppComponents): void {
 
     case "help":
       components.helpDialog.show();
+      break;
+
+    case "verify-session": {
+      // Self-verification: verify one of your own other sessions.
+      const uid = AppState.get("ownUserId");
+      if (uid) void startVerification(uid);
+      break;
+    }
+
+    case "setup-cross-signing":
+      void setupCrossSigning();
       break;
 
     case "open-quick-nav":

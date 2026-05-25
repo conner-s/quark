@@ -35,6 +35,7 @@ export {
   selectSpace,
   joinRoom,
   refreshRooms,
+  applyLocalRoomMeta,
   openOrCreateDm,
   loadRoomMembers,
 } from "./actions/rooms.js";

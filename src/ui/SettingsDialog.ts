@@ -267,6 +267,28 @@ export class SettingsDialog extends DialogBase {
     helpRow.appendChild(helpBtn);
     section.appendChild(helpRow);
 
+    // Security — device verification and cross-signing are otherwise only
+    // reachable via `:verify` / `:cross-sign`, which non-vim users can't find.
+    section.appendChild(this._makeSectionTitle("Security"));
+    const makeDispatchBtn = (label: string, ariaLabel: string, action: string): HTMLElement => {
+      const row = document.createElement("div");
+      row.className = "settings-dialog__row";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "settings-dialog__btn";
+      btn.textContent = label;
+      btn.setAttribute("aria-label", ariaLabel);
+      btn.addEventListener("click", () => {
+        // One overlay at a time: close settings before the flow takes over.
+        this.hide();
+        document.dispatchEvent(new CustomEvent("quark:action", { detail: { action } }));
+      });
+      row.appendChild(btn);
+      return row;
+    };
+    section.appendChild(makeDispatchBtn("[verify a session]", "Verify one of your sessions", "verify-session"));
+    section.appendChild(makeDispatchBtn("[set up cross-signing]", "Set up cross-signing", "setup-cross-signing"));
+
     const actions = document.createElement("div");
     actions.className = "settings-dialog__section settings-dialog__actions";
     actions.appendChild(this._makeSaveButton(async () => {

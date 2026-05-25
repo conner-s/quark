@@ -585,6 +585,39 @@ export async function joinRoom(roomIdOrAlias: string): Promise<void> {
 }
 
 /**
+ * Optimistically reflect a room name/topic edit (from Room settings) in the
+ * local cache — and, when it's the current room, the header — so the change is
+ * visible immediately instead of waiting for the next sync round-trip. The
+ * authoritative value still arrives via `refreshRooms()` on the next
+ * `quark://sync/rooms` event.
+ */
+export function applyLocalRoomMeta(
+  roomId: string,
+  meta: { name?: string; topic?: string },
+): void {
+  const cache = AppState.get("roomListCache");
+  const updated = cache.map((r) =>
+    r.room_id === roomId
+      ? {
+          ...r,
+          ...(meta.name !== undefined ? { name: meta.name } : {}),
+          ...(meta.topic !== undefined ? { topic: meta.topic } : {}),
+        }
+      : r,
+  );
+  AppState.set("roomListCache", updated);
+
+  if (roomId === AppState.get("currentRoomId")) {
+    const entry = updated.find((r) => r.room_id === roomId);
+    if (entry) {
+      // setRoom leaves member count / encryption / avatar untouched when those
+      // args are omitted.
+      getComponents().roomHeader.setRoom(entry.name ?? roomId, entry.topic ?? undefined);
+    }
+  }
+}
+
+/**
  * Refresh the room list from the backend.
  */
 export async function refreshRooms(): Promise<void> {
