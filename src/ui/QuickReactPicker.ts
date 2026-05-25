@@ -32,9 +32,6 @@ const CATEGORY_GLYPHS = new Map<string, Set<string>>(
 /** Special category id reserved for MSC2545 custom emoji */
 const CUSTOM_CATEGORY_ID = "__custom__";
 
-/** Number of columns in the quick-emoji grid (j/k jump a whole row). */
-const GRID_COLS = 6;
-
 export interface CustomEmojiEntry {
   /** Reaction key — for custom emoji this is `:shortcode:` */
   key: string;
@@ -415,6 +412,50 @@ export class QuickReactPicker extends PickerBase {
     this._buttons[visible]?.focus();
   }
 
+  /**
+   * Move focus one visual row up/down. The grid is `flex-wrap`, so its column
+   * count varies with width and the visible buttons repack when a filter hides
+   * some — a fixed "+N columns" jump lands diagonally. Instead navigate by
+   * geometry: among visible buttons in the adjacent row (next distinct
+   * `offsetTop` in the travel direction), pick the one whose `offsetLeft` is
+   * closest to the current column. Moving up off the top row returns to the
+   * input.
+   */
+  private _moveByRow(dir: 1 | -1): void {
+    const cur = this._buttons[this._focusedBtnIndex];
+    if (!cur) {
+      if (dir > 0) {
+        const first = this._nextVisible(0, 1);
+        if (first >= 0) this._focusGrid(first);
+      }
+      return;
+    }
+    const visible = this._buttons.filter((b) => b.style.display !== "none");
+    const curTop = cur.offsetTop;
+    const curLeft = cur.offsetLeft;
+    const adjacent = visible.filter((b) => (dir > 0 ? b.offsetTop > curTop : b.offsetTop < curTop));
+    if (adjacent.length === 0) {
+      if (dir < 0) this._returnToInput();
+      return;
+    }
+    const targetTop =
+      dir > 0
+        ? Math.min(...adjacent.map((b) => b.offsetTop))
+        : Math.max(...adjacent.map((b) => b.offsetTop));
+    let best = adjacent[0];
+    let bestDist = Infinity;
+    for (const b of adjacent) {
+      if (b.offsetTop !== targetTop) continue;
+      const dist = Math.abs(b.offsetLeft - curLeft);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = b;
+      }
+    }
+    const idx = this._buttons.indexOf(best);
+    if (idx >= 0) this._focusGrid(idx);
+  }
+
   private _returnToInput(): void {
     this._focusedBtnIndex = -1;
     this._updateBtnFocus();
@@ -478,6 +519,13 @@ export class QuickReactPicker extends PickerBase {
       return;
     }
 
+    // `/` jumps back to the search input (parity with the emoji picker).
+    if (e.key === "/") {
+      e.preventDefault();
+      this._returnToInput();
+      return;
+    }
+
     // Movement + select route through the keymap so user `quarkrc` rebindings
     // (e.g. remapping j/k or the arrows) apply here too. The grid is sparse
     // (buttons may be hidden by the active filter / category), so we resolve the
@@ -505,19 +553,12 @@ export class QuickReactPicker extends PickerBase {
       }
       case "nav-down": {
         e.preventDefault();
-        const next = this._nextVisible(this._focusedBtnIndex + GRID_COLS, 1);
-        if (next >= 0) this._focusGrid(next);
+        this._moveByRow(1);
         break;
       }
       case "nav-up": {
         e.preventDefault();
-        const prev = this._nextVisible(this._focusedBtnIndex - GRID_COLS, -1);
-        if (prev < 0 || prev === this._focusedBtnIndex) {
-          // Already on top row (or no previous visible) — go back to input
-          this._returnToInput();
-        } else {
-          this._focusGrid(prev);
-        }
+        this._moveByRow(-1);
         break;
       }
       case "select": {

@@ -43,8 +43,18 @@ export class QuickNavPalette extends PickerBase {
 
     this._searchInput.addEventListener("input", () => this._filter());
     this._searchInput.addEventListener("keydown", (e) => {
-      // Let panel handler take navigation keys
-      if (e.key === "Escape" || e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Enter") return;
+      // Let the panel handler take navigation/selection keys. Tab is included
+      // so you can dive from the search box into the list without reaching for
+      // the arrow keys (mirrors the emoji picker's Tab-into-grid).
+      if (
+        e.key === "Escape" ||
+        e.key === "ArrowUp" ||
+        e.key === "ArrowDown" ||
+        e.key === "Enter" ||
+        e.key === "Tab"
+      ) {
+        return;
+      }
       e.stopPropagation();
     });
 
@@ -170,6 +180,14 @@ export class QuickNavPalette extends PickerBase {
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
       e.preventDefault();
       this.hide();
+      return;
+    }
+
+    // Tab / Shift-Tab step through the list, so the search box and the results
+    // are reachable from the keyboard home row (Tab isn't a remappable action).
+    if (e.key === "Tab") {
+      e.preventDefault();
+      this._list.dispatch(e.shiftKey ? "nav-up" : "nav-down");
       return;
     }
 
