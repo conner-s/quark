@@ -90,6 +90,37 @@ function appendLinkifiedText(container: HTMLElement, text: string): void {
   }
 }
 
+/**
+ * Activate Matrix spoilers (MSC2010 / `data-mx-spoiler`) inside a freshly
+ * rendered message body. The server-supplied HTML already contains
+ * `<span data-mx-spoiler[="reason"]>…</span>`; on its own that renders as plain
+ * text. Here we obscure each spoiler (the CSS `.message__spoiler` rule blurs it)
+ * and reveal it on click/tap. An optional reason is exposed as a tooltip.
+ */
+function setupSpoilers(container: HTMLElement): void {
+  for (const span of Array.from(container.querySelectorAll<HTMLElement>("[data-mx-spoiler]"))) {
+    if (span.classList.contains("message__spoiler")) continue; // already wired
+    span.classList.add("message__spoiler");
+    span.setAttribute("role", "button");
+    span.setAttribute("tabindex", "0");
+    const reason = span.getAttribute("data-mx-spoiler");
+    span.title = reason ? `Spoiler: ${reason}` : "Spoiler — click to reveal";
+    const reveal = (e: Event): void => {
+      if (span.classList.contains("message__spoiler--revealed")) return;
+      // Stop the reveal tap from also selecting the message / opening a menu.
+      e.preventDefault();
+      e.stopPropagation();
+      span.classList.add("message__spoiler--revealed");
+      span.removeAttribute("role");
+      span.removeAttribute("tabindex");
+    };
+    span.addEventListener("click", reveal);
+    span.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") reveal(e);
+    });
+  }
+}
+
 // ── URL preview cards ─────────────────────────────────────────────────────────
 
 /** In-memory cache: url → preview data (null = fetched but no preview available) */
@@ -624,6 +655,7 @@ function buildMessageElement(msg: MessageData): HTMLElement {
           a.style.cursor = "pointer";
         }
       }
+      setupSpoilers(body);
     } else {
       appendLinkifiedText(body, msg.body);
     }
@@ -1826,6 +1858,7 @@ export class Timeline {
       body.className = "thread-inline__message-body";
       if (msg.htmlBody) {
         body.innerHTML = msg.htmlBody;
+        setupSpoilers(body);
       } else {
         body.textContent = msg.body;
       }
@@ -1861,6 +1894,15 @@ export class Timeline {
   get selectedMessage(): MessageData | null {
     if (this._selectedIndex < 0 || this._selectedIndex >= this._messages.length) return null;
     return this._messages[this._selectedIndex];
+  }
+
+  /**
+   * Body text of a message by event ID, reflecting any edits already applied
+   * (reads from MessageData rather than the raw timeline event). Null if the
+   * message isn't currently loaded.
+   */
+  getMessageBodyById(eventId: string): string | null {
+    return this._messages.find((m) => m.id === eventId)?.body ?? null;
   }
 
   /** Move selection down. Navigates thread replies when a thread is open. */
@@ -2037,6 +2079,7 @@ export class Timeline {
     if (!bodyEl) return;
     if (newHtmlBody) {
       bodyEl.innerHTML = newHtmlBody;
+      setupSpoilers(bodyEl);
     } else {
       bodyEl.textContent = newBody;
     }

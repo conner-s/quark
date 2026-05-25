@@ -1,6 +1,7 @@
 // Compose bar with mode indicator
 
 import { Mode } from "../vim/mode.js";
+import { isMobile, onMobileChange } from "../app/mobile.js";
 
 const MODE_LABELS: Record<string, string> = {
   Normal: "NOR",
@@ -95,9 +96,13 @@ export class Input {
     this._fieldEl.type = "text";
     this._fieldEl.className = "input-bar__field";
     this._fieldEl.setAttribute("autocomplete", "off");
-    this._fieldEl.setAttribute("autocorrect", "off");
-    this._fieldEl.setAttribute("autocapitalize", "off");
-    this._fieldEl.setAttribute("spellcheck", "false");
+    // Autocorrect/autocapitalise/spellcheck are off on desktop (the terminal
+    // aesthetic, and vim navigation lives in this field), but on mobile the
+    // field is a plain text box with vim disabled — there, users expect the
+    // soft keyboard's autocorrect and sentence capitalisation. Re-applied on
+    // viewport changes so dev resizing across the breakpoint behaves too.
+    this._applyTextAssistAttributes();
+    onMobileChange(() => this._applyTextAssistAttributes());
     this._fieldEl.setAttribute("aria-label", "Compose message");
     this._fieldEl.placeholder = "…";
     this._composeBoxEl.appendChild(this._fieldEl);
@@ -195,6 +200,18 @@ export class Input {
 
     inputBar.appendChild(this._composeBoxEl);
     this._el.appendChild(inputBar);
+  }
+
+  /**
+   * Set the soft-keyboard assist attributes on the compose field. On mobile we
+   * want autocorrect, sentence-casing, and spellcheck; on desktop they stay off
+   * to preserve the terminal feel and avoid interfering with vim keystrokes.
+   */
+  private _applyTextAssistAttributes(): void {
+    const mobile = isMobile();
+    this._fieldEl.setAttribute("autocorrect", mobile ? "on" : "off");
+    this._fieldEl.setAttribute("autocapitalize", mobile ? "sentences" : "off");
+    this._fieldEl.setAttribute("spellcheck", mobile ? "true" : "false");
   }
 
   /** Register a callback invoked when the field is clicked to enter insert mode. */

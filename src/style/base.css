@@ -1879,6 +1879,36 @@ img[data-mx-emoticon] {
   display: inline;
 }
 
+/* ── Spoilers (data-mx-spoiler) ──────────────────────────────────────────────
+   Hidden text is blurred and dimmed until clicked/tapped. Inline custom emoji
+   inside a spoiler are obscured the same way. JS toggles --revealed. */
+
+.message__spoiler {
+  filter: blur(6px);
+  background: var(--fg);
+  border-radius: 2px;
+  color: transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: filter 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.message__spoiler img[data-mx-emoticon] {
+  visibility: hidden;
+}
+
+.message__spoiler--revealed {
+  filter: none;
+  background: transparent;
+  color: inherit;
+  cursor: text;
+  user-select: text;
+}
+
+.message__spoiler--revealed img[data-mx-emoticon] {
+  visibility: visible;
+}
+
 /* ── Reaction bar ────────────────────────────────────────────────────────── */
 
 .reaction-bar {

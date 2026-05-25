@@ -171,6 +171,37 @@ describe("Timeline", () => {
     });
   });
 
+  describe("spoilers", () => {
+    it("obscures data-mx-spoiler spans and reveals them on click", () => {
+      timeline.setMessages([
+        makeMsg({
+          body: "secret",
+          htmlBody: 'before <span data-mx-spoiler="plot">secret</span> after',
+        }),
+      ]);
+
+      const spoiler = timeline.getElement().querySelector<HTMLElement>(".message__spoiler");
+      expect(spoiler).not.toBeNull();
+      expect(spoiler!.classList.contains("message__spoiler--revealed")).toBe(false);
+      expect(spoiler!.getAttribute("role")).toBe("button");
+      // Reason surfaces as a tooltip.
+      expect(spoiler!.title).toContain("plot");
+
+      spoiler!.click();
+      expect(spoiler!.classList.contains("message__spoiler--revealed")).toBe(true);
+      expect(spoiler!.hasAttribute("role")).toBe(false);
+    });
+
+    it("handles reasonless spoilers", () => {
+      timeline.setMessages([
+        makeMsg({ body: "x", htmlBody: "<span data-mx-spoiler>x</span>" }),
+      ]);
+      const spoiler = timeline.getElement().querySelector<HTMLElement>(".message__spoiler");
+      expect(spoiler).not.toBeNull();
+      expect(spoiler!.title).toBe("Spoiler — click to reveal");
+    });
+  });
+
   describe("reactions", () => {
     it("renders reaction bar when reactions are present", () => {
       timeline.setMessages([

@@ -1,5 +1,20 @@
 # Quark — A CLI-Styled Matrix Client
 
+## Verification queue — 0.9.0 mobile/formatting batch
+
+Branch `fix/mobile-formatting-issues`. Covers issues #34, #37, #38, #40, #42. iOS needs a fresh install to pick up the new Info.plist permission keys.
+
+### Cross-platform
+- [ ] **#42 Spoiler text** — receive (or send from another client) a message containing a spoiler (`<span data-mx-spoiler>`). Confirm it renders blurred/blacked-out and reveals on click (desktop) or tap (mobile). A spoiler with a reason shows the reason as a tooltip. *Fix: `data-mx-spoiler` already survived into the DOM but had no styling/handler — added `setupSpoilers()` in Timeline + `.message__spoiler` CSS.*
+- [x] **#37 Edit/Delete in context menu** — right-click (desktop) or long-press (mobile) one of **your own** messages: the menu now shows **Edit** and **Delete** below the standard actions. Messages from others show neither. *Same callback feeds desktop + mobile, so this also resolves #34.*
+- [x] **#34 Long-hold delete on mobile** — long-press your own message → bottom sheet includes **Delete** (and **Edit**). Resolved together with #37.
+
+### iOS (needs reinstall)
+- [ ] **#38 Camera crash** — tap 📎 attach, choose "Take Photo". Camera opens instead of crashing the app. *Fix: added `NSCameraUsageDescription` / `NSMicrophoneUsageDescription` / `NSPhotoLibraryUsageDescription` to `gen/apple/quark_iOS/Info.plist` — accessing the camera without the usage-description key is a hard crash on iOS.*
+- [ ] **#40 Autocorrect** — focus the compose field, type a misspelled / lowercase-first sentence. The soft keyboard now autocorrects, sentence-capitalises, and shows spellcheck. *Fix: the field hard-disabled `autocorrect`/`autocapitalize`/`spellcheck`; now enabled on mobile (where vim is off anyway), still off on desktop for the terminal feel.*
+
+---
+
 ## Verification queue — 0.8.x mobile batch
 
 Branch `fix/mobile-issues-25-33`. 0.8.2 needs a fresh iPhone install (re-run `xcrun devicectl`); Android still needs `make android-build` + sideload to verify. Delete this section once everything's confirmed.

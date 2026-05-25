@@ -3,6 +3,7 @@
 import { modeManager, Mode } from "../vim/mode.js";
 import { keymapManager } from "../vim/keybindings.js";
 import type { AppComponents } from "../ui/App.js";
+import type { ContextMenuEntry } from "../ui/ContextMenu.js";
 import {
   sendMessage,
   sendReaction,
@@ -798,7 +799,10 @@ export function setupKeyboard(components: AppComponents): void {
   timeline.onContextMenu((eventId, x, y) => {
     const events = AppState.get("currentTimeline");
     const evt = events.find((ev) => ev.event_id === eventId);
-    contextMenu.show(x, y, [
+    const ownUserId = AppState.get("ownUserId");
+    const isOwn = !!evt && !!ownUserId && evt.sender === ownUserId;
+
+    const entries: ContextMenuEntry[] = [
       {
         label: "Reply",
         hint: "r",
@@ -832,7 +836,35 @@ export function setupKeyboard(components: AppComponents): void {
         label: "View raw event",
         action: () => void openDebugViewerForEvent(eventId),
       },
-    ]);
+    ];
+
+    // Own-message actions: edit and delete. Both the desktop right-click menu
+    // and the mobile long-press sheet flow through this callback, so this is
+    // the single place that gives finger-input users a way to delete/edit.
+    if (isOwn) {
+      entries.push(
+        { separator: true },
+        {
+          label: "Edit",
+          hint: "E",
+          action: () => {
+            // Prefer the MessageData body (reflects applied edits) over the
+            // raw timeline event.
+            const body = timeline.getMessageBodyById(eventId) ?? evt?.body ?? "";
+            startEdit(eventId, body);
+            modeManager.transition(Mode.Insert);
+            input.focus();
+          },
+        },
+        {
+          label: "Delete",
+          hint: "dd",
+          action: () => void redactMessage(eventId),
+        },
+      );
+    }
+
+    contextMenu.show(x, y, entries);
   });
 
   // Right-click context menu for rooms in the room list
