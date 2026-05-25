@@ -20,6 +20,11 @@ Thumbs.db
 .env
 .env.local
 
+# Android release signing — never commit real keystores or their passwords
+keystore.properties
+*.jks
+*.keystore
+
 # Flatpak
 flatpak-build/
 flatpak-repo/

@@ -13,6 +13,20 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// Release signing. Values come from a local `keystore.properties` (git-ignored,
+// for manual local release builds) or, in CI, from environment variables. The
+// keystore MUST be the same one for every release forever — Android refuses to
+// upgrade an installed app whose signing certificate differs, so a new key
+// would force every user to uninstall+reinstall. See keystore.properties.example.
+val keystoreProperties = Properties().apply {
+    val propFile = rootProject.file("keystore.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+fun signingValue(propKey: String, envKey: String): String? =
+    keystoreProperties.getProperty(propKey) ?: System.getenv(envKey)
+
 android {
     compileSdk = 36
     namespace = "zone.derg.quark"
@@ -23,6 +37,20 @@ android {
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    signingConfigs {
+        create("release") {
+            val storeFilePath = signingValue("storeFile", "ANDROID_KEYSTORE_PATH")
+            if (storeFilePath != null) {
+                storeFile = file(storeFilePath)
+                storePassword = signingValue("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "ANDROID_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "ANDROID_KEY_PASSWORD")
+                // v1 (JAR) + v2 (APK Signature Scheme) for the widest device range.
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -37,6 +65,12 @@ android {
             }
         }
         getByName("release") {
+            // Attach the release signing config only when a keystore is actually
+            // configured; otherwise leave the APK unsigned so the CI debug-signed
+            // fallback path still works for dev sideloading.
+            signingConfigs.getByName("release").storeFile?.let {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }

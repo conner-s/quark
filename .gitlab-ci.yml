@@ -339,15 +339,25 @@ build:macos:
 # Builds an arm64-only release APK via `pnpm tauri android build --apk`.
 # (arm64-v8a covers all modern physical devices; a universal APK packing all
 # four ABIs ran ~600 MB and exceeded the package-registry proxy's upload limit.)
-# Signing: if ANDROID_KEYSTORE_BASE64 + related vars are set, the APK is
-# signed for release with apksigner; otherwise it falls back to a debug-signed
-# APK (installable on dev devices, NOT suitable for public distribution).
+# Signing: if ANDROID_KEYSTORE_BASE64 + related vars are set, Gradle signs the
+# release APK during the build (via the signingConfig in app/build.gradle.kts);
+# otherwise it falls back to a debug-signed APK (installable on dev devices,
+# NOT suitable for public distribution).
+#
+# IMPORTANT: use the SAME keystore for every release, forever. Android refuses
+# to install an update whose signing certificate differs from the installed
+# app ("App not installed" / INSTALL_FAILED_UPDATE_INCOMPATIBLE), forcing users
+# to uninstall first. The debug fallback key is regenerated every CI run, so
+# debug builds are never upgradeable over one another — release-sign all public
+# builds with one permanent, backed-up keystore.
 #
 # Required CI/CD variables for release signing:
 #   ANDROID_KEYSTORE_BASE64    — base64 of your .jks keystore (file-type var ok)
 #   ANDROID_KEYSTORE_PASSWORD
 #   ANDROID_KEY_ALIAS
 #   ANDROID_KEY_PASSWORD
+# (the job decodes the keystore to a file and exports ANDROID_KEYSTORE_PATH,
+#  which build.gradle.kts reads.)
 
 build:android:
   stage: build
@@ -429,27 +439,31 @@ build:android:
     - export GRADLE_USER_HOME="$CI_PROJECT_DIR/.gradle-cache"
     - |
       if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-        echo "Building release APK (release-signed)…"
-        pnpm tauri android build --apk --target aarch64
-        UNSIGNED=$(find src-tauri/gen/android/app/build/outputs/apk -name "*-release-unsigned.apk" | head -n1)
-        if [ -z "$UNSIGNED" ]; then
-          # Some Tauri versions emit *-release.apk (still unsigned without a signingConfig).
-          UNSIGNED=$(find src-tauri/gen/android/app/build/outputs/apk -name "*-release.apk" | head -n1)
-        fi
-        echo "Found APK: $UNSIGNED"
+        echo "Building release APK (release-signed by Gradle)…"
+        # Decode the keystore and hand its path to Gradle. The release
+        # signingConfig in app/build.gradle.kts reads ANDROID_KEYSTORE_PATH +
+        # ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD,
+        # so `tauri android build` emits a signed, zipaligned APK directly —
+        # no separate apksigner step, and the same key is used every release.
         echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > /tmp/quark.jks
-        zipalign -p -f 4 "$UNSIGNED" /tmp/quark-aligned.apk
-        apksigner sign \
-          --ks /tmp/quark.jks \
-          --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
-          --ks-key-alias "$ANDROID_KEY_ALIAS" \
-          --key-pass "pass:$ANDROID_KEY_PASSWORD" \
-          --out quark-android.apk \
-          /tmp/quark-aligned.apk
-        rm -f /tmp/quark.jks /tmp/quark-aligned.apk
+        export ANDROID_KEYSTORE_PATH=/tmp/quark.jks
+        pnpm tauri android build --apk --target aarch64
+        SIGNED=$(find src-tauri/gen/android/app/build/outputs/apk -name "*-release.apk" ! -name "*-unsigned.apk" | head -n1)
+        rm -f /tmp/quark.jks
+        if [ -z "$SIGNED" ]; then
+          echo "ERROR: no signed *-release.apk produced. Is the signingConfig wired up in build.gradle.kts?" >&2
+          exit 1
+        fi
+        echo "Found signed APK: $SIGNED"
+        # Fail loudly if the APK didn't actually get signed (e.g. signingConfig skipped).
+        apksigner verify --print-certs "$SIGNED" | grep -i "Signer #1 certificate SHA-256" \
+          || { echo "ERROR: APK is not signed." >&2; exit 1; }
+        cp "$SIGNED" quark-android.apk
       else
         echo "No ANDROID_KEYSTORE_BASE64 set — building DEBUG-signed APK."
-        echo "  (Installable on dev devices, but NOT suitable for public release.)"
+        echo "  (Installable on dev devices, but NOT suitable for public release —"
+        echo "   the debug key is regenerated every CI run, so debug builds can NOT"
+        echo "   be installed over one another. Public releases MUST be release-signed.)"
         pnpm tauri android build --apk --debug --target aarch64
         DEBUG_APK=$(find src-tauri/gen/android/app/build/outputs/apk -name "*-debug.apk" | head -n1)
         cp "$DEBUG_APK" quark-android.apk
