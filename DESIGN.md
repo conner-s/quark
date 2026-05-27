@@ -709,7 +709,8 @@ quark/
   - macOS builds must be code-signed for Gatekeeper to allow the update; Linux and Windows updates work without signing but signing is recommended.
   - Add `:checkupdate` command to trigger a manual check.
 
-- [x] **Multi-platform builds** — GitLab CI pipeline (`.gitlab-ci.yml`) triggered only on tag pushes.
+- [x] **Multi-platform builds** — GitLab CI pipeline (`.gitlab-ci.yml`).
+  - **Gating:** the `test` job (`pnpm test` + `cargo test`; `pnpm build` also type-checks) and the advisory `lint` job (`cargo clippy`, `allow_failure`) run on **every** pipeline — tag pushes, merge requests, and branch pushes — so regressions are caught before merge, not just at release time. The `build:*` and `release` jobs are pinned to tag pushes via per-job `rules`.
   - Jobs: `build:linux` (`.deb` + `.AppImage` + `.rpm`), `build:flatpak`, `build:windows` (`.msi` + NSIS `.exe`), `build:macos` (`.dmg` + `.app.tar.gz`), `build:android` (universal `.apk`).
   - Each job runs `pnpm tauri build` (or `pnpm tauri android build --apk` for Android) and uploads its bundles to the project's Generic Package Registry under `quark/<tag>/quark-<tag>-<platform>.<ext>`. The `release` job creates a GitLab Release whose asset links point to those stable, externally-accessible URLs (not job-artifact URLs, which expire).
   - Secrets needed (optional): macOS notarisation — `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`; Android release signing — `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without Android keystore vars, the APK is debug-signed (installable on dev devices, not for public distribution).

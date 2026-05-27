@@ -60,7 +60,6 @@ import {
 import { loadQuarkrc } from "../ipc/config.js";
 import type { ParsedRc } from "../ipc/types.js";
 import { getAppConfig, setAppConfig } from "../ipc/app_config.js";
-import type { AppConfig } from "../ipc/app_config.js";
 import type { KeyContext } from "../vim/keybindings.js";
 import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
 import { showToast } from "../ui/NotificationToast.js";
@@ -69,6 +68,8 @@ import { filterMembers, type MentionEntry } from "../ui/MentionPreview.js";
 import { getEmojiPacks } from "../ipc/emoji.js";
 import { getThumbnail } from "../ipc/media.js";
 import { getRoomMembers } from "../ipc/rooms.js";
+import { extractShortcodeQuery, extractMentionQuery } from "./autocomplete_query.js";
+import { applySetOptions } from "./set_options.js";
 
 // ── Default keybindings ───────────────────────────────────────────────────────
 
@@ -383,31 +384,7 @@ function allShortcodes(): ShortcodeEntry[] {
   return [..._customEmoji, ...BUILTIN_EMOJI];
 }
 
-/**
- * Extract the active shortcode query from the input value.
- * Returns the query text (without the colon) if the cursor is in a `:query` span,
- * or null if no shortcode is being typed.
- */
-function extractShortcodeQuery(value: string): string | null {
-  // Find the last unmatched colon
-  const lastColon = value.lastIndexOf(":");
-  if (lastColon < 0) return null;
-
-  const query = value.slice(lastColon + 1);
-  // Must have at least 1 character after the colon and no spaces
-  if (query.length < 1 || /\s/.test(query)) return null;
-  // Don't trigger if the colon is preceded by another colon (already closed like :foo:)
-  // Check that this colon isn't the closing colon of a previous shortcode
-  const beforeColon = value.slice(0, lastColon);
-  const prevColon = beforeColon.lastIndexOf(":");
-  if (prevColon >= 0) {
-    const between = beforeColon.slice(prevColon + 1);
-    // If the text between the two colons has no spaces, the last colon closes a shortcode
-    if (between.length > 0 && !/\s/.test(between)) return null;
-  }
-
-  return query;
-}
+// extractShortcodeQuery lives in ./autocomplete_query.ts (pure, unit-tested).
 
 // ── Mention autocomplete ──────────────────────────────────────────────────────
 
@@ -431,20 +408,7 @@ async function refreshRoomMembers(): Promise<void> {
   }
 }
 
-/**
- * Extract the active @mention query from the input value.
- * Returns the query text (without @) or null.
- */
-function extractMentionQuery(value: string): string | null {
-  const lastAt = value.lastIndexOf("@");
-  if (lastAt < 0) return null;
-  // The character before @ must be a space or start of string
-  if (lastAt > 0 && !/\s/.test(value[lastAt - 1])) return null;
-  const query = value.slice(lastAt + 1);
-  // Must have no spaces (a space ends the mention query)
-  if (/\s/.test(query)) return null;
-  return query;
-}
+// extractMentionQuery lives in ./autocomplete_query.ts (pure, unit-tested).
 
 // ── Text-select submode keyboard handler ──────────────────────────────────────
 
@@ -682,47 +646,7 @@ const MAP_TYPE_TO_CONTEXT: Readonly<Record<string, KeyContext>> = {
   visual: "visual",
 };
 
-function applySetOptions(cfg: AppConfig, sets: Array<{ name: string; value: boolean | number | string }>): AppConfig {
-  const updated: AppConfig = {
-    general: { ...cfg.general },
-    sync: { ...cfg.sync },
-    media: { ...cfg.media },
-    gif: { ...cfg.gif },
-    emoji: { ...cfg.emoji },
-  };
-
-  for (const { name, value } of sets) {
-    switch (name) {
-      // general
-      case "theme":           if (typeof value === "string")  updated.general.theme = value; break;
-      case "notifications":   if (typeof value === "boolean") updated.general.notifications = value; break;
-      case "confirm_redact":  if (typeof value === "boolean") updated.general.confirm_redact = value; break;
-      case "icon_radius":     if (typeof value === "string")  updated.general.icon_radius = value; break;
-      case "vim_mode":        if (typeof value === "boolean") updated.general.vim_mode = value; break;
-      // sync
-      case "sliding_sync":    if (typeof value === "boolean") updated.sync.sliding_sync = value; break;
-      case "timeline_limit":  if (typeof value === "number")  updated.sync.timeline_limit = value; break;
-      // media
-      case "auto_load_images":  if (typeof value === "boolean") updated.media.auto_load_images = value; break;
-      case "max_image_width":   if (typeof value === "number")  updated.media.max_image_width = value; break;
-      case "max_image_height":  if (typeof value === "number")  updated.media.max_image_height = value; break;
-      case "sticker_max_size":  if (typeof value === "number")  updated.media.sticker_max_size = value; break;
-      case "cache_size_mb":     if (typeof value === "number")  updated.media.cache_size_mb = value; break;
-      // gif
-      case "gif_provider":      if (typeof value === "string")  updated.gif.provider = value as "tenor" | "giphy"; break;
-      case "gif_rating":        if (typeof value === "string")  updated.gif.rating = value as "g" | "pg" | "pg-13" | "r"; break;
-      case "gif_api_key":       if (typeof value === "string")  updated.gif.api_key = value; break;
-      case "gif_cache_results": if (typeof value === "boolean") updated.gif.cache_results = value; break;
-      // emoji
-      case "shortcode_autocomplete": if (typeof value === "boolean") updated.emoji.shortcode_autocomplete = value; break;
-      case "autocomplete_min_chars": if (typeof value === "number")  updated.emoji.autocomplete_min_chars = value; break;
-      default:
-        console.warn(`[quarkrc] unknown set option: "${name}"`);
-    }
-  }
-
-  return updated;
-}
+// applySetOptions lives in ./set_options.ts (pure, unit-tested).
 
 async function applyRcDirectives(rc: ParsedRc): Promise<void> {
   for (const directive of rc.directives) {
