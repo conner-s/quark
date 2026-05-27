@@ -20,11 +20,22 @@ stages:
 
 # ─── pipeline-level gating ──────────────────────────────────────────────────
 #
-# Pipeline only fires on tag pushes. Nothing runs on regular pushes or MRs.
+# Pipelines fire on:
+#   • tag pushes        → full test + build + release (see per-job rules below)
+#   • merge requests    → test/lint only (build & release are tag-gated)
+#   • branch pushes      → test/lint only
+#
+# The third rule suppresses the duplicate *branch* pipeline that would
+# otherwise run alongside the MR pipeline for any branch with an open MR
+# (GitLab's canonical "avoid duplicate pipelines" guard).
 
 workflow:
   rules:
     - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
 
 # ─── shared defaults ────────────────────────────────────────────────────────
 
@@ -106,6 +117,10 @@ variables:
   }
 
 # ─── test ───────────────────────────────────────────────────────────────────
+#
+# Hard gate. Runs on every pipeline (tags, MRs, branch pushes). `pnpm build`
+# in before_script also type-checks the frontend (tsc), so a type error fails
+# the job before the test step is reached.
 
 test:
   stage: test
@@ -138,6 +153,42 @@ test:
     - pnpm test
     - cargo test --manifest-path src-tauri/Cargo.toml
 
+# ─── lint (advisory) ──────────────────────────────────────────────────────────
+#
+# Runs clippy but does NOT block the pipeline (allow_failure). The backend
+# currently carries ~31 pre-existing clippy warnings and uses a deliberate
+# hand-formatting style that diverges from rustfmt's default, so neither
+# `clippy -D warnings` nor `cargo fmt --check` can be a hard gate yet. This job
+# keeps the signal visible (and lets new warnings stand out) without forcing a
+# codebase-wide cleanup. Promote to a hard gate (`-D warnings`) once the
+# existing warnings are cleared.
+
+lint:
+  stage: test
+  image: rust:slim-bookworm
+  <<: *cache_rust_linux
+  allow_failure: true
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends
+        ca-certificates
+        pkg-config
+        libssl-dev
+        libsqlite3-dev
+        libgtk-3-dev
+        libjavascriptcoregtk-4.1-dev
+        libsoup-3.0-dev
+        libwebkit2gtk-4.1-dev
+    - rustup component add clippy
+    # `tauri::generate_context!()` embeds the frontend bundle at compile time and
+    # panics if frontendDist (../dist) is missing. The `test` job gets a real
+    # dist/ from `pnpm build`; clippy doesn't need the built assets, so a
+    # placeholder lets the proc-macro expand and the Rust actually gets linted.
+    - mkdir -p dist
+    - echo '<!doctype html><title>quark</title>' > dist/index.html
+  script:
+    - cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
+
 # ─── build: Linux ───────────────────────────────────────────────────────────
 #
 # Produces: .deb, .AppImage, .rpm (whatever Tauri's "all" target emits).
@@ -146,6 +197,8 @@ build:linux:
   stage: build
   image: ubuntu:22.04
   <<: *cache_rust_linux
+  rules:
+    - if: $CI_COMMIT_TAG
   variables:
     DEBIAN_FRONTEND: noninteractive
   before_script:
@@ -200,6 +253,8 @@ build:linux:
 build:flatpak:
   stage: build
   image: ubuntu:24.04
+  rules:
+    - if: $CI_COMMIT_TAG
   variables:
     DEBIAN_FRONTEND: noninteractive
   cache:
@@ -259,6 +314,8 @@ build:windows:
   stage: build
   image: ubuntu:22.04
   <<: *cache_rust_windows
+  rules:
+    - if: $CI_COMMIT_TAG
   variables:
     DEBIAN_FRONTEND: noninteractive
   before_script:
@@ -362,6 +419,8 @@ build:macos:
 build:android:
   stage: build
   image: eclipse-temurin:17-jdk-jammy
+  rules:
+    - if: $CI_COMMIT_TAG
   variables:
     DEBIAN_FRONTEND: noninteractive
     ANDROID_HOME: /opt/android-sdk
@@ -484,6 +543,8 @@ build:android:
 release:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG
   needs:
     - job: build:linux
       artifacts: false
