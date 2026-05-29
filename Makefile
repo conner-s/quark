@@ -54,7 +54,11 @@ android-dev: ## Run on a connected Android device / emulator (hot reload)
 	$(android_env) pnpm tauri android dev
 
 .PHONY: android-build
-android-build: ## Release APK + AAB for all four ABIs
+android-build: ## Release arm64 APK (covers all modern physical devices)
+	$(android_env) pnpm tauri android build --apk --target aarch64
+
+.PHONY: android-build-universal
+android-build-universal: ## Release APK + AAB for all four ABIs (~4x larger; Play Store / emulators)
 	$(android_env) pnpm tauri android build
 
 .PHONY: android-build-debug

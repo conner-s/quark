@@ -130,7 +130,11 @@ export function openEmojiPicker(initialTab: "emoji" | "sticker" = "emoji"): void
     id: cat.id,
     icon: cat.icon,
     name: cat.name,
-    entries: cat.entries.map(([shortcode, glyph]) => ({ key: glyph, shortcode })),
+    entries: cat.entries.map((e) => ({
+      key: e.glyph,
+      shortcode: e.shortcode,
+      keywords: [...(e.keywords ?? []), ...(e.aliases ?? [])],
+    })),
   }));
   emojiPicker.setCategories(builtinCategories);
 

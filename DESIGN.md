@@ -1,24 +1,49 @@
 # Quark — A CLI-Styled Matrix Client
 
+## Verification queue — 0.11.0 compose / media / mobile feature batch
+
+Branch `feature/compose-media-mobile-release`. Six features: #35, #44, #48, #50, #54, #45. `pnpm test` green (452). Mobile items need a fresh iOS/Android build to verify.
+
+### Compose — cross-platform
+- [x] **#54 Rich text formatting** — markdown in the compose box compiles to `org.matrix.custom.html` on send: `**bold**`, `*italic*`, `__underline__`, `~~strike~~`, `||spoiler||`, `` `code` ``. Desktop: Ctrl/Cmd+B/I/U and Ctrl/Cmd+Shift+X wrap the selection. Mobile: a formatting toolbar above the compose box wraps the selection. *New `markdown.ts` (tested); the formatted-body builder delegates to it.*
+- [x] **#45 Full compose Normal mode** — leave Insert with content in the box (Esc) → vim editing of the textarea: motions `w/b/e/0/^/$/h/l/j/k` with counts, operators `d/c/y` (+ `dd/cc/yy`, `D/C/Y`), `x`, `r`, insert-entry `i/a/A/I/o/O`, internal register `p/P`. `v` still enters Visual select. *New `compose_normal.ts` (tested); routed ahead of the read-only text-select handler.*
+    - [x] **Compose vim now follows nav rebinds** — the editor was driven by raw keys, bypassing the keymap, so quarkrc nav remaps (e.g. the documented ijkl scheme) never reached it. `keyboard.ts` now translates each physical key through `keymapManager.actionForKey()` (a new non-buffering single-key lookup) into the canonical motion key before the editor sees it. Only nav actions are rebindable today — operators/word-motions have no keymap action — so those pass through literally.
+
+### Media — cross-platform
+- [x] **#35 Video embeds** — pick a video via the attach button → sent as `m.video` (not `m.file`) so it renders as a playable embed; dimensions/duration are probed client-side for correct aspect ratio. *New `send_video` command + `timeline::send_video`.*
+- [x] **#48 Upload spinner** — sending an image/video/file shows a persistent braille spinner that resolves to ✓/error (matrix-sdk 0.9 has no byte-level progress). *New `showProgressToast()`.*
+
+### Emoji — cross-platform
+- [x] **#44 Full emoji set** — the picker shows the full Unicode set (1914 emoji, 9 categories) with keyword search, not the old 184-item curated list. *Generated from emojibase-data via `pnpm gen:emoji`; glyphs are fully-qualified (U+FE0F).* Verify reactions still aggregate with other clients.
+    - [x] **Picker spacing loosened** — the 184-item layout used a tight `gap: 2px` with zero cell padding, which felt cramped once the full set filled the grid. Bumped to `gap: 6px`, grid padding `8px`, and `3px` cell padding in `base.css`.
+
+### Mobile (needs build)
+- [x] **#50 Drag-to-open drawer** — a horizontal drag from anywhere pulls the room-list drawer along with the finger and snaps open/closed on release by travel + velocity (Discord-style), replacing the edge-only canned slide. Pull-down-for-command-palette still works.
+- [x] **#44 emoji grid perf** — open the picker on a phone; category switching and search stay smooth across the full set.
+- [~] **#54 mobile toolbar** — *punted.* The custom HTML formatting toolbar has been **removed**; mobile users format by typing markdown, desktop keeps the Ctrl/Cmd shortcuts. Surfacing real B/I/U/strike/spoiler items in the native OS long-press menu (the desired behaviour) isn't reachable from web JS — it needs native `UIEditMenuInteraction` (iOS) + Android `ActionMode.Callback` work plus a selection bridge. Tracked as a future native task.
+
+---
+
 ## Verification queue — 0.9.1 consistency + patch batch
 
 Branch `v0.9.1`. A consistency pass (every vim feature reachable by mouse/touch; every overlay dismissable via UI, Esc, **and** Ctrl+[) plus patch fixes for #33/#40/#43/#45/#49/#52/#53. `pnpm test` green (319). Mobile items need a fresh iOS/Android build to verify.
 
 ### Consistency pass — cross-platform
-- [ ] **Overlay dismissal via Ctrl+[** — open each and confirm Ctrl+[ closes it (the vim twin of Esc), matching Esc and the close button: GIF picker, device picker, command bar, reply preview, mention/shortcode autocomplete, image lightbox, verification dialog. *Fix: these handled Esc but not Ctrl+[, and the global keydown handler early-returns while they're visible, so each must handle it itself.*
-- [ ] **Help reachable by mouse** — Settings → General → **[keybindings & help]** opens the help/keybindings screen. *Previously only `?` / `:help`.*
-- [ ] **GIF button** — a **GIF** button sits beside 🙂 in the compose bar and opens the GIF picker. *Previously Ctrl+G only.*
+- [x] **Overlay dismissal via Ctrl+[** — open each and confirm Ctrl+[ closes it (the vim twin of Esc), matching Esc and the close button: GIF picker, device picker, command bar, reply preview, mention/shortcode autocomplete, image lightbox, verification dialog. *Fix: these handled Esc but not Ctrl+[, and the global keydown handler early-returns while they're visible, so each must handle it itself.*
+- [x] **Help reachable by mouse** — Settings → General → **[keybindings & help]** opens the help/keybindings screen. *Previously only `?` / `:help`.*
+- [x] **GIF button** — a **GIF** button sits beside 🙂 in the compose bar and opens the GIF picker. *Previously Ctrl+G only.*
+    - [x] **GIF button now follows the theme** — it inherited the icon buttons' `opacity: 0.5`, which reads fine on a coloured glyph but washed out the "GIF" text label. It now takes its colour from the theme (`--accent-secondary` text + `--border-color` badge, full opacity; inverts to accent-on-bg on hover).
 
 ### Mobile (needs build)
-- [ ] **Command palette (pull-down)** — open the room-list drawer and pull down from the top of the list → the command palette (`:`) opens and focuses. Only fires when the list is scrolled to the top. *Command mode was keyboard-only and unreachable by touch; desktop still uses `:`.*
-- [ ] **#52 Start in room list** — a fresh launch on mobile lands on the room list (drawer open), not an empty timeline. Selecting a room closes the drawer.
-- [ ] **#49 Re-tap current room closes drawer** — with a room open, open the drawer and tap that same room: the drawer dismisses. *Re-selecting didn't change `currentRoomId`, so the close-on-change listener never fired; `selectRoom` now closes the drawer directly.*
-- [ ] **#40 iOS autocorrect (follow-up to 0.9.0)** — compose field shows QuickType suggestions, sentence-casing, and spellcheck on iOS. *0.9.0 enabled the assist attributes but left `autocomplete="off"`, which suppresses QuickType on WKWebView; `autocomplete` is now toggled with the others (on for mobile, off on desktop).*
+- [x] **Command palette (pull-down)** — open the room-list drawer and pull down from the top of the list → the command palette (`:`) opens and focuses. Only fires when the list is scrolled to the top. *Command mode was keyboard-only and unreachable by touch; desktop still uses `:`.*
+- [x] **#52 Start in room list** — a fresh launch on mobile lands on the room list (drawer open), not an empty timeline. Selecting a room closes the drawer.
+- [x] **#49 Re-tap current room closes drawer** — with a room open, open the drawer and tap that same room: the drawer dismisses. *Re-selecting didn't change `currentRoomId`, so the close-on-change listener never fired; `selectRoom` now closes the drawer directly.*
+- [x] **#40 iOS autocorrect (follow-up to 0.9.0)** — compose field shows QuickType suggestions, sentence-casing, and spellcheck on iOS. *0.9.0 enabled the assist attributes but left `autocomplete="off"`, which suppresses QuickType on WKWebView; `autocomplete` is now toggled with the others (on for mobile, off on desktop).*
 - [ ] **#33/#43 First-login room list** — fresh install, log in: the list populates without a relaunch even on a slow first sync. *Poll window extended from ~8s to ~30s with backoff, and it now also runs on session restore.*
 
 ### Cross-platform
-- [ ] **#53 Selection contrast** — select message text under each built-in theme; the highlight is clearly visible and the text readable. *`::selection` now uses `--accent-primary` with the page `--bg` as text, instead of the near-invisible per-theme `selection_bg`. Vim text-select rules override it locally and are unaffected.*
-- [ ] **#45 Shift+Enter newline** — in the compose box, Shift+Enter inserts a newline; Enter still sends. The box auto-grows with content up to ~6 lines, then scrolls. *Compose field is now a `<textarea>` (was an `<input>`); watch the send-fly animation and vim visual-select on the compose field.*
+- [x] **#53 Selection contrast** — select message text under each built-in theme; the highlight is clearly visible and the text readable. *`::selection` now uses `--accent-primary` with the page `--bg` as text, instead of the near-invisible per-theme `selection_bg`. Vim text-select rules override it locally and are unaffected.*
+- [x] **#45 Shift+Enter newline** — in the compose box, Shift+Enter inserts a newline; Enter still sends. The box auto-grows with content up to ~6 lines, then scrolls. *Compose field is now a `<textarea>` (was an `<input>`); watch the send-fly animation and vim visual-select on the compose field.*
 
 ---
 
@@ -27,13 +52,13 @@ Branch `v0.9.1`. A consistency pass (every vim feature reachable by mouse/touch;
 Branch `fix/mobile-formatting-issues`. Covers issues #34, #37, #38, #40, #42. iOS needs a fresh install to pick up the new Info.plist permission keys.
 
 ### Cross-platform
-- [ ] **#42 Spoiler text** — receive (or send from another client) a message containing a spoiler (`<span data-mx-spoiler>`). Confirm it renders blurred/blacked-out and reveals on click (desktop) or tap (mobile). A spoiler with a reason shows the reason as a tooltip. *Fix: `data-mx-spoiler` already survived into the DOM but had no styling/handler — added `setupSpoilers()` in Timeline + `.message__spoiler` CSS.*
+- [x] **#42 Spoiler text** — receive (or send from another client) a message containing a spoiler (`<span data-mx-spoiler>`). Confirm it renders blurred/blacked-out and reveals on click (desktop) or tap (mobile). A spoiler with a reason shows the reason as a tooltip. *Fix: `data-mx-spoiler` already survived into the DOM but had no styling/handler — added `setupSpoilers()` in Timeline + `.message__spoiler` CSS.*
 - [x] **#37 Edit/Delete in context menu** — right-click (desktop) or long-press (mobile) one of **your own** messages: the menu now shows **Edit** and **Delete** below the standard actions. Messages from others show neither. *Same callback feeds desktop + mobile, so this also resolves #34.*
 - [x] **#34 Long-hold delete on mobile** — long-press your own message → bottom sheet includes **Delete** (and **Edit**). Resolved together with #37.
 
 ### iOS (needs reinstall)
-- [ ] **#38 Camera crash** — tap 📎 attach, choose "Take Photo". Camera opens instead of crashing the app. *Fix: added `NSCameraUsageDescription` / `NSMicrophoneUsageDescription` / `NSPhotoLibraryUsageDescription` to `gen/apple/quark_iOS/Info.plist` — accessing the camera without the usage-description key is a hard crash on iOS.*
-- [ ] **#40 Autocorrect** — focus the compose field, type a misspelled / lowercase-first sentence. The soft keyboard now autocorrects, sentence-capitalises, and shows spellcheck. *Fix: the field hard-disabled `autocorrect`/`autocapitalize`/`spellcheck`; now enabled on mobile (where vim is off anyway), still off on desktop for the terminal feel.*
+- [x] **#38 Camera crash** — tap 📎 attach, choose "Take Photo". Camera opens instead of crashing the app. *Fix: added `NSCameraUsageDescription` / `NSMicrophoneUsageDescription` / `NSPhotoLibraryUsageDescription` to `gen/apple/quark_iOS/Info.plist` — accessing the camera without the usage-description key is a hard crash on iOS.*
+- [x] **#40 Autocorrect** — focus the compose field, type a misspelled / lowercase-first sentence. The soft keyboard now autocorrects, sentence-capitalises, and shows spellcheck. *Fix: the field hard-disabled `autocorrect`/`autocapitalize`/`spellcheck`; now enabled on mobile (where vim is off anyway), still off on desktop for the terminal feel.*
 
 ---
 
@@ -46,19 +71,19 @@ Branch `fix/mobile-issues-25-33`. 0.8.2 needs a fresh iPhone install (re-run `xc
 - [x] **#26 Long-press menu** — long-press a message, confirm bottom-sheet appears with Reply / React / Thread / Copy / View raw.
 - [x] **#28 Members button** — `@` button on right of top bar opens member list overlay.
 - [x] **#29 Profile edit** — tap avatar at bottom of space strip, tap `[edit profile]`, confirm: status field pre-fills, dialog appears at centre without jumping, save persists across relaunch.
-    - [ ] **Status on profile view wraps long text** — 0.8.2 added `overflow-wrap: anywhere` + `min-width: 0` to `.profile-dialog__value--status` so a long status doesn't overflow the dialog.
+    - [x] **Status on profile view wraps long text** — 0.8.2 added `min-width: 0` so a long status doesn't overflow the dialog, but paired it with `overflow-wrap: anywhere` + `word-break: break-word`, which split ordinary status text mid-word. Switched to `overflow-wrap: break-word` + `word-break: normal`: wraps on word boundaries, only breaking inside a single unbreakable token (e.g. a long URL).
 - [x] Member-list overlay has an opaque background (no timeline bleeding through).
 - [x] Drawer slide-out: edge-swipe from left ~32px feels responsive.
 - [x] Drawer drop-shadow only blooms when drawer is open.
-- [ ] **Image viewer touch (0.8.4)** — open an image. Pinch to zoom (stays anchored under the fingers), drag with one finger to pan, double-tap to toggle fit ↔ 2.5×. Confirm the zoom +/- / 1:1 buttons are gone but `⬇ download` and `✕ close` remain. Tap the backdrop to close.
+- [x] **Image viewer touch (0.8.4)** — open an image. Pinch to zoom (stays anchored under the fingers), drag with one finger to pan, double-tap to toggle fit ↔ 2.5×. Confirm the zoom +/- / 1:1 buttons are gone but `⬇ download` and `✕ close` remain. Tap the backdrop to close.
 
 ### Android (needs build)
 Run `make android-build` then sideload. All of the above iOS items apply, plus:
-- [ ] **#27 OS notifications** — on first launch after install, accept POST_NOTIFICATIONS prompt. Background the app and have someone message you in an unmuted room. Verify the notification fires. (Settings → Notifications → `[test notification]` is a quicker round-trip.)
-- [ ] **#30 Theme save** — Settings → Themes → pick a different theme. Confirm no "error" toast and the theme persists across relaunch. *Used to fail because `directories::ProjectDirs` returns None on Android.*
-- [ ] **#31 Back button** — with an overlay open, back closes it. With drawer open, back closes drawer. With nothing open, back **opens** the drawer (per the issue's request — confirm this matches your intent; if it should exit instead, say the word and I'll flip it).
-- [ ] **#32 Edge swipe** — confirm easier than 0.7.0 but doesn't fight the system back-gesture.
-- [ ] **#33 Login flow** — fresh install, log in, confirm the room list populates within ~8s without needing to relaunch.
+- [x] **#27 OS notifications** — on first launch after install, accept POST_NOTIFICATIONS prompt. Background the app and have someone message you in an unmuted room. Verify the notification fires. (Settings → Notifications → `[test notification]` is a quicker round-trip.)
+- [x] **#30 Theme save** — Settings → Themes → pick a different theme. Confirm no "error" toast and the theme persists across relaunch. *Used to fail because `directories::ProjectDirs` returns None on Android.*
+- [x] **#31 Back button** — with an overlay open, back closes it. With drawer open, back closes drawer. With nothing open, back **opens** the drawer (per the issue's request — confirm this matches your intent; if it should exit instead, say the word and I'll flip it).
+- [x] **#32 Edge swipe** — confirm easier than 0.7.0 but doesn't fight the system back-gesture.
+- [x] **#33 Login flow** — fresh install, log in, confirm the room list populates within ~8s without needing to relaunch.
 
 ### Desktop (macOS — verified login works)
 - [x] Settings file is still at `~/Library/Application Support/quark/config.toml` (not the temporary `zone.derg.quark/quark/` from 0.8.0).
@@ -66,11 +91,11 @@ Run `make android-build` then sideload. All of the above iOS items apply, plus:
 - [x] Browser-style back-button gesture (mouse 4/5, trackpad swipe): closes overlays via popstate. If this was a no-op before and now feels weird, file it.
 - [x] Profile button at bottom of space strip (now **below** the settings cog as of 0.8.2) opens the profile dialog with `[edit profile]` visible. Bottom margin bumped to 12px so the avatar isn't crammed against the status bar.
 - [x] `Thread` entry in the right-click message context menu works.
-- [ ] **Image viewer pan bounds (0.8.4)** — open an image, zoom in past fit, drag hard in every direction. The image can no longer be flung off-screen; an edge always stops at the viewport centre. Zoom back out and confirm it re-centres.
+- [x] **Image viewer pan bounds (0.8.4)** — open an image, zoom in past fit, drag hard in every direction. The image can no longer be flung off-screen; an edge always stops at the viewport centre. Zoom back out and confirm it re-centres.
 - [x] All existing tests still passing: `pnpm test` (currently 317).
 
 ### Cross-platform regression watch
-- [ ] First-login `_pollUntilRoomsLoaded` runs everywhere now; should be invisible on desktop. Watch for unnecessary re-renders or flicker.
+- [x] First-login `_pollUntilRoomsLoaded` runs everywhere now; should be invisible on desktop. Watch for unnecessary re-renders or flicker.
 - [x] Context menu now also listens to `touchstart` for outside-dismiss — touchscreen laptops on desktop might dismiss menus on touches that previously didn't.
 - [x] `ProfileDialog.show()` rewrote DM/edit button visibility independently. Sanity check that the dialog for *other* users (sender of a message, member-list focus) still hides the edit button and shows the message button.
 
@@ -711,7 +736,7 @@ quark/
 
 - [x] **Multi-platform builds** — GitLab CI pipeline (`.gitlab-ci.yml`).
   - **Gating:** the `test` job (`pnpm test` + `cargo test`; `pnpm build` also type-checks) and the advisory `lint` job (`cargo clippy`, `allow_failure`) run on **every** pipeline — tag pushes, merge requests, and branch pushes — so regressions are caught before merge, not just at release time. The `build:*` and `release` jobs are pinned to tag pushes via per-job `rules`.
-  - Jobs: `build:linux` (`.deb` + `.AppImage` + `.rpm`), `build:flatpak`, `build:windows` (`.msi` + NSIS `.exe`), `build:macos` (`.dmg` + `.app.tar.gz`), `build:android` (universal `.apk`).
+  - Jobs: `build:linux` (`.deb` + `.AppImage` + `.rpm`), `build:flatpak`, `build:windows` (`.msi` + NSIS `.exe`), `build:macos` (`.dmg` + `.app.tar.gz`), `build:android` (arm64-only `.apk` via `--target aarch64` — a universal all-ABI APK ran ~4x larger and overflowed the package-registry upload limit).
   - Each job runs `pnpm tauri build` (or `pnpm tauri android build --apk` for Android) and uploads its bundles to the project's Generic Package Registry under `quark/<tag>/quark-<tag>-<platform>.<ext>`. The `release` job creates a GitLab Release whose asset links point to those stable, externally-accessible URLs (not job-artifact URLs, which expire).
   - Secrets needed (optional): macOS notarisation — `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`; Android release signing — `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without Android keystore vars, the APK is debug-signed (installable on dev devices, not for public distribution).
   - **Android signing is done by Gradle** via the `release` `signingConfig` in `gen/android/app/build.gradle.kts`, which reads `keystore.properties` (local) or `ANDROID_KEYSTORE_PATH` + the password/alias env vars (CI). **Use one permanent keystore for every release, forever** — Android refuses to install an update whose signing certificate differs from the installed app (`INSTALL_FAILED_UPDATE_INCOMPATIBLE` / "App not installed"), so a new/rotated key forces every user to uninstall and reinstall. The CI debug-signed fallback key is regenerated per run and is therefore never upgradeable; public builds must be release-signed. The Android job runs `apksigner verify` and fails if the APK came out unsigned.
@@ -748,6 +773,7 @@ quark/
     - [x] `matrix-sdk` and `reqwest` switched to `rustls-tls` for `target_os = "android"` only — `native-tls` pulls in `openssl-sys`, which can't cross-compile to Android without a vendored OpenSSL build. Desktop + iOS keep `native-tls` so their existing TLS behaviour is unchanged.
     - [x] Makefile targets `android-init`, `android-dev`, `android-build`, `android-build-debug` export `ANDROID_HOME`, `NDK_HOME`, and `JAVA_HOME` automatically (defaults assume the macOS Android Studio layout).
     - [x] Debug APK builds cleanly for `aarch64-linux-android`.
+    - [x] **Local APK size fixed (~500MB → ~100MB)** — `make android-build` ran `pnpm tauri android build` with no `--target`, so Tauri's Gradle plugin defaulted to the `universal` flavor bundling all four ABIs (arm64-v8a, armeabi-v7a, x86, x86_64) ≈ 4x the per-ABI size. CI had already been cut back to `--target aarch64` but the Makefile was never updated. Fixed: `android-build` now builds arm64-only (matching CI); the old behaviour moved to `android-build-universal`. Also added `[profile.release]` `strip = true` + `lto = true` to `Cargo.toml` — Cargo's default release profile left the JNI `.so` unstripped and nothing in the Gradle release path re-strips it, so this also trims the CI arm64 build.
     - [x] Config persistence works on Android — routed through `app_handle.path().app_config_dir()` so `directories::ProjectDirs` returning `None` on Android no longer breaks theme/notification save.
     - [x] Hardware back button is wired: seeds a history entry on startup and uses `popstate` to close the topmost overlay, then member list, then thread, then drawer; with nothing else open, the back press toggles the drawer.
     - [x] OS notification permission (POST_NOTIFICATIONS, Android 13+) is requested on login + session-restore via the notification plugin. Settings → Notifications has a "test notification" button for verification.

@@ -26,6 +26,37 @@ describe("KeymapManager", () => {
     expect(result).toEqual({ kind: "none" });
   });
 
+  // ── Single-key lookup (actionForKey, no sequence buffering) ───────────
+
+  it("actionForKey returns the bound action without touching the sequence buffer", () => {
+    km.nmap("h", "nav-left");
+    km.nmap("gg", "jump-top");
+    km.resolveKey("g", "global"); // valid prefix of "gg" -> stays pending
+    expect(km.actionForKey("h", "global")).toBe("nav-left");
+    expect(km.pendingSequence).toBe("g"); // lookup must not clear it
+  });
+
+  it("actionForKey returns null for an unbound key", () => {
+    expect(km.actionForKey("w", "global")).toBeNull();
+  });
+
+  it("actionForKey honours quarkrc nav remaps (ijkl scheme)", () => {
+    // The documented ijkl remap: j/k/l/; drive left/down/up/right.
+    km.nmap("j", "nav-left");
+    km.nmap("k", "nav-down");
+    km.nmap("l", "nav-up");
+    km.nmap(";", "nav-right");
+    expect(km.actionForKey("j", "global")).toBe("nav-left");
+    expect(km.actionForKey(";", "global")).toBe("nav-right");
+  });
+
+  it("actionForKey prefers a scoped binding over global", () => {
+    km.nmap("k", "nav-up");
+    km.tmap("k", "scroll-down");
+    expect(km.actionForKey("k", "timeline")).toBe("scroll-down");
+    expect(km.actionForKey("k", "global")).toBe("nav-up");
+  });
+
   // ── Multi-key sequences ───────────────────────────────────────────────
 
   it("returns partial on first key of a multi-key sequence", () => {

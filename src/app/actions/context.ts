@@ -16,6 +16,7 @@
 
 import { AppState } from "../state.js";
 import { registerAnimatedUrl } from "../animated_urls.js";
+import { markdownToHtml } from "../markdown.js";
 
 import {
   getThumbnail,
@@ -325,48 +326,16 @@ export function roomMemberToEntry(m: RoomMember): MemberEntry {
 }
 
 /**
- * Scan `body` for `:shortcode:` patterns and, for any that match a known
- * custom emoji, return an HTML `formatted_body` string with each custom emoji
- * replaced by an `<img data-mx-emoticon>` tag (MSC2545 / Matrix custom emoji).
+ * Build the HTML `formatted_body` for a compose-box message: inline markdown
+ * (bold/italic/underline/strikethrough/spoiler/code, see {@link markdownToHtml})
+ * plus custom-emoji shortcodes resolved to `<img data-mx-emoticon>` tags
+ * (MSC2545).
  *
- * Returns `undefined` if the body contains no resolvable custom emoji
- * shortcodes so the message is sent as plain text.
+ * Returns `undefined` if the body has no formatting and no resolvable custom
+ * emoji, so the message is sent as plain text only.
  */
 export function _buildFormattedBodyWithEmoji(body: string): string | undefined {
-  const SHORTCODE_RE = /:([a-zA-Z0-9_-]+):/g;
-  let hasCustom = false;
-
-  // First pass: check if there are any resolvable shortcodes.
-  let m: RegExpExecArray | null;
-  while ((m = SHORTCODE_RE.exec(body)) !== null) {
-    if (_shortcodeToMxc.has(m[1])) {
-      hasCustom = true;
-      break;
-    }
-  }
-  if (!hasCustom) return undefined;
-
-  // Second pass: build the HTML body.
-  // Escape plain-text segments so they're safe in HTML.
-  const escape = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  let html = "";
-  let last = 0;
-  SHORTCODE_RE.lastIndex = 0;
-  while ((m = SHORTCODE_RE.exec(body)) !== null) {
-    const [fullMatch, shortcode] = m;
-    const mxc = _shortcodeToMxc.get(shortcode);
-    html += escape(body.slice(last, m.index));
-    if (mxc) {
-      html += `<img data-mx-emoticon src="${mxc}" alt=":${shortcode}:" title=":${shortcode}:">`;
-    } else {
-      html += escape(fullMatch);
-    }
-    last = m.index + fullMatch.length;
-  }
-  html += escape(body.slice(last));
-  return html;
+  return markdownToHtml(body, { resolveEmoji: (shortcode) => _shortcodeToMxc.get(shortcode) });
 }
 
 /**

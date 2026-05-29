@@ -205,7 +205,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   // Now that mobile state is known, re-apply the compose field's soft-keyboard
   // assist attributes (constructor ran before initMobile with the desktop default).
   input.applyTextAssist();
-  setupTouchGestures(mainLayout, roomList.getElement(), {
+  setupTouchGestures(mainLayout, {
     scrollEl: roomList.getScrollElement(),
     // The quick-nav palette (Ctrl+K on desktop) is unreachable by touch. Pulling
     // down from the top of the room list opens it; close the drawer first so the

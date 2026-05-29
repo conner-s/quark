@@ -87,6 +87,33 @@ export async function sendFile(
 }
 
 /**
+ * Upload base64-encoded video bytes and send as an m.video event so it renders
+ * as a playable embed. width/height/durationMs are probed client-side from the
+ * file and let the timeline reserve the correct aspect ratio before download.
+ */
+export async function sendVideo(
+  roomId: string,
+  dataBase64: string,
+  mimeType: string,
+  filename: string,
+  width?: number,
+  height?: number,
+  durationMs?: number,
+  fileSize?: number,
+): Promise<string> {
+  return invoke<string>("send_video", {
+    roomId,
+    dataBase64,
+    mimeType,
+    filename,
+    width: width ?? null,
+    height: height ?? null,
+    durationMs: durationMs ?? null,
+    fileSize: fileSize ?? null,
+  });
+}
+
+/**
  * Download media to a temp file on disk and return the absolute path.
  */
 export async function saveMediaToTemp(
