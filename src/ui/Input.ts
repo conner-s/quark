@@ -216,6 +216,12 @@ export class Input {
     this._composeBoxEl.appendChild(actionsEl);
 
     inputBar.appendChild(this._composeBoxEl);
+
+    // No mobile formatting toolbar: a custom HTML bar duplicates the native
+    // selection callout poorly, and surfacing real B/I/U/strike/spoiler items
+    // in the OS long-press menu needs native (UIEditMenuInteraction / Android
+    // ActionMode) work, which is out of scope here. Mobile users format by
+    // typing markdown; desktop keeps the Ctrl/Cmd shortcuts. (#54 — punted.)
     this._el.appendChild(inputBar);
   }
 
@@ -324,6 +330,29 @@ export class Input {
 
   setValue(text: string): void {
     this._fieldEl.value = text;
+    this._autoGrow();
+  }
+
+  /**
+   * Wrap the current selection in markdown markers (e.g. `**` for bold), or
+   * insert an empty pair with the caret between them when nothing is selected.
+   * The inner text stays selected so the user can keep typing or toggle again.
+   * Used by the desktop formatting shortcuts and the mobile toolbar (#54).
+   */
+  wrapSelection(marker: string, closing: string = marker): void {
+    const field = this._fieldEl;
+    const start = field.selectionStart ?? field.value.length;
+    const end = field.selectionEnd ?? field.value.length;
+    const selected = field.value.slice(start, end);
+    const before = field.value.slice(0, start);
+    const after = field.value.slice(end);
+    field.value = before + marker + selected + closing + after;
+
+    const innerStart = start + marker.length;
+    const innerEnd = innerStart + selected.length;
+    field.focus();
+    field.setSelectionRange(innerStart, innerEnd);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
     this._autoGrow();
   }
 

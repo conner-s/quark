@@ -329,6 +329,18 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       } as TimelineEvent);
       return "$mock-file-event-id";
     }
+    case "send_video": {
+      const filename = (args?.filename as string) ?? "video.mp4";
+      MOCK_TIMELINE.push({
+        ...mockEvent("@you:matrix.org", `[Video: ${filename}]`, 0),
+        msg_type: "m.video",
+        media_url: "",
+        media_mimetype: (args?.mimeType as string) ?? "video/mp4",
+        media_width: (args?.width as number) ?? null,
+        media_height: (args?.height as number) ?? null,
+      } as TimelineEvent);
+      return "$mock-video-event-id";
+    }
     case "send_sticker":
       return "$mock-sticker-event-id";
     case "get_own_profile":

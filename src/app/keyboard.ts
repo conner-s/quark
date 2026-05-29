@@ -2,6 +2,7 @@
 
 import { modeManager, Mode } from "../vim/mode.js";
 import { keymapManager } from "../vim/keybindings.js";
+import { ComposeNormalEditor } from "../vim/compose_normal.js";
 import { modalManager } from "../ui/ModalManager.js";
 import type { AppComponents } from "../ui/App.js";
 import type { ContextMenuEntry } from "../ui/ContextMenu.js";
@@ -457,6 +458,70 @@ function moveTextSelection(
   }
 }
 
+// Vim Normal-mode editor for the compose textarea (#45). Holds pending
+// count/operator state between keystrokes; reset whenever we leave the
+// compose-normal submode.
+const composeEditor = new ComposeNormalEditor();
+
+// The compose editor speaks canonical vim keys (h/j/k/l), but the user may have
+// remapped navigation in their quarkrc (e.g. the documented ijkl scheme). The
+// rest of the app honours those remaps because it resolves keys to action names
+// through the keymap; the compose editor didn't, so rebinds never reached it.
+// We bridge the gap by mapping a key's bound nav action back to the canonical
+// motion key before the editor sees it. Only nav actions are translated —
+// operators/word-motions have no keymap action to rebind, so they pass through
+// as literal keys and keep working.
+const NAV_ACTION_TO_COMPOSE_KEY: Record<string, string> = {
+  "nav-left": "h",
+  "nav-down": "j",
+  "nav-up": "k",
+  "nav-right": "l",
+};
+
+/**
+ * Translate a physical key into the canonical compose-editor key, honouring
+ * quarkrc nav remaps. A key bound to a nav action becomes its motion key; any
+ * other key (operators, word motions, insert-entry, unbound keys) is returned
+ * unchanged so the editor's own grammar still applies.
+ */
+function translateComposeKey(key: string): string {
+  const action = keymapManager.actionForKey(key, "global");
+  if (action && action in NAV_ACTION_TO_COMPOSE_KEY) {
+    return NAV_ACTION_TO_COMPOSE_KEY[action];
+  }
+  return key;
+}
+
+/**
+ * Routes keys for compose-box Normal mode (#45) through the vim editor:
+ * motions, operators, counts, x/D/C/Y, insert-entry, p/P, r. Returns true if
+ * the key was handled. Keys the editor doesn't own (v, :, copy/quote/paste)
+ * fall through to {@link handleTextSelectKeydown}.
+ */
+function handleComposeNormalKeydown(e: KeyboardEvent, components: AppComponents): boolean {
+  // Modifier combos (clipboard, Ctrl+K palette, …) and bare modifier presses
+  // are not editor commands — let them reach their handlers.
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") return false;
+
+  const field = components.input.getFieldElement();
+  const res = composeEditor.handleKey(translateComposeKey(e.key), field);
+  if (!res.consumed) return false;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (res.enterInsert) {
+    exitTextSelect();
+    composeEditor.reset();
+    modeManager.transition(Mode.Insert);
+    components.input.focus();
+  } else {
+    composeEditor.primeBlock(field);
+  }
+  return true;
+}
+
 /**
  * Routes keys when text-select mode is active.
  *
@@ -590,6 +655,24 @@ function handleInsertKeydown(e: KeyboardEvent, components: AppComponents): void 
     e.preventDefault();
     openGifPicker();
     return;
+  }
+
+  // Rich-text formatting shortcuts (#54): wrap the selection in markdown
+  // markers. Cmd on macOS, Ctrl elsewhere. Bold/italic/underline are the bare
+  // chord; strikethrough is Shift+X (no conventional bare chord), and the
+  // mobile toolbar covers the rest.
+  if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+    const key = e.key.toLowerCase();
+    let marker: string | null = null;
+    if (!e.shiftKey && key === "b") marker = "**";
+    else if (!e.shiftKey && key === "i") marker = "*";
+    else if (!e.shiftKey && key === "u") marker = "__";
+    else if (e.shiftKey && key === "x") marker = "~~";
+    if (marker) {
+      e.preventDefault();
+      input.wrapSelection(marker);
+      return;
+    }
   }
 
   // Enter → send message, reply, or commit an inline edit
@@ -936,6 +1019,7 @@ export function setupKeyboard(components: AppComponents): void {
       const alreadyInTextSelect = AppState.get("textSelectMode") !== null;
       if (enteringFromInsert && hasContent && AppState.get("vimMode")) {
         enterComposeTextSelect(input.getFieldElement());
+        composeEditor.reset(); // fresh sequence state for this editing session
         // Don't blur — the input field stays focused for caret-driven editing.
       } else if (!alreadyInTextSelect) {
         // Blur the input so normal-mode keys don't type into the textbox.
@@ -949,6 +1033,7 @@ export function setupKeyboard(components: AppComponents): void {
     // (Visual is the one mode where text-select makes sense alongside vim mode.)
     if (to === Mode.Insert || to === Mode.Command) {
       exitTextSelect();
+      composeEditor.reset();
     }
 
     // Visual → Normal while text-select is active: the user has been extending
@@ -1115,6 +1200,7 @@ export function setupKeyboard(components: AppComponents): void {
         }
         if (inTextSelect) {
           exitTextSelect();
+          composeEditor.reset();
           keymapManager.resetSequence();
           return;
         }
@@ -1144,6 +1230,13 @@ export function setupKeyboard(components: AppComponents): void {
     if (mode === Mode.Command) {
       // Command bar handles its own keydown — nothing to do here
       return;
+    }
+
+    // Compose-box Normal mode: route through the vim editor first so motions /
+    // operators / counts edit the textarea. Unhandled keys (v, :, copy, …) fall
+    // through to the text-select handler below.
+    if (AppState.get("textSelectMode") === "compose" && mode === Mode.Normal) {
+      if (handleComposeNormalKeydown(e, components)) return;
     }
 
     // Text-select submode takes precedence over the normal panel keymap so

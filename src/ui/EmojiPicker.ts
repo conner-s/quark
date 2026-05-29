@@ -11,6 +11,8 @@ export interface EmojiEntry {
   imageUrl?: string;
   /** Shortcode label, e.g. "partyblob" */
   shortcode: string;
+  /** Optional search keywords (CLDR tags + alias shortcodes) */
+  keywords?: string[];
 }
 
 export interface EmojiPickerCategory {
@@ -37,7 +39,7 @@ type StickerSelectCallback = (sticker: StickerEntry) => void;
 type TabChangeCallback = (tab: PickerTab) => void;
 type StickerTabActivatedCallback = () => void;
 
-const COLS = 8;
+const COLS = 7;
 const STICKER_COLS = 4;
 
 /** Keyboard-navigable emoji / sticker / GIF picker overlay. */
@@ -404,7 +406,10 @@ export class EmojiPicker extends PickerBase {
         ? this._categories.flatMap((c) => c.entries)
         : this._allEntries;
       this._filteredEntries = allEntries.filter(
-        (e) => e.shortcode.toLowerCase().includes(q) || e.key.includes(q)
+        (e) =>
+          e.shortcode.toLowerCase().includes(q) ||
+          e.key.includes(q) ||
+          (e.keywords?.some((kw) => kw.toLowerCase().includes(q)) ?? false)
       );
     } else {
       this._filteredEntries = this._allEntries;

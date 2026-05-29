@@ -7,26 +7,43 @@ import { PickerBase } from "./PickerBase.js";
 
 /** Build reaction data from the full built-in emoji set, with a set of pinned
  *  common reactions shown first so frequently-used emoji are always at the top. */
-const PINNED_EMOJI = new Set(["👍", "👎", "❤️", "😂", "🎉", "🚀", "👀", "🤔", "💯", "✅", "😮", "😢"]);
+
+// Glyphs carry a U+FE0F variation selector in the fully-qualified form
+// (e.g. "👍️"); strip it when matching so pinned/dedup logic is presentation
+// agnostic and doesn't depend on whether a glyph is qualified.
+const VARIATION_SELECTOR_16 = 0xfe0f;
+const stripVS = (s: string): string =>
+  [...s].filter((c) => c.codePointAt(0) !== VARIATION_SELECTOR_16).join("");
+
+const PINNED_ORDER = ["👍", "👎", "❤️", "😂", "🎉", "🚀", "👀", "🤔", "💯", "✅", "😮", "😢"].map(stripVS);
+const PINNED_EMOJI = new Set(PINNED_ORDER);
+
+// The built-in set now includes alias shortcodes, so the same glyph can appear
+// more than once; dedupe by glyph for the reaction grid (autocomplete keeps
+// every alias). First occurrence wins, so primary shortcodes are preferred.
+const _seenGlyphs = new Set<string>();
+const _uniqueEmoji = BUILTIN_EMOJI.filter((e) => {
+  const g = stripVS(e.key);
+  if (_seenGlyphs.has(g)) return false;
+  _seenGlyphs.add(g);
+  return true;
+});
 
 const BUILTIN_REACTION_DATA: { key: string; shortcode: string; imageUrl?: string }[] = [
   // Pinned common reactions first
-  ...BUILTIN_EMOJI
-    .filter((e) => PINNED_EMOJI.has(e.key))
-    .sort((a, b) => {
-      const order = [...PINNED_EMOJI];
-      return order.indexOf(a.key) - order.indexOf(b.key);
-    })
+  ..._uniqueEmoji
+    .filter((e) => PINNED_EMOJI.has(stripVS(e.key)))
+    .sort((a, b) => PINNED_ORDER.indexOf(stripVS(a.key)) - PINNED_ORDER.indexOf(stripVS(b.key)))
     .map((e) => ({ key: e.key, shortcode: e.shortcode })),
   // Then the rest of the emoji set
-  ...BUILTIN_EMOJI
-    .filter((e) => !PINNED_EMOJI.has(e.key))
+  ..._uniqueEmoji
+    .filter((e) => !PINNED_EMOJI.has(stripVS(e.key)))
     .map((e) => ({ key: e.key, shortcode: e.shortcode })),
 ];
 
 /** Set of glyphs belonging to each category, keyed by category id */
 const CATEGORY_GLYPHS = new Map<string, Set<string>>(
-  EMOJI_CATEGORIES.map((cat) => [cat.id, new Set(cat.entries.map(([, glyph]) => glyph))])
+  EMOJI_CATEGORIES.map((cat) => [cat.id, new Set(cat.entries.map((e) => e.glyph))])
 );
 
 /** Special category id reserved for MSC2545 custom emoji */

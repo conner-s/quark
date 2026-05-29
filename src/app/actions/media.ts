@@ -10,9 +10,10 @@ import {
   openMediaExternally,
   sendPastedImage,
   sendFile,
+  sendVideo,
 } from "../../ipc/index.js";
 
-import { showToast, showError, showSuccess } from "../../ui/NotificationToast.js";
+import { showProgressToast, showError, showSuccess } from "../../ui/NotificationToast.js";
 import { promptSaveFilePath } from "../../ui/SaveFileDialog.js";
 
 import { getComponents } from "./context.js";
@@ -42,8 +43,13 @@ export async function handleImagePaste(blob: Blob): Promise<void> {
     const ext = blob.type.split("/")[1] ?? "png";
     const filename = `pasted-image-${Date.now()}.${ext}`;
 
-    showToast("Uploading image…", "info");
-    await sendPastedImage(roomId, dataBase64, blob.type, filename);
+    const progress = showProgressToast("Uploading image…");
+    try {
+      await sendPastedImage(roomId, dataBase64, blob.type, filename);
+      progress.succeed("Image sent");
+    } catch (err) {
+      progress.fail(`Failed to send image: ${err instanceof Error ? err.message : String(err)}`);
+    }
   } catch (err) {
     showError(`Failed to send image: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -64,12 +70,34 @@ export async function handleFilePick(file: File): Promise<void> {
     for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
     const dataBase64 = btoa(binary);
 
-    if (file.type.startsWith("image/")) {
-      showToast("Uploading image…", "info");
-      await sendPastedImage(roomId, dataBase64, file.type, file.name);
-    } else {
-      showToast(`Uploading ${file.name}…`, "info");
-      await sendFile(roomId, dataBase64, file.type || "application/octet-stream", file.name, file.size);
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+    const noun = isImage ? "image" : isVideo ? "video" : "file";
+    const progress = showProgressToast(`Uploading ${isImage ? "image" : file.name}…`);
+    try {
+      if (isImage) {
+        await sendPastedImage(roomId, dataBase64, file.type, file.name);
+      } else if (isVideo) {
+        // Send as m.video (not m.file) so it renders as a playable embed. Probe
+        // dimensions/duration up front so the timeline can reserve the right
+        // aspect ratio before the video is downloaded.
+        const meta = await probeVideoMetadata(file);
+        await sendVideo(
+          roomId,
+          dataBase64,
+          file.type,
+          file.name,
+          meta?.width,
+          meta?.height,
+          meta?.durationMs,
+          file.size,
+        );
+      } else {
+        await sendFile(roomId, dataBase64, file.type || "application/octet-stream", file.name, file.size);
+      }
+      progress.succeed(`${noun.charAt(0).toUpperCase()}${noun.slice(1)} sent`);
+    } catch (err) {
+      progress.fail(`Failed to send ${noun}: ${err instanceof Error ? err.message : String(err)}`);
     }
   } catch (err) {
     showError(`Failed to send file: ${err instanceof Error ? err.message : String(err)}`);
@@ -157,6 +185,36 @@ export function setupMessageActionHandlers(): void {
     } else {
       void _openVideoExternally(mxcUrl, encryptionInfo, filename).finally(stopLoading);
     }
+  });
+}
+
+/**
+ * Probe a video file's intrinsic dimensions and duration via a detached
+ * <video> element. Best-effort: resolves to undefined if metadata can't be
+ * read (unsupported codec, etc.) so the send still goes through without info.
+ */
+function probeVideoMetadata(
+  file: File,
+): Promise<{ width: number; height: number; durationMs: number } | undefined> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    let settled = false;
+    const finish = (result: { width: number; height: number; durationMs: number } | undefined) => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(url);
+      resolve(result);
+    };
+    video.onloadedmetadata = () => {
+      const durationMs = Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : 0;
+      finish({ width: video.videoWidth, height: video.videoHeight, durationMs });
+    };
+    video.onerror = () => finish(undefined);
+    // Guard against metadata that never fires (e.g. codec the webview can't parse).
+    setTimeout(() => finish(undefined), 3000);
+    video.src = url;
   });
 }
 

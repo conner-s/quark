@@ -2310,10 +2310,15 @@ span.reaction__emoji {
 }
 
 .emoji-picker__grid {
+  /* Fixed-size emoji cells that flow into as many columns as fit (7 at the
+     340px panel width). Decoupling cell height from the flexible column width
+     — no more aspect-ratio — lets row-gap alone control vertical spacing. */
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 2px;
-  padding: 6px;
+  grid-template-columns: repeat(auto-fill, 34px);
+  justify-content: center;
+  column-gap: 10px;
+  row-gap: 12px;
+  padding: 10px;
   overflow-y: auto;
   overflow-x: hidden;
   flex: 1;
@@ -2321,7 +2326,8 @@ span.reaction__emoji {
 }
 
 .emoji-picker__cell {
-  aspect-ratio: 1;
+  width: 34px;
+  height: 34px;
   background: transparent;
   border: none;
   border-radius: 4px;
@@ -2329,10 +2335,10 @@ span.reaction__emoji {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 20px;
   outline: none;
   overflow: hidden;
-  padding: 0;
+  padding: 3px;
   min-width: 0;
 }
 
@@ -2580,11 +2586,24 @@ span.reaction__emoji {
 }
 
 /* GIF button is a text label, not a glyph — render it as a compact badge so it
-   sits at the same visual weight as the emoji/attach icons beside it. */
+   sits at the same visual weight as the emoji/attach icons beside it.
+   A glyph reads fine at the base 0.5 opacity, but a text label washes out, so
+   the GIF badge takes its colour straight from the theme (accent + border) and
+   stays fully opaque instead of inheriting the dimmed icon treatment. */
 .input-bar__action-btn--gif {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.5px;
+  opacity: 1;
+  color: var(--accent-secondary);
+  border-color: var(--border-color);
+  padding: 2px 5px;
+}
+
+.input-bar__action-btn--gif:hover {
+  color: var(--bg);
+  background-color: var(--accent-secondary);
+  border-color: var(--accent-secondary);
 }
 
 /* ── Send animations ─────────────────────────────────────────────────────── */
@@ -3671,13 +3690,15 @@ a:hover {
 }
 
 /* The status value can be arbitrary user text (including long URLs or
- * languages without spaces). Without word-break + min-width: 0 the flex
- * row would push past the dialog and clip horizontally. */
+ * languages without spaces). min-width: 0 lets the flex row wrap instead of
+ * pushing past the dialog. Wrap on word boundaries — only break inside a word
+ * when a single unbroken token (e.g. a long URL) can't fit on its own line,
+ * so ordinary status text never splits mid-word. */
 .profile-dialog__value--status {
   min-width: 0;
   flex: 1 1 auto;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .profile-dialog__copy-btn {
@@ -5700,7 +5721,9 @@ body.quark-mobile .room-list {
  * 24px into the viewport from the right edge of the off-screen panel and made
  * the edge-swipe target look smudged. */
 body.quark-mobile-drawer-open .space-strip,
-body.quark-mobile-drawer-open .room-list {
+body.quark-mobile-drawer-open .room-list,
+body.quark-mobile.quark-drawer-dragging .space-strip,
+body.quark-mobile.quark-drawer-dragging .room-list {
   box-shadow: 0 0 24px var(--shadow-color);
 }
 
@@ -5732,6 +5755,24 @@ body.quark-mobile .room-list__scroll {
 body.quark-mobile-drawer-open .space-strip,
 body.quark-mobile-drawer-open .room-list {
   transform: translateX(0);
+}
+
+/* While a drag is in flight the drawer follows the finger: --drawer-shut runs
+ * from 1 (fully closed) to 0 (fully open), set live from touchmove. The
+ * transforms are written so shut:1 matches the closed resting state and shut:0
+ * matches the open one, so releasing the drag (which drops .quark-drawer-
+ * dragging and lets the transition animate) hands off without a jump. */
+body.quark-mobile.quark-drawer-dragging .space-strip,
+body.quark-mobile.quark-drawer-dragging .room-list {
+  transition: none;
+}
+
+body.quark-mobile.quark-drawer-dragging .space-strip {
+  transform: translateX(calc(-100% * var(--drawer-shut, 1)));
+}
+
+body.quark-mobile.quark-drawer-dragging .room-list {
+  transform: translateX(calc((-100% - var(--space-strip-width)) * var(--drawer-shut, 1)));
 }
 
 /* While the drawer is open, fully lock the content area so the timeline

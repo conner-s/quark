@@ -718,6 +718,57 @@ pub async fn send_file(
     Ok(event_id)
 }
 
+/// Send a video (m.video) event to a room.
+pub async fn send_video(
+    client: &Client,
+    room_id: &str,
+    body: &str,
+    mxc_url: &str,
+    mime_type: &str,
+    width: Option<u64>,
+    height: Option<u64>,
+    duration_ms: Option<u64>,
+    file_size: Option<u64>,
+) -> Result<String, String> {
+    use matrix_sdk::ruma::{
+        events::room::{
+            message::{VideoMessageEventContent, VideoInfo},
+            MediaSource,
+        },
+        MxcUri,
+    };
+    use std::time::Duration;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {} not found", room_id))?;
+
+    let mxc_uri = <&MxcUri>::try_from(mxc_url).map_err(|e| format!("Invalid mxc URI: {e}"))?;
+    let source = MediaSource::Plain(mxc_uri.to_owned());
+
+    let mut video_info = VideoInfo::default();
+    video_info.mimetype = Some(mime_type.to_string());
+    video_info.width = width.and_then(|w| UInt::try_from(w).ok());
+    video_info.height = height.and_then(|h| UInt::try_from(h).ok());
+    video_info.size = file_size.and_then(|s| UInt::try_from(s).ok());
+    video_info.duration = duration_ms.map(Duration::from_millis);
+
+    let mut video_content = VideoMessageEventContent::new(body.to_string(), source);
+    video_content.info = Some(Box::new(video_info));
+
+    let msg_content = RoomMessageEventContent::new(MessageType::Video(video_content));
+
+    let response = room
+        .send(msg_content)
+        .await
+        .map_err(|e| format!("Failed to send video: {e}"))?;
+
+    let event_id = response.event_id.to_string();
+    info!(event_id = %event_id, "Video sent");
+    Ok(event_id)
+}
+
 /// Fetch events surrounding a specific event using the Matrix /context endpoint.
 /// Returns a window of messages centered on the target event, ordered oldest-first.
 pub async fn get_event_context(

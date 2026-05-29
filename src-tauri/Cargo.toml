@@ -1,6 +1,6 @@
 [package]
 name = "quark"
-version = "0.10.0"
+version = "0.11.1"
 edition = "2021"
 description = "A CLI-styled Matrix client"
 
@@ -50,6 +50,14 @@ tempfile = "3"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+# Cargo's default release profile keeps symbol tables, which leaves the Android
+# JNI .so (libquark_lib.so) unstripped — and nothing in the Gradle release path
+# re-strips it. Strip here so every ABI ships lean; LTO shrinks the binary
+# further. opt-level stays at the default 3 so desktop runtime perf is unchanged.
+[profile.release]
+strip = true
+lto = true
 
 # macOS Tahoe: objc2 debug assertions panic on removed NSApplicationDelegate methods
 [profile.dev.package.objc2]

@@ -786,6 +786,47 @@ pub async fn send_file(
     .await
 }
 
+/// Upload video data (base64-encoded) and send it as an m.video event.
+/// Used for the file picker attach flow when a video file is chosen, so it
+/// renders as a playable embed rather than a generic file attachment.
+#[tauri::command]
+pub async fn send_video(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    data_base64: String,
+    mime_type: String,
+    filename: String,
+    width: Option<u64>,
+    height: Option<u64>,
+    duration_ms: Option<u64>,
+    file_size: Option<u64>,
+) -> Result<String, String> {
+    let client = get_client(&state)?;
+
+    let data = crate::matrix::media::decode_base64(&data_base64)?;
+
+    let mxc_url = crate::matrix::media::upload_media(
+        &client,
+        data,
+        &mime_type,
+        Some(&filename),
+    )
+    .await?;
+
+    crate::matrix::timeline::send_video(
+        &client,
+        &room_id,
+        &filename,
+        &mxc_url,
+        &mime_type,
+        width,
+        height,
+        duration_ms,
+        file_size,
+    )
+    .await
+}
+
 #[tauri::command]
 pub async fn send_sticker(
     state: State<'_, MatrixState>,

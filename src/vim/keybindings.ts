@@ -142,6 +142,25 @@ export class KeymapManager {
     return { kind: "none" };
   }
 
+  /**
+   * Single-key exact lookup (scoped beats global) that does NOT touch the
+   * pending-sequence buffer. Submodes that run their own multi-key grammar —
+   * e.g. the compose-box vim editor, which composes counts + operators +
+   * motions itself — can't feed keys through {@link resolveKey} without
+   * fighting its sequence buffering, but still need to know what a single
+   * physical key is bound to so user remaps apply. Returns the action, or null.
+   */
+  actionForKey(key: string, activeContext: KeyContext): string | null {
+    const scoped = this._entries.find(
+      (e) => e.context === activeContext && e.sequence === key
+    );
+    if (scoped) return scoped.action;
+    const global = this._entries.find(
+      (e) => e.context === "global" && e.sequence === key
+    );
+    return global ? global.action : null;
+  }
+
   /** Reset any pending sequence (e.g. on Escape) */
   resetSequence(): void {
     this._clearTimeout();
