@@ -1,8 +1,8 @@
-# Quark
+<h1><img src="src-tauri/icons/quarklogo512.png" alt="" height="32" align="top"> Quark</h1>
 
 **A keyboard-driven, terminal-aesthetic Matrix client.**
 
-![version](https://img.shields.io/badge/version-0.10.0-00ff41) ![license](https://img.shields.io/badge/license-AGPL--3.0-blue) ![stack](https://img.shields.io/badge/Tauri-v2-ffc131)
+![version](https://img.shields.io/badge/version-0.11.0-00ff41) ![license](https://img.shields.io/badge/license-AGPL--3.0-blue) ![stack](https://img.shields.io/badge/Tauri-v2-ffc131)
 
 Quark is a [Matrix](https://matrix.org) chat client that looks like a terminal but renders in a real GUI window. You drive it with vim-style keys and a `:` command bar, while still getting inline images, animated GIFs, custom emoji, and stickers — things a true TUI can't render reliably.
 
