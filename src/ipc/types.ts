@@ -101,6 +101,8 @@ export interface TimelineEvent {
   media_mimetype: string | null;
   media_width: number | null;
   media_height: number | null;
+  /** Media caption (MSC2530) for image messages; absent when the body is just a filename. */
+  caption?: string | null;
   /** JSON-serialized EncryptedFile for E2EE media; absent for plain media. */
   media_encryption_info?: string | null;
   /** mxc:// URL for the video thumbnail image (from VideoInfo.thumbnail_source). */

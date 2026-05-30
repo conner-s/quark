@@ -127,6 +127,13 @@ let _unlisteners: UnlistenFn[] = [];
 export async function startSync(components: AppComponents): Promise<() => void> {
   const { timeline, roomList, statusBar, typingIndicator } = components;
 
+  // Tear down any listeners from a previous startSync() before registering a new
+  // set. Otherwise a second call (e.g. logout → login in the same session) would
+  // orphan the old listeners — `_unlisteners` is overwritten below, losing their
+  // unlisten handles — so every sync event would be handled twice (duplicate
+  // toasts, duplicate renders), compounding on each re-login.
+  stopSync();
+
   // ── quark://sync/message ──────────────────────────────────────────────────
   const unlistenMessage = await tauriListen<SyncNewMessagePayload>(
     "quark://sync/message",

@@ -1,5 +1,20 @@
 # Quark — A CLI-Styled Matrix Client
 
+## Verification queue — 0.11.2 bug patch batch
+
+Branch `v0.11.2`. Four bug fixes (#59, #60, #61, #63) plus a small timeline-load tweak. `pnpm test` green (460); `cargo test` green (190).
+
+### Cross-platform
+- [x] **#61 Image captions** — an `m.image` message with a media caption (MSC2530: a `body` distinct from its `filename`) now renders the caption beneath the image. Bare-filename bodies are still suppressed, so uncaptioned images are unchanged. *Rust surfaces `image.caption()` as a new `TimelineEvent.caption`; `Timeline` renders it as `.message__image-caption`.*
+- [x] **#60 Sticker aspect ratio** — non-square stickers no longer stretch in the timeline. *`.message__sticker` lacked `object-fit: contain` (the image and thread-inline rules already had it), so the bitmap filled the attribute-reserved box instead of letterboxing into it.*
+- [x] **#59 Double message render** — sending a message whose sync echo beats the send-IPC response no longer leaves a permanent duplicate. *Race: while the optimistic node still carried its `optimistic-…` ID, all three sync-path dedup checks missed, so the echo was appended; `confirmMessage` then renamed the optimistic node to the same event ID. It now drops the optimistic node when the echo already rendered the event.*
+- [x] **#63 Duplicate OS notifications** — a single message could raise ~20 system notifications. *The matrix-sdk message handler had no per-event dedup, so any re-delivery (the sync loop retries after a transient error and replays events from before the sync token advanced) fired another notification. Added a bounded event-ID set (`claim_notification`) so each event notifies once. Also hardened the frontend: `startSync` now tears down its prior listeners before re-registering, instead of orphaning them on a second call (logout→login), which would otherwise double every sync handler.*
+
+### Performance
+- [x] **Timeline media loads in parallel with member fetch** — image / reaction-emoji / inline-emoji downloads depend only on the (already-fetched) timeline events, but were gated behind `await getRoomMembers(...)`. Moved ahead of the member round-trip so images start loading immediately after the timeline renders. (Larger wins — virtual scrolling, IPC payload size — are out of scope for a patch.)
+
+---
+
 ## Verification queue — 0.11.0 compose / media / mobile feature batch
 
 Branch `feature/compose-media-mobile-release`. Six features: #35, #44, #48, #50, #54, #45. `pnpm test` green (452). Mobile items need a fresh iOS/Android build to verify.

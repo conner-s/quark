@@ -166,6 +166,14 @@ export async function selectRoom(roomId: string): Promise<void> {
     timeline.onScrollToTop(() => void loadMoreMessages());
     timeline.onScrollToBottom(() => void loadMoreMessagesForward());
 
+    // Kick off media/emoji downloads now — these depend only on the timeline
+    // events (already fetched) and the rendered DOM, not on member data. Starting
+    // them here lets images load in parallel with the member round-trip below
+    // instead of waiting for it.
+    _downloadMessageImages(events, timeline);
+    void _downloadReactionEmoji(events, timeline);
+    _downloadInlineEmoji(timeline);
+
     // Members arrive asynchronously — update display names and avatars when ready
     const members = await membersPromise;
     for (const m of members) {
@@ -213,17 +221,10 @@ export async function selectRoom(roomId: string): Promise<void> {
         }
       }
 
-      // Download uncached avatar thumbnails in the background
+      // Download uncached avatar thumbnails in the background. This depends on
+      // member data, so it stays here; the media/emoji downloads were already
+      // started above in parallel with the member fetch.
       _downloadMemberAvatars(members, timeline);
-
-      // Download mxc:// image content in the background
-      _downloadMessageImages(events, timeline);
-
-      // Resolve any mxc:// custom emoji used in reaction chips
-      void _downloadReactionEmoji(events, timeline);
-
-      // Resolve mxc:// URLs for inline custom emoji in formatted message bodies
-      _downloadInlineEmoji(timeline);
     }
   } catch (err) {
     showError(`Failed to load timeline: ${err instanceof Error ? err.message : String(err)}`);

@@ -127,6 +127,46 @@ describe("Timeline", () => {
       const body = timeline.getElement().querySelector(".message__body");
       expect(body).toBeNull();
     });
+
+    it("renders the caption beneath an image when present", () => {
+      timeline.setMessages([
+        makeMsg({ type: "image", mediaUrl: "https://x.com/img.png", caption: "a wild sunset" }),
+      ]);
+
+      const caption = timeline.getElement().querySelector(".message__image-caption");
+      expect(caption).not.toBeNull();
+      expect(caption?.textContent).toBe("a wild sunset");
+    });
+  });
+
+  describe("confirmMessage", () => {
+    it("promotes an optimistic message to its real event ID", () => {
+      timeline.setMessages([]);
+      timeline.appendMessage(makeMsg({ id: "optimistic-1", body: "hi" }));
+
+      timeline.confirmMessage("optimistic-1", "$real:server");
+
+      expect(timeline.getMessageElementById("$real:server")).not.toBeNull();
+      expect(timeline.getMessageElementById("optimistic-1")).toBeNull();
+    });
+
+    it("drops the optimistic duplicate when the sync echo already rendered the event", () => {
+      timeline.setMessages([]);
+      // Optimistic local echo, still keyed by its temporary ID...
+      timeline.appendMessage(makeMsg({ id: "optimistic-1", body: "hi" }));
+      // ...then the homeserver sync echo wins the race and is appended under the
+      // real event ID (the sync-path dedup checks all miss in this window).
+      timeline.appendMessage(makeMsg({ id: "$real:server", body: "hi" }));
+
+      timeline.confirmMessage("optimistic-1", "$real:server");
+
+      // The duplicate is collapsed: exactly one node carries the real event ID.
+      expect(
+        timeline.getElement().querySelectorAll('[data-message-id="$real:server"]'),
+      ).toHaveLength(1);
+      expect(timeline.getMessageElementById("optimistic-1")).toBeNull();
+      expect(timeline.getElement().querySelectorAll(".message__body")).toHaveLength(1);
+    });
   });
 
   describe("reply messages", () => {

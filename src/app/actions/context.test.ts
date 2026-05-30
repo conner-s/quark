@@ -237,6 +237,13 @@ describe("timelineEventToMessage", () => {
     expect(timelineEventToMessage(makeEvent({ sender: "@other:x" })).isOwn).toBe(false);
   });
 
+  it("maps the image caption when present and leaves it undefined otherwise", () => {
+    expect(
+      timelineEventToMessage(makeEvent({ msg_type: "m.image", caption: "a wild sunset" })).caption,
+    ).toBe("a wild sunset");
+    expect(timelineEventToMessage(makeEvent({ msg_type: "m.image" })).caption).toBeUndefined();
+  });
+
   it("resolves the sender name from the member cache", () => {
     _memberDisplayName.set("@bob:x", "Bob");
     expect(timelineEventToMessage(makeEvent({ sender: "@bob:x" })).senderName).toBe("Bob");

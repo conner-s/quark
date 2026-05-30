@@ -311,6 +311,8 @@ export interface MessageData {
   /** Natural pixel dimensions of the image — used to reserve layout space before src loads */
   mediaWidth?: number;
   mediaHeight?: number;
+  /** Media caption (MSC2530) shown beneath an image; absent when the body is just a filename. */
+  caption?: string;
   /** MIME type for media messages (used for video canPlayType check) */
   mediaMimeType?: string;
   /** JSON-serialized EncryptedFile for E2EE video/audio; absent for plain media */
@@ -607,6 +609,13 @@ function buildMessageElement(msg: MessageData): HTMLElement {
       img.dataset.gif = "1";
     }
     row.appendChild(img);
+    // Render the media caption (MSC2530) beneath the image, when present.
+    if (msg.caption) {
+      const caption = document.createElement("div");
+      caption.className = "message__body message__image-caption";
+      caption.textContent = msg.caption;
+      row.appendChild(caption);
+    }
   } else if (type === "video") {
     row.classList.add("message--video");
     const aff = buildVideoAffordance(msg.mediaUrl, msg.mediaAlt, msg.mediaMimeType, msg.mediaEncryptionInfo, msg.mediaThumbnailUrl, msg.mediaThumbnailEncryptionInfo);
@@ -2271,6 +2280,16 @@ export class Timeline {
    * reactions, edits, and selection all target the real event ID.
    */
   confirmMessage(optimisticId: string, realEventId: string): void {
+    // Race guard: if the homeserver's sync echo for this event arrived before
+    // the send IPC resolved, a message keyed by the real event ID is already
+    // rendered (the sync dedup checks all miss while the node still carries its
+    // optimistic ID). Renaming the optimistic node would then leave two nodes
+    // sharing one event ID — a permanent duplicate. Instead, drop the optimistic
+    // node and keep the echo (it is the canonical copy, already in state).
+    if (this._messages.some((m) => m.id === realEventId)) {
+      this.removeMessage(optimisticId);
+      return;
+    }
     const idx = this._messages.findIndex((m) => m.id === optimisticId);
     if (idx >= 0) {
       this._messages[idx] = { ...this._messages[idx], id: realEventId };

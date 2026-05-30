@@ -23,6 +23,7 @@ use matrix_sdk::{
     Client, Room,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
 use tauri::{Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
@@ -44,6 +45,39 @@ pub fn init_startup_time() {
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
     let _ = STARTUP_TIME_MS.set(now);
+}
+
+/// Event IDs already surfaced as an OS notification, newest at the back.
+/// Bounded to the most recent [`MAX_NOTIFIED_IDS`] entries.
+static NOTIFIED_EVENT_IDS: Mutex<VecDeque<String>> = Mutex::new(VecDeque::new());
+
+/// Upper bound on remembered notification event IDs. A few hundred covers any
+/// realistic burst of re-deliveries while keeping the scan and memory trivial.
+const MAX_NOTIFIED_IDS: usize = 256;
+
+/// Record that `event_id` is about to be notified, returning `true` if it is
+/// new (notify) or `false` if it was already notified (skip).
+///
+/// The matrix-sdk sync loop can hand the same message event to our handler more
+/// than once — e.g. when `client.sync()` retries after a transient error and
+/// re-delivers events from before the sync token advanced. Without this guard
+/// each re-delivery raises another OS notification, so one message can produce
+/// a burst of duplicates. Deduping by event ID collapses them to one.
+fn claim_notification(event_id: &str) -> bool {
+    let mut ids = match NOTIFIED_EVENT_IDS.lock() {
+        Ok(ids) => ids,
+        // On a poisoned lock, fail open: better one possible duplicate than a
+        // silently dropped notification.
+        Err(_) => return true,
+    };
+    if ids.iter().any(|id| id == event_id) {
+        return false;
+    }
+    ids.push_back(event_id.to_string());
+    if ids.len() > MAX_NOTIFIED_IDS {
+        ids.pop_front();
+    }
+    true
 }
 
 use crate::{
@@ -197,7 +231,10 @@ pub fn setup_sync_event_handlers(client: &Client, app_handle: &tauri::AppHandle)
                         emit_notification && !is_own_message && !window_focused && !is_pre_startup
                     };
 
-                    if should_send_os_notification {
+                    // `claim_notification` is short-circuited behind the checks
+                    // above so an event ID is only remembered when we genuinely
+                    // notify — and a re-delivered event is suppressed here.
+                    if should_send_os_notification && claim_notification(&timeline_event.event_id) {
                         // Fetch config again for formatting.
                         if let Some(config_state) =
                             app.try_state::<Mutex<NotificationConfig>>()
@@ -532,6 +569,13 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
         (is_edit, relates_to, reply_to, t_root)
     };
 
+    // Media captions (MSC2530): only present when a distinct filename is set, so
+    // a bare-filename body is not surfaced as a caption.
+    let caption = match effective_msgtype {
+        MessageType::Image(image) => image.caption().map(|c| c.to_owned()),
+        _ => None,
+    };
+
     Some(TimelineEvent {
         event_id,
         sender,
@@ -547,6 +591,7 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
         media_mimetype,
         media_width,
         media_height,
+        caption,
         media_encryption_info,
         media_thumbnail_url: None,
         media_thumbnail_encryption_info: None,
@@ -594,6 +639,7 @@ mod tests {
             media_mimetype: None,
             media_width: None,
             media_height: None,
+            caption: None,
             media_encryption_info: None,
             media_thumbnail_url: None,
             media_thumbnail_encryption_info: None,
@@ -750,5 +796,29 @@ mod tests {
         assert_eq!(EVENT_VERIFICATION_REQUEST, "quark://sync/verification_request");
         assert_eq!(EVENT_UNREAD_COUNT, "quark://sync/unread_count");
         assert_eq!(EVENT_CONNECTED, "quark://sync/connected");
+    }
+
+    // ── Notification dedup ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_claim_notification_dedupes_repeated_event() {
+        // Use unique IDs so this test is independent of the process-global set.
+        let id = "$claim-dedupe-test:example.com";
+        assert!(claim_notification(id), "first delivery should notify");
+        assert!(!claim_notification(id), "re-delivery should be suppressed");
+        assert!(!claim_notification(id), "still suppressed on a third delivery");
+    }
+
+    #[test]
+    fn test_claim_notification_evicts_oldest_past_cap() {
+        let first = "$evict-test-first:example.com";
+        assert!(claim_notification(first));
+        // Fill past the cap so `first` is evicted from the back-bounded deque.
+        for i in 0..MAX_NOTIFIED_IDS {
+            assert!(claim_notification(&format!("$evict-test-{i}:example.com")));
+        }
+        // Evicted → treated as new again (notifies). Acceptable: the cap only
+        // bounds memory; a duplicate this far back in history is implausible.
+        assert!(claim_notification(first), "evicted ID should be claimable again");
     }
 }
