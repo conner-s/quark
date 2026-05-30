@@ -46,48 +46,46 @@ variables:
   CARGO_TERM_COLOR: always
   # Keep incremental artefacts out of the source tree so caches stay clean.
   CARGO_TARGET_DIR: $CI_PROJECT_DIR/src-tauri/target
+  # Put CARGO_HOME inside the workspace. GitLab only caches paths under
+  # $CI_PROJECT_DIR, so the previous $HOME/.cargo/* cache paths were silently
+  # skipped and crates re-downloaded on every job. Relocating it here makes the
+  # crate registry/cache genuinely cacheable.
+  CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  # Parallel cache (de)compression. The default single-threaded gzip is the main
+  # reason large Rust caches were slow to archive and extract; fastzip + the
+  # fastest level cut that dramatically.
+  FF_USE_FASTZIP: "true"
+  CACHE_COMPRESSION_LEVEL: "fastest"
   # Generic Package Registry base URL for this tag.
   PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/quark/${CI_COMMIT_TAG}"
 
 # ─── cache templates ────────────────────────────────────────────────────────
+#
+# Each Rust job uses two caches:
+#
+#   1. The cargo registry/index/git dirs — SHARED across every job (keyed only
+#      on Cargo.lock via the `cargo_registry_cache` anchor below). Small, stable,
+#      and image-independent, so one download warms every job's crate sources.
+#
+#   2. A per-job `target/` cache with its OWN key prefix (defined inline in each
+#      job). Previously test, lint and build:linux all shared one `rust-linux`
+#      key under the default pull-push policy, so they mixed debug + release
+#      artifacts into a single ballooning archive and raced to overwrite it on
+#      every pipeline. Separate prefixes keep each job's archive lean and stop
+#      the thrash.
+#
+# All paths live under $CI_PROJECT_DIR (CARGO_HOME is relocated there), so
+# GitLab actually caches them — unlike the old $HOME/.cargo/* paths.
 
-.cache_rust_linux: &cache_rust_linux
-  cache:
-    key:
-      files:
-        - src-tauri/Cargo.lock
-      prefix: rust-linux
-    paths:
-      - $HOME/.cargo/registry/index/
-      - $HOME/.cargo/registry/cache/
-      - $HOME/.cargo/git/db/
-      - src-tauri/target/
-
-# Windows is now cross-compiled from Linux (cargo-xwin), so this caches the
-# Linux host's cargo dirs under a separate prefix from build:linux.
-.cache_rust_windows: &cache_rust_windows
-  cache:
-    key:
-      files:
-        - src-tauri/Cargo.lock
-      prefix: rust-windows-cross
-    paths:
-      - $HOME/.cargo/registry/index/
-      - $HOME/.cargo/registry/cache/
-      - $HOME/.cargo/git/db/
-      - src-tauri/target/
-
-.cache_rust_macos: &cache_rust_macos
-  cache:
-    key:
-      files:
-        - src-tauri/Cargo.lock
-      prefix: rust-macos
-    paths:
-      - $HOME/.cargo/registry/index/
-      - $HOME/.cargo/registry/cache/
-      - $HOME/.cargo/git/db/
-      - src-tauri/target/
+.cargo_registry_cache: &cargo_registry_cache
+  key:
+    files:
+      - src-tauri/Cargo.lock
+    prefix: cargo-registry
+  paths:
+    - .cargo/registry/index/
+    - .cargo/registry/cache/
+    - .cargo/git/db/
 
 # ─── upload helper ──────────────────────────────────────────────────────────
 #
@@ -125,7 +123,14 @@ variables:
 test:
   stage: test
   image: node:20-bookworm-slim
-  <<: *cache_rust_linux
+  cache:
+    - <<: *cargo_registry_cache
+    - key:
+        files:
+          - src-tauri/Cargo.lock
+        prefix: rust-target-test
+      paths:
+        - src-tauri/target/
   before_script:
     - apt-get update -qq
     - apt-get install -y -qq --no-install-recommends
@@ -141,7 +146,7 @@ test:
         libwebkit2gtk-4.1-dev
     # Install Rust
     - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
-    - . "$HOME/.cargo/env"
+    - . "$CARGO_HOME/env"
     # Install pnpm + deps
     - corepack enable
     # Honour the "packageManager" field in package.json (pnpm 10.x — pnpm 11
@@ -166,7 +171,14 @@ test:
 lint:
   stage: test
   image: rust:slim-bookworm
-  <<: *cache_rust_linux
+  cache:
+    - <<: *cargo_registry_cache
+    - key:
+        files:
+          - src-tauri/Cargo.lock
+        prefix: rust-target-clippy
+      paths:
+        - src-tauri/target/
   allow_failure: true
   before_script:
     - apt-get update -qq
@@ -196,7 +208,14 @@ lint:
 build:linux:
   stage: build
   image: ubuntu:22.04
-  <<: *cache_rust_linux
+  cache:
+    - <<: *cargo_registry_cache
+    - key:
+        files:
+          - src-tauri/Cargo.lock
+        prefix: rust-target-release-linux
+      paths:
+        - src-tauri/target/
   rules:
     - if: $CI_COMMIT_TAG
   variables:
@@ -222,7 +241,7 @@ build:linux:
         libayatana-appindicator3-dev
         xdg-utils
     - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
-    - . "$HOME/.cargo/env"
+    - . "$CARGO_HOME/env"
     - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     - apt-get install -y nodejs
     - corepack enable
@@ -313,7 +332,14 @@ build:flatpak:
 build:windows:
   stage: build
   image: ubuntu:22.04
-  <<: *cache_rust_windows
+  cache:
+    - <<: *cargo_registry_cache
+    - key:
+        files:
+          - src-tauri/Cargo.lock
+        prefix: rust-target-windows-cross
+      paths:
+        - src-tauri/target/
   rules:
     - if: $CI_COMMIT_TAG
   variables:
@@ -331,7 +357,7 @@ build:windows:
         lld
         nsis
     - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
-    - . "$HOME/.cargo/env"
+    - . "$CARGO_HOME/env"
     - rustup target add x86_64-pc-windows-msvc
     # cargo-xwin downloads the MSVC CRT/SDK headers and drives the cross-link.
     - cargo install --locked cargo-xwin
@@ -344,7 +370,7 @@ build:windows:
     - pnpm install --frozen-lockfile
   script:
     - *upload_helper
-    - . "$HOME/.cargo/env"
+    - . "$CARGO_HOME/env"
     - pnpm tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --config '{"bundle":{"targets":["nsis"]}}'
     - upload_to_registry "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe" "quark-${CI_COMMIT_TAG}-windows-x64.exe"
   artifacts:
@@ -375,7 +401,14 @@ build:macos:
     - when: never
   tags:
     - macos
-  <<: *cache_rust_macos
+  cache:
+    - <<: *cargo_registry_cache
+    - key:
+        files:
+          - src-tauri/Cargo.lock
+        prefix: rust-target-macos
+      paths:
+        - src-tauri/target/
   before_script:
     - rustup update stable
     - pnpm install --frozen-lockfile
@@ -429,14 +462,12 @@ build:android:
     SDK_PLATFORM: "android-34"
     BUILD_TOOLS_VERSION: "34.0.0"
   cache:
+    - <<: *cargo_registry_cache
     - key:
         files:
           - src-tauri/Cargo.lock
-        prefix: rust-android
+        prefix: rust-target-android
       paths:
-        - $HOME/.cargo/registry/index/
-        - $HOME/.cargo/registry/cache/
-        - $HOME/.cargo/git/db/
         - src-tauri/target/
     - key: android-sdk-v1
       paths:
@@ -476,7 +507,7 @@ build:android:
     - cp -a "$ANDROID_HOME/." .android-sdk-cache/
     # Rust + Android targets.
     - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
-    - . "$HOME/.cargo/env"
+    - . "$CARGO_HOME/env"
     # arm64-only — covers all modern physical Android devices and keeps the APK
     # small enough to clear the package-registry upload limit (see header note).
     - rustup target add aarch64-linux-android
@@ -492,7 +523,7 @@ build:android:
     - pnpm tauri android init --ci
   script:
     - *upload_helper
-    - . "$HOME/.cargo/env"
+    - . "$CARGO_HOME/env"
     - export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION:$PATH"
     - export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
     - export GRADLE_USER_HOME="$CI_PROJECT_DIR/.gradle-cache"
