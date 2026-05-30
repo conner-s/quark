@@ -1646,6 +1646,11 @@ body {
   cursor: zoom-in;
 }
 
+/* MSC2530 caption rendered beneath an image message */
+.message__image-caption {
+  margin-top: 4px;
+}
+
 /* ── Video messages ──────────────────────────────────────────────────────── */
 
 .message--video {
@@ -1876,6 +1881,11 @@ body {
   max-height: var(--sticker-max-size);
   width: auto;
   height: auto;
+  /* Preserve the intrinsic aspect ratio: the width/height attributes reserve
+     layout space, and object-fit letterboxes the bitmap into that box rather
+     than stretching non-square stickers to fill it. */
+  object-fit: contain;
+  object-position: left;
   margin-top: 4px;
 }
 

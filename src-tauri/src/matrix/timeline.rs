@@ -39,6 +39,10 @@ pub struct TimelineEvent {
     pub media_mimetype: Option<String>,
     pub media_width: Option<u64>,
     pub media_height: Option<u64>,
+    /// Media caption (MSC2530) for image/media messages: the `body` field when a
+    /// distinct `filename` is present. `None` when the body is merely the filename.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caption: Option<String>,
     /// JSON-serialized EncryptedFile for E2EE media; None for plain (unencrypted) media.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_encryption_info: Option<String>,
@@ -327,6 +331,7 @@ fn convert_sync_sticker(ev: matrix_sdk::ruma::events::OriginalSyncMessageLikeEve
         media_mimetype: mime,
         media_width: w,
         media_height: h,
+        caption: None,
         media_encryption_info: enc,
         media_thumbnail_url: None,
         media_thumbnail_encryption_info: None,
@@ -355,6 +360,7 @@ fn convert_sync_encrypted(
         media_mimetype: None,
         media_width: None,
         media_height: None,
+        caption: None,
         media_encryption_info: None,
         media_thumbnail_url: None,
         media_thumbnail_encryption_info: None,
@@ -384,6 +390,13 @@ fn convert_sync_room_message(ev: OriginalSyncRoomMessageEvent) -> TimelineEvent 
     let (is_edit, relates_to_event_id, in_reply_to, thread_root) =
         extract_relations(&ev.content);
 
+    // Media captions (MSC2530): only present when the message carries a distinct
+    // filename, so a bare-filename body is not surfaced as a caption.
+    let caption = match &effective_content.msgtype {
+        MessageType::Image(image) => image.caption().map(|c| c.to_owned()),
+        _ => None,
+    };
+
     TimelineEvent {
         event_id,
         sender,
@@ -399,6 +412,7 @@ fn convert_sync_room_message(ev: OriginalSyncRoomMessageEvent) -> TimelineEvent 
         media_mimetype,
         media_width,
         media_height,
+        caption,
         media_encryption_info,
         media_thumbnail_url,
         media_thumbnail_encryption_info,
@@ -905,6 +919,7 @@ mod tests {
             media_mimetype: None,
             media_width: None,
             media_height: None,
+            caption: None,
             media_encryption_info: None,
             media_thumbnail_url: None,
             media_thumbnail_encryption_info: None,
