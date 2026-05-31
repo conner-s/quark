@@ -3,7 +3,7 @@
 import { AppState } from "./state.js";
 import type { AppComponents } from "../ui/App.js";
 import type { TimelineEvent, RoomInfo } from "../ipc/types.js";
-import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage, resolveSenderAvatarUrl, ensureSenderAvatarDownloaded, applyIncomingRedaction, stripReplyFallback, isInContextView, reloadCurrentRoomTimeline } from "./actions.js";
+import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage, resolveSenderAvatarUrl, ensureSenderAvatarDownloaded, applyIncomingRedaction, stripReplyFallback, isInContextView, reloadCurrentRoomTimeline, appendRoomTimelineCache } from "./actions.js";
 import { showToast } from "../ui/NotificationToast.js";
 import { handleIncomingMessage } from "./notifications.js";
 
@@ -143,6 +143,11 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     "quark://sync/message",
     (payload) => {
       const currentRoom = AppState.get("currentRoomId");
+
+      // Keep the per-room timeline cache warm for any room we've loaded this
+      // session (not just the current one), so revisiting it paints the latest
+      // messages instantly instead of a stale tail. No-op for uncached rooms.
+      appendRoomTimelineCache(payload.room_id, payload.event);
 
       const isCurrentRoomLive = payload.room_id === currentRoom && !isInContextView();
       // In context view we keep the room in focus but skip applying live-tail

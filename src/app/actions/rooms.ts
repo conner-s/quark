@@ -22,7 +22,7 @@ import {
 
 import { getPseudoSpace, sortByRecency } from "../pseudo_spaces.js";
 
-import type { RoomMember } from "../../ipc/types.js";
+import type { RoomMember, TimelineEvent } from "../../ipc/types.js";
 import type { RoomSection } from "../../ui/RoomList.js";
 import type { SpaceItem } from "../../ui/SpaceStrip.js";
 
@@ -55,6 +55,44 @@ import { cancelReply } from "./messages.js";
 import { openRoomSettings } from "./dialogs.js";
 import { openProfileForUser } from "./profile.js";
 
+// ── Per-room timeline cache ─────────────────────────────────────────────────
+// A `room.messages()` round-trip costs ~2s every open (homeserver latency), so
+// re-opening a room you've already viewed this session would otherwise re-stare
+// at a skeleton for 2s. We keep the last-rendered tail per room and paint it
+// instantly on revisit, then refresh from the server in the background and
+// reconcile only if the head changed (no flicker on an unchanged room). Sync
+// keeps already-cached rooms' tails warm so the paint isn't stale.
+interface CachedRoomTimeline {
+  events: TimelineEvent[];
+  reachedStart: boolean;
+}
+const _roomTimelineCache = new Map<string, CachedRoomTimeline>();
+/** Max events retained per room (cap memory; the live tail is what matters). */
+const ROOM_TIMELINE_CACHE_CAP = 200;
+/** Events fetched for the first paint. Smaller = faster first-ever open. */
+const ROOM_OPEN_LIMIT = 50;
+
+/** True if two event lists share the same newest event and length — i.e. the
+ *  background refresh found nothing new, so a re-render would just flicker. */
+function _sameTimelineHead(a: TimelineEvent[], b: TimelineEvent[]): boolean {
+  if (a.length !== b.length) return false;
+  if (a.length === 0) return true;
+  return a[a.length - 1].event_id === b[b.length - 1].event_id;
+}
+
+/** Append a live event to a room's cached tail (only for rooms already cached,
+ *  i.e. visited this session). Keeps revisits instant *and* current. Called
+ *  from the sync message handler for every room. */
+export function appendRoomTimelineCache(roomId: string, event: TimelineEvent): void {
+  const entry = _roomTimelineCache.get(roomId);
+  if (!entry) return;
+  if (entry.events.some((e) => e.event_id === event.event_id)) return;
+  entry.events.push(event);
+  if (entry.events.length > ROOM_TIMELINE_CACHE_CAP) {
+    entry.events.splice(0, entry.events.length - ROOM_TIMELINE_CACHE_CAP);
+  }
+}
+
 /**
  * Select a room: fetch timeline, update header, mark read.
  */
@@ -82,8 +120,9 @@ export async function selectRoom(roomId: string): Promise<void> {
   roomList.setActiveRoom(roomId);
 
   // Show skeleton immediately before the async IPC fetch so the timeline doesn't
-  // appear blank while waiting for message data.
-  timeline.showSkeleton();
+  // appear blank while waiting for message data — but skip it when we can paint
+  // instantly from the per-room cache below (revisit), to avoid a skeleton flash.
+  if (!_roomTimelineCache.has(roomId)) timeline.showSkeleton();
 
   // Clear typing indicator when switching rooms
   const typingTextEl = typingIndicator.querySelector(".typing-indicator__text");
@@ -140,12 +179,42 @@ export async function selectRoom(roomId: string): Promise<void> {
     }).catch(() => { /* non-fatal: fallback letter stays */ });
   }
 
+  // Renders an event list into the timeline (thread replies excluded; edits
+  // applied). Shared by the instant cache paint and the authoritative refresh.
+  const renderEvents = (events: TimelineEvent[]) => {
+    const threadRootCounts = _buildThreadRootCounts(events);
+    const mainEvents = _applyEdits(events).filter((e) => !e.thread_root);
+    const messages = mainEvents.map((e) => timelineEventToMessage(e, events, threadRootCounts));
+    timeline.setMessages(messages);
+  };
+  const registerScrollCallbacks = () => {
+    // The top callback fires only when the in-memory buffer is exhausted; the
+    // bottom callback fires only while in context view (forward fetches).
+    timeline.onScrollToTop(() => void loadMoreMessages());
+    timeline.onScrollToBottom(() => void loadMoreMessagesForward());
+  };
+
+  // Instant paint from the per-room cache (revisit) — no waiting on the network.
+  const cachedTimeline = _roomTimelineCache.get(roomId);
+  if (cachedTimeline) {
+    paginationState.reachedStart = cachedTimeline.reachedStart;
+    AppState.set("currentTimeline", cachedTimeline.events);
+    renderEvents(cachedTimeline.events);
+    registerScrollCallbacks();
+    // Start media/emoji loads from the cached events *now* (not after the
+    // background fetch ~2s later). Cached media applies synchronously; the rest
+    // streams in. Without this, revisited rooms showed text instantly but images
+    // lagged a second behind.
+    _downloadMessageImages(cachedTimeline.events, timeline);
+    void _downloadReactionEmoji(cachedTimeline.events, timeline);
+    _downloadInlineEmoji(timeline);
+  }
+
   try {
-    // Fetch timeline first for fast initial render; members come in parallel
-    // but we don't wait for them before rendering (cached display names are used).
-    // Cache-backed open: returns events already cached (oldest-first) and grows
-    // as the user scrolls/searches; `reached_start` replaces the prev_batch token.
-    const timelinePromise = openRoomTimeline(roomId, 100);
+    // Authoritative fetch — runs even when we painted from cache, to reconcile
+    // anything that changed while we were away. Members come in parallel; we
+    // don't block the render on them (cached display names are used).
+    const timelinePromise = openRoomTimeline(roomId, ROOM_OPEN_LIMIT);
     const membersPromise = getRoomMembers(roomId).catch(() => [] as RoomMember[]);
 
     const page = await timelinePromise;
@@ -153,24 +222,24 @@ export async function selectRoom(roomId: string): Promise<void> {
     paginationState.reachedStart = reached_start;
 
     AppState.set("currentTimeline", events);
+    _roomTimelineCache.set(roomId, {
+      events: events.slice(-ROOM_TIMELINE_CACHE_CAP),
+      reachedStart: reached_start,
+    });
 
-    // Render with cached display names immediately — update once members arrive
-    // Thread replies (thread_root set) are excluded from the main timeline;
-    // they belong in the thread panel only.
-    const threadRootCounts = _buildThreadRootCounts(events);
-    const mainEvents = _applyEdits(events).filter((e) => !e.thread_root);
-    const messages = mainEvents.map((e) => timelineEventToMessage(e, events, threadRootCounts));
-    // Pass unread count so the timeline can insert a "── new messages ──" separator
-    if (roomInfo && roomInfo.unread_count > 0) {
-      timeline.setUnreadCount(roomInfo.unread_count);
+    // Re-render only if the fresh fetch differs from what we painted (or we had
+    // nothing cached) — an unchanged revisit keeps its scroll position, no flash.
+    if (!cachedTimeline || !_sameTimelineHead(cachedTimeline.events, events)) {
+      // Pass unread count so the timeline can insert a "── new messages ──" separator
+      if (roomInfo && roomInfo.unread_count > 0) {
+        timeline.setUnreadCount(roomInfo.unread_count);
+      }
+      renderEvents(events);
     }
-    timeline.setMessages(messages);
-
-    // Register pagination callbacks (re-registers on each room change). The
-    // top callback fires only when the in-memory buffer is exhausted; the
-    // bottom callback fires only while in context view (forward fetches).
-    timeline.onScrollToTop(() => void loadMoreMessages());
-    timeline.onScrollToBottom(() => void loadMoreMessagesForward());
+    if (!cachedTimeline) {
+      // Register pagination callbacks (re-registers on each room change).
+      registerScrollCallbacks();
+    }
 
     // Kick off media/emoji downloads now — these depend only on the timeline
     // events (already fetched) and the rendered DOM, not on member data. Starting
@@ -462,14 +531,18 @@ export async function jumpToLatest(): Promise<void> {
   }
 
   try {
-    // Leaving context view → return to the cache-backed live timeline.
-    const page = await openRoomTimeline(roomId, 100);
+    // Leaving context view → return to the live timeline.
+    const page = await openRoomTimeline(roomId, ROOM_OPEN_LIMIT);
     paginationState.prevBatch = null;
     paginationState.nextBatch = null;
     paginationState.reachedStart = page.reached_start;
     paginationState.inContextView = false;
 
     AppState.set("currentTimeline", page.events);
+    _roomTimelineCache.set(roomId, {
+      events: page.events.slice(-ROOM_TIMELINE_CACHE_CAP),
+      reachedStart: page.reached_start,
+    });
     const threadRootCounts = _buildThreadRootCounts(page.events);
     const mainEvents = _applyEdits(page.events).filter((e) => !e.thread_root);
     const messages = mainEvents.map((e) => timelineEventToMessage(e, page.events, threadRootCounts));
@@ -502,7 +575,7 @@ export async function reloadCurrentRoomTimeline(): Promise<void> {
   const { timeline } = getComponents();
   let page;
   try {
-    page = await openRoomTimeline(roomId, 100);
+    page = await openRoomTimeline(roomId, ROOM_OPEN_LIMIT);
   } catch {
     return; // non-fatal: leave the current render in place
   }
@@ -512,6 +585,10 @@ export async function reloadCurrentRoomTimeline(): Promise<void> {
   const { events, reached_start } = page;
   paginationState.reachedStart = reached_start;
   AppState.set("currentTimeline", events);
+  _roomTimelineCache.set(roomId, {
+    events: events.slice(-ROOM_TIMELINE_CACHE_CAP),
+    reachedStart: reached_start,
+  });
 
   const threadRootCounts = _buildThreadRootCounts(events);
   const mainEvents = _applyEdits(events).filter((e) => !e.thread_root);

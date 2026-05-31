@@ -107,6 +107,10 @@ export const _memberDisplayName = new Map<string, string>();
 export const _memberAvatarMxc = new Map<string, string>();
 /** mxc:// URL → blob: URL, populated as thumbnails are downloaded */
 export const _avatarDataUrl = new Map<string, string>();
+/** mxc:// URL → blob: URL for message images/stickers, so revisiting a room
+ *  shows already-fetched media instantly instead of re-downloading + decoding
+ *  (~1s round-trip) on every open. */
+export const _messageMediaCache = new Map<string, string>();
 /** roomId → resolved blob: URL for the room avatar */
 export const _roomAvatarDataUrl = new Map<string, string>();
 /** userId → known DM room ID, populated when a DM room is entered */
@@ -280,6 +284,11 @@ export function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEve
     ? stripReplyFallback(e.body, e.formatted_body ?? undefined)
     : { body: e.body, htmlBody: e.formatted_body ?? undefined };
 
+  // Prefer an already-fetched blob URL so cached images paint instantly on a
+  // revisit; otherwise pass the raw mxc:// and let _downloadMessageImages swap.
+  const mediaUrl =
+    (e.media_url ? _messageMediaCache.get(e.media_url) : undefined) ?? e.media_url ?? undefined;
+
   return {
     id: e.event_id,
     senderId: e.sender,
@@ -290,7 +299,7 @@ export function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEve
     body: displayBody,
     htmlBody: displayHtml,
     type: msgType,
-    mediaUrl: e.media_url ?? undefined,
+    mediaUrl,
     mediaMimeType: e.media_mimetype ?? undefined,
     mediaWidth: e.media_width ?? undefined,
     mediaHeight: e.media_height ?? undefined,
@@ -421,9 +430,17 @@ export function _downloadMessageImages(events: TimelineEvent[], timeline: { upda
     if (e.msg_type === "m.video" || e.msg_type === "m.audio") continue;
     const eventId = e.event_id;
     const mxc = e.media_url;
+    // Already fetched this session → apply the cached blob URL synchronously
+    // (no IPC, no decode), so revisiting a room shows images immediately.
+    const cached = _messageMediaCache.get(mxc);
+    if (cached) {
+      timeline.updateMessageMedia(eventId, cached);
+      continue;
+    }
     downloadMedia(mxc, e.media_encryption_info).then((dl) => {
-      const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
-      timeline.updateMessageMedia(eventId, dataUrl);
+      const url = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
+      _messageMediaCache.set(mxc, url);
+      timeline.updateMessageMedia(eventId, url);
     }).catch((err) => {
       console.error(`[media] failed to download ${mxc}:`, err);
     });
