@@ -18,6 +18,7 @@ import {
   listenSearchEvents,
 } from "../ipc/rooms.js";
 import type { SearchResult, TimelineEvent } from "../ipc/types.js";
+import { DatePicker } from "./DatePicker.js";
 import { DialogBase } from "./DialogBase.js";
 import type { Timeline } from "./Timeline.js";
 
@@ -54,7 +55,8 @@ export class SearchDialog extends DialogBase {
   private _timeline: Timeline;
   private _queryInput!: HTMLInputElement;
   private _dateRow!: HTMLElement;
-  private _dateInput!: HTMLInputElement;
+  /** "Back to date" cutoff picker (custom calendar — see DatePicker for why). */
+  private _datePicker!: DatePicker;
   private _listEl!: HTMLElement;
   private _statusEl!: HTMLElement;
   private _cancelBtn!: HTMLButtonElement;
@@ -161,36 +163,26 @@ export class SearchDialog extends DialogBase {
 
     this.content.appendChild(scopeRow);
 
-    // Date row (revealed only for the "date" scope)
+    // Date row (revealed only for the "date" scope). Uses the custom DatePicker
+    // component (the native <input type=date> popup is an uncontrollable modal
+    // grab on WebKitGTK). Selecting a date runs the search.
     this._dateRow = document.createElement("div");
     this._dateRow.className = "search-dialog__date-row";
     this._dateRow.style.display = "none";
     const dateLabel = document.createElement("span");
     dateLabel.className = "search-dialog__date-label";
     dateLabel.textContent = "Search back to:";
-    // A plain text field rather than `<input type="date">`: the native
-    // WebKitGTK date-picker popup is unreliable to dismiss (it ignores blur and
-    // can trap focus), and a typed `YYYY-MM-DD` fits the terminal aesthetic. The
-    // search runs on Enter or when the field commits (blur/`change`).
-    this._dateInput = document.createElement("input");
-    this._dateInput.type = "text";
-    this._dateInput.className = "search-dialog__date";
-    this._dateInput.placeholder = "YYYY-MM-DD";
-    this._dateInput.setAttribute("inputmode", "numeric");
-    this._dateInput.setAttribute("aria-label", "Search back to date (YYYY-MM-DD)");
-    this._dateInput.addEventListener("change", () => {
-      if (this._query.trim()) void this._run();
+
+    this._datePicker = new DatePicker({
+      placeholder: "Pick a date…",
+      ariaLabel: "Choose a date to search back to",
     });
-    this._dateInput.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") return; // bubble to base → close
-      e.stopPropagation();
-      if (e.key === "Enter") {
-        e.preventDefault();
-        void this._run();
-      }
+    this._datePicker.onChange((value) => {
+      if (value && this._query.trim()) void this._run();
     });
+
     this._dateRow.appendChild(dateLabel);
-    this._dateRow.appendChild(this._dateInput);
+    this._dateRow.appendChild(this._datePicker.getElement());
     this.content.appendChild(this._dateRow);
 
     // Results list
@@ -248,6 +240,7 @@ export class SearchDialog extends DialogBase {
       clearTimeout(this._renderThrottle);
       this._renderThrottle = null;
     }
+    this._datePicker.close();
     this._cancelActive();
   }
 
@@ -262,6 +255,7 @@ export class SearchDialog extends DialogBase {
       btn.setAttribute("aria-pressed", active ? "true" : "false");
     }
     this._dateRow.style.display = scope === "date" ? "" : "none";
+    if (scope !== "date") this._datePicker.close();
     void this._run();
   }
 
@@ -292,11 +286,11 @@ export class SearchDialog extends DialogBase {
     this._statusEl.textContent = text;
   }
 
-  /** Parse the `YYYY-MM-DD` "back to date" field into an epoch-ms cutoff (local
-   *  midnight), or null if empty/invalid. */
+  /** Parse the picker's selected date into an epoch-ms cutoff (local midnight),
+   *  or null if no date is selected. */
   private _parseUntilTs(): number | null {
-    const d = this._dateInput.value.trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    const d = this._datePicker.getValue();
+    if (!d) return null;
     const ts = Date.parse(`${d}T00:00:00`);
     return Number.isNaN(ts) ? null : ts;
   }
@@ -376,7 +370,7 @@ export class SearchDialog extends DialogBase {
     if (this._scope === "date") {
       const parsed = this._parseUntilTs();
       if (parsed === null) {
-        this._status("Enter a date as YYYY-MM-DD to search back to.");
+        this._status("Pick a date to search back to.");
         return;
       }
       untilTs = parsed;

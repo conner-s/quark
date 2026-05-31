@@ -1,8 +1,8 @@
 # Quark — A CLI-Styled Matrix Client
 
-## Verification queue — 0.13.0 event-cache-backed timeline + search
+## Verification queue — 0.13.1 event-cache-backed timeline + search
 
-Branch `feature/search-implementation`. Routes the live timeline's backward loading **and** message search through the matrix-sdk event cache (`RoomEventCache::pagination().run_backwards`), which persists decrypted events to the SQLite cache so scrolling and searching feed one growing store. Fixes three issues found testing 0.12.0 search: (a) the local-cache search tier was nearly empty, (b) "search back to date" returned different results on repeat runs (E2EE decryption timing), (c) historical search was slow. `pnpm test` green (468); `cargo test` green.
+Branch `feature/search-implementation`. Routes the live timeline's backward loading **and** message search through the matrix-sdk event cache (`RoomEventCache::pagination().run_backwards`), which persists decrypted events to the SQLite cache so scrolling and searching feed one growing store. Fixes three issues found testing 0.12.0 search: (a) the local-cache search tier was nearly empty, (b) "search back to date" returned different results on repeat runs (E2EE decryption timing), (c) historical search was slow. (0.13.1 = search/calendar UX polish on top of the 0.13.0 cache work.) `pnpm test` green (468); `cargo test` green.
 
 ### Backend
 - [x] **`search_messages` on the event cache** — scans already-cached events first (instant, offline), then `run_backwards` (BATCH_SIZE 300) persisting each batch; stop decision extracted to the unit-tested `search_should_break`. Re-running a search is now fast and consistent.
@@ -12,13 +12,18 @@ Branch `feature/search-implementation`. Routes the live timeline's backward load
 ### Frontend
 - [x] `selectRoom` opens via `openRoomTimeline`; `loadMoreMessages` branches on `inContextView` (context view keeps the raw `getTimeline`/`prevBatch` path; live uses `loadOlderTimeline`/`reachedStart`); `jumpToLatest` returns to the cache-backed live timeline.
 - [x] **Search input guards** — min query length (3), debounced live loaded-tier (~180ms), and a 200-row render cap (counts stay exact). Stops the lag spike from 1–2 char queries matching a huge fraction of the now-large cached buffer.
-- [x] **Concurrency/UX fixes** — all event-cache back-pagination (search, scroll, room-open) serialized via a `PaginationLock` with cancel-first hand-off (fixes the "expected Idle, observed Paginating" error); pagination errors now soft-recover with partial results; "Back to date" starts on date-pick (`change`), not just Enter.
+- [x] **Results sort dropdown** — right end of the scope row; Newest-first (default, reset on each open) / Oldest-first. Results held in an array and re-rendered sorted+capped (streaming hits re-sort as they arrive, throttled).
+- [x] **Custom `DatePicker` component** ([src/ui/DatePicker.ts](src/ui/DatePicker.ts)) for "Back to date" — replaces `<input type=date>`, whose native popup on WebKitGTK is an uncontrollable modal grab (ignores blur/click/Enter; only the toolkit's Escape dismisses it). A themed DOM calendar popover, mounted on `<body>` with `position: fixed` (positioned from the trigger rect, flips/nudges to stay on-screen) so the dialog's `overflow: hidden` can't clip it. Reusable: `getElement()`/`onChange()`/`getValue()`/`setValue()`/`open/close/toggle/destroy`.
+- [x] **Concurrency/UX fixes** — all event-cache back-pagination (search, scroll, room-open) serialized via a `PaginationLock` with cancel-first hand-off (fixes the "expected Idle, observed Paginating" error); pagination errors now soft-recover with partial results.
+- [x] **Sort-dropdown theming** — `appearance: none` so WebKitGTK honors the theme background (native selects paint white otherwise).
 
 ### To verify manually (needs a real account)
 - [ ] Re-open a room **offline** → renders from persisted cache.
 - [ ] Scroll up repeatedly → older loads, scroll position preserved, reactions on older messages render; reaching room start stops the spinner.
 - [ ] "Search back to date" **twice** → identical results; second run near-instant; local-cache tier then returns the scanned range.
 - [ ] Jump-to-message context view + jump-to-latest still work; live reactions/edits/redactions still update.
+- [x] **Custom date-picker calendar** — opens on the trigger, navigates year/month, picks a day, closes on select/outside-click; renders fully (not clipped) and themed (verified in the WebKitGTK dev build on NixOS/KDE, where the native `<input type=date>` was unusable).
+- [x] **Sort dropdown** — Newest/Oldest flips result order; defaults to Newest each open; background matches the theme in the real app.
 
 ---
 
