@@ -247,7 +247,9 @@ export async function selectRoom(roomId: string): Promise<void> {
  * blocks re-triggering.
  */
 async function loadMoreMessages(): Promise<void> {
-  if (paginationState.paginationLoading || !paginationState.prevBatch) return;
+  if (paginationState.paginationLoading || !paginationState.prevBatch) {
+    return;
+  }
   const roomId = AppState.get("currentRoomId");
   if (!roomId) return;
 

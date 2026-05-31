@@ -24,15 +24,22 @@ stages:
 #   • tag pushes        → full test + build + release (see per-job rules below)
 #   • merge requests    → test/lint only (build & release are tag-gated)
 #   • branch pushes      → test/lint only
+#   • main pushes        → skipped (see below)
 #
-# The third rule suppresses the duplicate *branch* pipeline that would
-# otherwise run alongside the MR pipeline for any branch with an open MR
-# (GitLab's canonical "avoid duplicate pipelines" guard).
+# main is merged fast-forward-only, so every commit that lands on main is the
+# exact commit that already passed test/lint in its MR pipeline. Re-running on
+# the main push would be pure duplication, so the main rule skips it outright.
+#
+# The $CI_OPEN_MERGE_REQUESTS rule suppresses the duplicate *branch* pipeline
+# that would otherwise run alongside the MR pipeline for any branch with an
+# open MR (GitLab's canonical "avoid duplicate pipelines" guard).
 
 workflow:
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: never
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
       when: never
     - if: $CI_COMMIT_BRANCH

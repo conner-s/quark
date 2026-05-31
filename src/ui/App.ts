@@ -274,7 +274,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   // or nothing (overlay scrollbars on macOS). Measure the actual gutter width at
   // runtime so the input-bar's padding-right always matches — regardless of OS
   // scrollbar style, user preferences, or DPI.
-  const timelineEl = timeline.getElement();
+  const timelineEl = timeline.getScrollElement();
   const inputBarEl = input.getInputBarElement();
   const syncComposeRight = () => {
     const gutterPx = timelineEl.offsetWidth - timelineEl.clientWidth;
