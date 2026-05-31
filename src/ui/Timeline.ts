@@ -207,19 +207,13 @@ function buildUrlPreviewCard(preview: { title: string | null; description: strin
 }
 
 /**
- * Append a URL preview card and, if the container is above the visible scroll
- * area, compensate scrollTop so the viewport doesn't jump.
+ * Append a URL preview card to a message container. No scrollTop compensation is
+ * needed: the timeline is `flex-direction: column-reverse` (bottom-anchored), so
+ * the browser keeps the viewport stationary when a card grows content above the
+ * fold — same mechanism that makes prepended history not jump.
  */
 function appendCardAboveViewportSafe(card: HTMLElement, container: HTMLElement): void {
   container.appendChild(card);
-  const scrollEl = container.closest<HTMLElement>(".timeline");
-  if (!scrollEl) return;
-  const cardHeight = card.offsetHeight; // force layout to measure
-  const cRect = container.getBoundingClientRect();
-  const sRect = scrollEl.getBoundingClientRect();
-  if (cRect.bottom < sRect.top) {
-    scrollEl.scrollTop += cardHeight;
-  }
 }
 
 /**
@@ -604,6 +598,14 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     if (msg.mediaWidth && msg.mediaHeight) {
       img.width = msg.mediaWidth;
       img.height = msg.mediaHeight;
+    } else {
+      // No dimensions in the event (sender omitted info.w/h). Reserve a
+      // placeholder box so the image isn't 0px tall before it decodes —
+      // otherwise prepended history doesn't grow scrollHeight, the prepend's
+      // scroll restore adds nothing, and the near-top prefetch re-fires on a
+      // viewport that never moved. updateMessageMedia drops this class and
+      // locks the real size once the bitmap loads.
+      img.classList.add("message__image--unsized");
     }
     // Mark GIFs so the focus/blur handler can pause/resume animation
     if ((msg.mediaUrl ?? "").match(/\.gif($|\?)/i) || msg.mediaMimeType === "image/gif") {
@@ -628,6 +630,8 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     if (msg.mediaWidth && msg.mediaHeight) {
       img.width = msg.mediaWidth;
       img.height = msg.mediaHeight;
+    } else {
+      img.classList.add("message__sticker--unsized");
     }
     img.alt = msg.mediaAlt ?? "sticker";
     row.appendChild(img);
@@ -915,6 +919,10 @@ export class Timeline {
   /** How many messages to render or cull when extending/shrinking the window. */
   private static readonly RENDER_CHUNK = 50;
 
+  /** Non-scrolling wrapper; `getElement()` returns this. Holds the scroller
+   *  (`_el`) plus the viewport-pinned overlays (loading indicator, jump button). */
+  private _wrapEl: HTMLElement;
+  /** The scroll container (`.timeline`). All scrollTop math operates on this. */
   private _el: HTMLElement;
   private _listEl: HTMLElement;
   private _loadingEl: HTMLElement;
@@ -957,8 +965,24 @@ export class Timeline {
   private _scrollBottomFired = false;
   /** Handle for the cleanup timeout of the scroll animation, so we can cancel it */
   private _scrollAnimCleanupTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Handle for the post-render scroll-to-bottom timer started in setMessages, so it can be cancelled on re-render */
-  private _postRenderScrollTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Debounce handle for the deferred window cull (runs at scroll-settle). */
+  private _cullTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Observes the message list while pinned to the live tail so late content
+   *  growth (images decoding, custom emoji and stickers resolving, GIFs
+   *  resuming on window refocus) re-pins to the bottom in a single coalesced
+   *  write. Replaces the per-image load→scrollToBottom handler and the
+   *  post-render timer chain. null where ResizeObserver is unavailable (jsdom). */
+  private _stickObserver: ResizeObserver | null = null;
+  /** Reentrancy guard: true while the stick observer is adjusting scrollTop. */
+  private _pinningToBottom = false;
+  /** Authoritative "follow the live tail" intent that drives the stick observer.
+   *  Distinct from _scrolledUp (which keeps a 40px hysteresis for the
+   *  jump-to-latest button): this disengages the instant the user moves up by a
+   *  pixel and only re-engages at the very bottom, so content growth can never
+   *  trap the user against the tail. */
+  private _stickToBottom = true;
+  /** Last observed scrollTop, used to detect user scroll direction. */
+  private _prevScrollTop = 0;
   /** Number of unread messages at the tail of the current message list. */
   private _unreadCount = 0;
   /** Fired when an "(edited)" marker is clicked — passes (eventId, originalBody). */
@@ -967,46 +991,89 @@ export class Timeline {
   private _onContextMenuCallback: ((eventId: string, x: number, y: number) => void) | null = null;
 
   constructor() {
+    // Non-scrolling wrapper. The overlays (loading indicator, jump-to-latest
+    // button) MUST live here as siblings of the scroller, not inside it: under
+    // `flex-direction: column-reverse` an absolutely positioned descendant of a
+    // scroll container scrolls *with the content* (it pins to the content edge,
+    // not the viewport). That left the jump-to-latest button stuck at the bottom
+    // of the timeline and scrolled out of view. Hosting them in the wrapper pins
+    // them to the timeline viewport regardless of scroll position.
+    this._wrapEl = document.createElement("div");
+    this._wrapEl.className = "timeline-wrap";
+
     this._el = document.createElement("div");
     this._el.className = "timeline";
+    this._wrapEl.appendChild(this._el);
 
     this._loadingEl = document.createElement("div");
     this._loadingEl.className = "timeline__loading-more";
     this._loadingEl.textContent = "Loading…";
     this._loadingEl.style.display = "none";
-    this._el.appendChild(this._loadingEl);
+    this._wrapEl.appendChild(this._loadingEl);
 
+    // The scroller's only in-flow child — keeps column-reverse anchoring clean.
     this._listEl = document.createElement("div");
     this._listEl.setAttribute("role", "list");
     this._listEl.setAttribute("aria-label", "Message timeline");
     this._el.appendChild(this._listEl);
 
-    // "Jump to latest" button — shown when scrolled up or in context view
+    // "Jump to latest" button — shown when scrolled up or in context view.
     this._jumpToLatestBtn = document.createElement("button");
     this._jumpToLatestBtn.type = "button";
     this._jumpToLatestBtn.className = "timeline__jump-to-latest";
     this._jumpToLatestBtn.textContent = "↓ jump to latest";
     this._jumpToLatestBtn.style.display = "none";
     this._jumpToLatestBtn.addEventListener("click", () => this._onJumpToLatestCallback?.());
-    this._el.appendChild(this._jumpToLatestBtn);
+    this._wrapEl.appendChild(this._jumpToLatestBtn);
 
     // Track whether the user has scrolled away from the bottom, and fire
     // pagination callbacks when near either edge. Extending the rendered
     // window from the in-memory buffer happens first — only when the buffer
     // edge is reached does a server fetch get requested.
     this._el.addEventListener("scroll", () => {
-      const { scrollTop, scrollHeight, clientHeight } = this._el;
-      this._scrolledUp = scrollHeight - scrollTop - clientHeight > 40;
+      const scrollTop = this._el.scrollTop;
+      // column-reverse convention: scrollTop is 0 at the live tail and negative
+      // scrolling up toward history. So distance-from-bottom is just -scrollTop,
+      // and distance-from-top is scrollHeight - clientHeight + scrollTop.
+      const distanceFromBottom = this._distanceFromBottom;
+      const distanceFromTop = this._distanceFromTop;
+
+      // Stick-to-bottom intent (drives the stick observer). Check "at the
+      // bottom" FIRST: when content shrinks (e.g. a GIF decoding to a shorter
+      // box than was reserved) the browser clamps scrollTop and fires a scroll
+      // event — that is not a user scroll-up, and while we're still at the bottom
+      // we must stay stuck so the observer can re-pin. Only a genuine move up
+      // *and away* from the bottom disengages. Re-engaging at <=4px keeps the
+      // user from being trapped against the tail by content growth. (Scrolling up
+      // makes scrollTop more negative, so `scrollTop < prevScrollTop` = moved up.)
+      if (distanceFromBottom <= 4) {
+        this._stickToBottom = true;
+      } else if (scrollTop < this._prevScrollTop - 1) {
+        this._stickToBottom = false;
+      }
+      this._prevScrollTop = scrollTop;
+
+      this._scrolledUp = distanceFromBottom > 40;
       this._updateJumpToLatestVisibility();
 
-      if (scrollTop < 80 && !this._scrollTopFired) {
+      // Prefetch older history ~one viewport before the top — but only when the
+      // approach would start a *server* fetch (`_renderStart === 0`). That fetch
+      // is async, so overlapping it with the scrolling still to come hides its
+      // latency: the messages are usually buffered by the time the top arrives.
+      // The buffered-window extend (`_renderStart > 0`) inserts a chunk at the
+      // top, which `column-reverse` anchors with no scrollTop write — so it stays
+      // smooth under a fast fling and can stay edge-triggered (80px). Guarded on
+      // !_stickToBottom so a room opened at the tail (where distanceFromTop is
+      // ~0 while pinned) doesn't fire a spurious history fetch before the user
+      // has scrolled up at all.
+      const prefetchMargin = this._renderStart === 0 ? this._el.clientHeight : 80;
+      if (!this._stickToBottom && distanceFromTop < prefetchMargin && !this._scrollTopFired) {
         this._scrollTopFired = true;
         this._handleScrollNearTop();
-      } else if (scrollTop >= 80) {
+      } else if (distanceFromTop >= prefetchMargin || this._stickToBottom) {
         this._scrollTopFired = false;
       }
 
-      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
       if (distanceFromBottom < 80 && !this._scrollBottomFired) {
         this._scrollBottomFired = true;
         this._handleScrollNearBottom();
@@ -1015,14 +1082,36 @@ export class Timeline {
       }
     });
 
-    // Scroll to bottom when images finish loading so the initial room load doesn't
-    // strand the user in the middle of history. Use capture phase because `load`
-    // doesn't bubble.
-    this._el.addEventListener("load", (e) => {
-      if (e.target instanceof HTMLImageElement && !this._scrolledUp) {
-        this._scrollToBottom();
-      }
-    }, true);
+    // Keep the viewport pinned to the live tail as late content settles. While
+    // the stick intent holds (`_stickToBottom`), any growth of the message list
+    // — images decoding, custom emoji and stickers resolving, GIFs resuming on
+    // window refocus — re-pins to the bottom in a single coalesced write.
+    // ResizeObserver fires once per frame after layout, so this replaces both
+    // the per-image `load`→scrollToBottom handler (which snapped once per decode,
+    // causing visible jitter on room load and refocus) and the 150 ms
+    // post-render timer chain in setMessages.
+    //
+    // It keys on `_stickToBottom`, not `_scrolledUp`: the latter's 40px deadzone
+    // would let a content resize re-pin the user while they were nudging up
+    // within that band, making it impossible to escape the tail. `_stickToBottom`
+    // disengages on any upward movement (see the scroll handler). When the user
+    // has scrolled up, `column-reverse` keeps growth above the viewport anchored
+    // for free, so no compensation is needed there.
+    //
+    // Note: under `column-reverse` the browser already holds the bottom on most
+    // tail growth, so this observer is mostly a safety net (e.g. a resize that
+    // momentarily clamps scrollTop). Re-pinning to the tail is `scrollTop = 0`.
+    if (typeof ResizeObserver !== "undefined") {
+      this._stickObserver = new ResizeObserver(() => {
+        if (!this._stickToBottom || this._pinningToBottom) return;
+        if (this._el.scrollTop === 0) return; // already pinned to the tail
+        this._pinningToBottom = true;
+        this._el.scrollTop = 0;
+        this._prevScrollTop = 0;
+        this._pinningToBottom = false;
+      });
+      this._stickObserver.observe(this._listEl);
+    }
 
     // Reply preview "jump to original" — fired by reply-preview clicks
     this._listEl.addEventListener("quark:jump-to-message", (e: Event) => {
@@ -1158,6 +1247,12 @@ export class Timeline {
   }
 
   getElement(): HTMLElement {
+    return this._wrapEl;
+  }
+
+  /** The scrolling element itself (inside the wrapper). Callers that need to
+   *  measure the scrollbar gutter or observe scroll-area size use this. */
+  getScrollElement(): HTMLElement {
     return this._el;
   }
 
@@ -1248,14 +1343,6 @@ export class Timeline {
    */
   setUnreadCount(count: number): void {
     this._unreadCount = count;
-  }
-
-  /** Scroll the timeline to the unread separator if one exists. */
-  scrollToUnreadSeparator(): void {
-    const sep = this._listEl.querySelector<HTMLElement>(".unread-separator");
-    if (sep) {
-      sep.scrollIntoView({ block: "center" });
-    }
   }
 
   /** Show a "Loading…" indicator above the message list. */
@@ -1410,11 +1497,16 @@ export class Timeline {
     setTimeout(scheduleWithMinimum, 3000);
   }
 
-  /** Prepend older messages above the current list, preserving scroll position. */
+  /** Prepend older messages above the current list.
+   *
+   * No scrollTop compensation: the timeline is `flex-direction: column-reverse`,
+   * so the browser anchors the scroll position to the bottom and keeps the
+   * visible content stationary when nodes are inserted at the top. This is the
+   * whole point of the structural fix — there is no JS scrollTop write here for
+   * WebKit's momentum engine to clobber mid-fling. */
   prependMessages(msgs: MessageData[]): void {
     if (msgs.length === 0) return;
-    const oldScrollHeight = this._el.scrollHeight;
-    const oldScrollTop = this._el.scrollTop;
+
     this._messages = [...msgs, ...this._messages];
     // Shift selection and render-window indices forward so they still point at
     // the same content after prepending.
@@ -1427,20 +1519,7 @@ export class Timeline {
     this._renderStart = Math.max(0, this._renderStart - msgs.length);
 
     // Insert new DOM nodes at the top without clearing existing content.
-    // This avoids blanking the visible timeline while the DOM rebuilds.
-    const groups = groupMessages(msgs);
-    const fragment = document.createDocumentFragment();
-    for (const entry of groups) {
-      if (Array.isArray(entry)) {
-        fragment.appendChild(buildMessageGroup(entry));
-      } else if ("type" in entry && entry.type === "time-separator") {
-        fragment.appendChild(buildTimeSeparator(entry.timestamp));
-      } else {
-        const el = buildMessageElement(entry as MessageData);
-        el.classList.add("message--ungrouped");
-        fragment.appendChild(el);
-      }
-    }
+    const fragment = this._buildGroupedFragment(msgs);
     // Check for a time gap at the junction between prepended and existing messages
     const lastPrepended = msgs[msgs.length - 1];
     const firstExisting = this._messages[msgs.length];
@@ -1452,22 +1531,23 @@ export class Timeline {
     }
     this._listEl.insertBefore(fragment, this._listEl.firstChild);
 
-    // Restore position so the previously-visible messages stay in view
-    this._el.scrollTop = oldScrollTop + (this._el.scrollHeight - oldScrollHeight);
-    // Synchronously refresh _scrolledUp; the scroll event from the scrollTop
-    // set fires asynchronously, and image-load handlers on freshly prepended
-    // cached images could otherwise read a stale value.
-    this._scrolledUp = this._el.scrollHeight - this._el.scrollTop - this._el.clientHeight > 40;
+    // Prepending means the user is reading history, not following the tail —
+    // disengage stick. scrollTop is unchanged (column-reverse held it), so the
+    // derived state below reads the same position the user was already at.
+    this._scrolledUp = this._distanceFromBottom > 40;
+    this._stickToBottom = false;
+    this._prevScrollTop = this._el.scrollTop;
 
-    // Reset _scrollTopFired so future keyboard navigation or scrolling can
-    // trigger another page load. The _paginationLoading guard in loadMoreMessages
-    // prevents a double-fire during the current load (which is still in progress
-    // when prependMessages runs). Without this reset, _scrollTopFired can stay
-    // true after restoration and block subsequent loads via keyboard nav.
-    this._scrollTopFired = false;
-    // Drop the bottom of the window if it now exceeds MAX_RENDERED — keeps
-    // the DOM bounded as history is paged in.
-    this._cullBottomIfNeeded();
+    // Re-arm the near-top trigger so future scrolling / keyboard nav can page
+    // again. Keep the latch SET if we're still within one viewport of the top
+    // (a page too light to push the viewport past the prefetch band), to stop an
+    // immediate duplicate fetch. _renderStart is 0 here (a prepend renders all
+    // prepended messages), so the band is one viewport, matching the handler.
+    this._scrollTopFired = this._distanceFromTop < this._el.clientHeight;
+    // Trim the window back to MAX_RENDERED once the scroll settles — culling the
+    // bottom needs a scrollTop write (down direction), which we must not do
+    // mid-fling, so it's deferred. See _scheduleCull.
+    this._scheduleCull();
   }
 
   /** Append newer messages below the current list. Used by forward pagination
@@ -1479,32 +1559,25 @@ export class Timeline {
     this._messages = [...this._messages, ...msgs];
     this._renderEnd = this._messages.length;
 
-    const groups = groupMessages(msgs);
-    const fragment = document.createDocumentFragment();
-    for (const entry of groups) {
-      if (Array.isArray(entry)) {
-        fragment.appendChild(buildMessageGroup(entry));
-      } else if ("type" in entry && entry.type === "time-separator") {
-        fragment.appendChild(buildTimeSeparator(entry.timestamp));
-      } else {
-        const el = buildMessageElement(entry as MessageData);
-        el.classList.add("message--ungrouped");
-        fragment.appendChild(el);
-      }
-    }
-    this._listEl.appendChild(fragment);
+    const oldScrollHeight = this._el.scrollHeight;
+    this._listEl.appendChild(this._buildGroupedFragment(msgs));
 
-    // Don't touch scrollTop — the new content sits below the viewport so the
-    // user's reading position stays stable. They'll scroll into the new
-    // content naturally. Re-arm the bottom-edge trigger so the next approach
-    // can fire (the previous fire reached this code path; the browser may
-    // not emit a fresh scroll event from the height change alone).
+    // DOWN direction: content was appended at the bottom. Under `column-reverse`
+    // the browser anchors the bottom, so without compensation the viewport would
+    // follow the new tail and jump downward by the added height. Subtract the
+    // delta from scrollTop (more negative = scrolled up relative to the new
+    // bottom) to keep the user's reading position fixed — they scroll into the
+    // new content naturally. This is the one compensating write the bottom-anchor
+    // trade requires; it only runs in context-view forward pagination, which is
+    // rare and not a fast-fling path, so the momentum-clobber risk is minimal.
+    this._el.scrollTop -= this._el.scrollHeight - oldScrollHeight;
+
+    // Re-arm the bottom-edge trigger so the next approach can fire.
     this._scrollBottomFired = false;
-    // scrollHeight just grew but scrollTop didn't — the user is no longer at
-    // the tail. Refresh synchronously so the image-load handler doesn't fire
-    // _scrollToBottom() on freshly appended cached images.
-    this._scrolledUp = this._el.scrollHeight - this._el.scrollTop - this._el.clientHeight > 40;
-    this._cullTopIfNeeded();
+    this._scrolledUp = this._distanceFromBottom > 40;
+    this._stickToBottom = false;
+    this._prevScrollTop = this._el.scrollTop;
+    this._scheduleCull();
   }
 
   /** Replace the entire message list.
@@ -1522,12 +1595,11 @@ export class Timeline {
       this._listEl.style.transition = "";
       this._listEl.style.transform = "";
     }
-    // Cancel any pending post-render scroll timer from a previous setMessages call
-    if (this._postRenderScrollTimer !== null) {
-      clearTimeout(this._postRenderScrollTimer);
-      this._postRenderScrollTimer = null;
+    // Cancel a pending deferred cull so it can't fire against the new list.
+    if (this._cullTimer !== null) {
+      clearTimeout(this._cullTimer);
+      this._cullTimer = null;
     }
-
     // Reset selection so _selectedIndex can't be out-of-range for the new message list.
     // Without this, navigating after a room switch can get stuck because _selectedIndex
     // still holds an index from the previous room's (longer) message list, making
@@ -1539,7 +1611,6 @@ export class Timeline {
     // Capture scroll state before re-render so we can restore it
     const wasScrolledUp = this._scrolledUp;
     const savedScrollTop = this._el.scrollTop;
-    const savedScrollHeight = this._el.scrollHeight;
 
     this._messages = [...msgs];
     // Render only the most recent window. Older messages remain in the buffer
@@ -1549,42 +1620,39 @@ export class Timeline {
     this._renderAll();
 
     if (preserveScroll && wasScrolledUp) {
-      // Restore the user's reading position by compensating for any height change
-      const heightDelta = this._el.scrollHeight - savedScrollHeight;
-      this._el.scrollTop = savedScrollTop + heightDelta;
-      // Keep _scrolledUp true so incoming messages don't auto-scroll the user
+      // Restore the user's reading position. Under `column-reverse` scrollTop is
+      // the distance from the live tail, so re-applying the saved value keeps the
+      // same distance-from-bottom (the _renderAll teardown above resets it, so we
+      // set it back explicitly — this path is a member-data refresh, not a fling,
+      // so the write is safe). The browser would have held it for free on an
+      // incremental change, but setMessages does a full rebuild.
+      this._el.scrollTop = savedScrollTop;
+      // Keep the user where they were reading; don't follow the tail.
       this._scrolledUp = true;
-    } else if (this._unreadCount > 0 && !preserveScroll) {
-      // Insert unread separator and scroll to it so the user sees new messages
-      this._insertUnreadSeparator();
-      this._unreadCount = 0;
-      this._scrolledUp = false;
-      this._scrollTopFired = false;
-      // Scroll to bottom first so layout is stable, then scroll to the separator
-      this._scrollToBottom();
-      requestAnimationFrame(() => {
-        this.scrollToUnreadSeparator();
-        this._scrolledUp = true;
-        this._updateJumpToLatestVisibility();
-      });
+      this._stickToBottom = false;
+      this._prevScrollTop = this._el.scrollTop;
     } else if (!skipAutoScroll) {
+      // Draw the unread separator in-place (if any) but still open at the live
+      // tail. Auto-jumping to the separator caused a variable mid-list landing:
+      // it was centered in a rAF before media finished decoding, and any image
+      // in the band above it that grew afterward shoved it downward by an
+      // unpredictable amount. The marker now stays put; the user scrolls up or
+      // uses jump-to-latest to reach it.
+      if (this._unreadCount > 0 && !preserveScroll) {
+        this._insertUnreadSeparator();
+        this._unreadCount = 0;
+      }
       this._scrolledUp = false;
       this._scrollTopFired = false;
-      // Scroll immediately (for text content), then again after images may have loaded
+      // Pin to the bottom now for text content, and once more after the next
+      // layout. The stick observer keeps us pinned as images, emoji and stickers
+      // settle afterwards — no timer guesswork needed.
       this._scrollToBottom();
-      requestAnimationFrame(() => {
-        this._scrollToBottom();
-        // Second pass after a short delay to catch any late-loading content
-        // (e.g. custom emoji or stickers that aren't covered by the image load listener).
-        // Store the handle so a subsequent setMessages call can cancel it.
-        this._postRenderScrollTimer = setTimeout(() => {
-          this._postRenderScrollTimer = null;
-          this._scrollToBottom();
-        }, 150);
-      });
+      requestAnimationFrame(() => this._scrollToBottom());
     } else {
       // skipAutoScroll: caller will handle scrolling (e.g. jumpToMessage)
       this._scrolledUp = true;
+      this._stickToBottom = false;
       this._scrollTopFired = false;
     }
     this._updateJumpToLatestVisibility();
@@ -1605,6 +1673,9 @@ export class Timeline {
     }
     this._renderEnd = this._messages.length;
     const animate = opts?.animate ?? false;
+    // Height before the append, so a scrolled-up reader's position can be held
+    // (column-reverse anchors the bottom — see _settleTailAppend).
+    const oldScrollHeight = this._el.scrollHeight;
 
     // Check 30-minute time gap from the previous message
     const prevMsg = this._messages[this._messages.length - 2];
@@ -1636,8 +1707,8 @@ export class Timeline {
           if (msgHeader) (msgHeader as HTMLElement).style.display = "none";
           if (animate) el.classList.add("message--entering");
           innerGroup.appendChild(el);
-          this._cullTopIfNeeded();
-          if (!this._scrolledUp) this._scrollToBottom();
+          this._scheduleCull();
+          this._settleTailAppend(oldScrollHeight);
           return;
         }
       }
@@ -1654,9 +1725,23 @@ export class Timeline {
       this._listEl.appendChild(el);
     }
 
-    this._cullTopIfNeeded();
+    this._scheduleCull();
+    this._settleTailAppend(oldScrollHeight);
+  }
 
-    if (!this._scrolledUp) {
+  /** After appending live content at the tail: pin to the bottom if the user is
+   *  following the live tail, otherwise hold their reading position. Under
+   *  `flex-direction: column-reverse` the bottom is anchored, so appending below
+   *  shifts the viewport toward the new tail — when scrolled up we subtract the
+   *  added height to keep the previously-visible content fixed. `animate` uses the
+   *  send counter-animation instead of an instant pin. */
+  private _settleTailAppend(oldScrollHeight: number, animate = false): void {
+    if (this._scrolledUp) {
+      this._el.scrollTop -= this._el.scrollHeight - oldScrollHeight;
+      this._prevScrollTop = this._el.scrollTop;
+    } else if (animate) {
+      this._scrollAnimated();
+    } else {
       this._scrollToBottom();
     }
   }
@@ -2023,6 +2108,7 @@ export class Timeline {
     // message — the user is presumably looking at the compose box, which is
     // anchored to the live tail.
     this._renderEnd = this._messages.length;
+    const oldScrollHeight = this._el.scrollHeight;
 
     // Check 30-minute time gap from the previous message
     const prevMsg = this._messages[this._messages.length - 2];
@@ -2050,7 +2136,7 @@ export class Timeline {
           el.style.opacity = "0";
           innerGroup!.appendChild(el);
           this._lastHiddenEl = el;
-          if (!this._scrolledUp) this._scrollAnimated();
+          this._settleTailAppend(oldScrollHeight, true);
           return;
         }
       }
@@ -2061,14 +2147,14 @@ export class Timeline {
       wrapper.style.opacity = "0";
       this._listEl.appendChild(wrapper);
       this._lastHiddenEl = wrapper;
-      if (!this._scrolledUp) this._scrollAnimated();
+      this._settleTailAppend(oldScrollHeight, true);
     } else {
       const el = buildMessageElement(msg);
       el.classList.add("message--ungrouped");
       el.style.opacity = "0";
       this._listEl.appendChild(el);
       this._lastHiddenEl = el;
-      if (!this._scrolledUp) this._scrollAnimated();
+      this._settleTailAppend(oldScrollHeight, true);
     }
   }
 
@@ -2208,21 +2294,36 @@ export class Timeline {
     if (!el) return;
     const img = el.querySelector<HTMLImageElement>(".message__image, .message__sticker");
     if (!img) return;
-    // Measure before and after in the same synchronous task.
-    // Data URLs are decoded immediately, so el.offsetHeight reflects the
-    // new size after the forced layout that follows the src assignment.
-    // Doing this synchronously avoids the async load-event racing with
-    // in-progress momentum scroll (which a deferred scrollTop set would interrupt).
-    const prevHeight = el.offsetHeight;
-    img.src = dataUrl;
-    const heightDelta = el.offsetHeight - prevHeight; // forces layout; data URL already decoded
-    if (heightDelta > 0) {
-      const elRect = el.getBoundingClientRect();
-      const scrollRect = this._el.getBoundingClientRect();
-      if (elRect.bottom < scrollRect.top) {
-        this._el.scrollTop += heightDelta;
+
+    // Whether the box already reserves space (width/height attributes set at
+    // render time from info.w/h). Captured before swapping src.
+    const hasReserved = img.getAttribute("width") && img.getAttribute("height");
+
+    // `settle` locks an unsized image to its decoded natural size and backfills
+    // the buffer so windowed re-renders reserve the right height. It no longer
+    // touches scrollTop: under `flex-direction: column-reverse` the browser
+    // anchors the bottom, so media decoding/growing *above* the fold keeps the
+    // read position stable for free (this is what previously caused a one-frame
+    // shift each time an image settled — the residual "flicker"). Media is
+    // delivered as Blob URLs that decode asynchronously, so settle runs both
+    // synchronously (cached blobs) and on the `load` event.
+    const settle = (): void => {
+      if (!hasReserved && img.naturalWidth && img.naturalHeight) {
+        img.width = img.naturalWidth;
+        img.height = img.naturalHeight;
+        // The explicit dimensions now reserve the box; drop the placeholder
+        // min-height so it can't fight the real (often smaller) decoded size.
+        img.classList.remove("message__image--unsized", "message__sticker--unsized");
+        if (idx >= 0) {
+          this._messages[idx].mediaWidth = img.naturalWidth;
+          this._messages[idx].mediaHeight = img.naturalHeight;
+        }
       }
-    }
+    };
+
+    img.src = dataUrl;
+    settle(); // cached/decoded blobs change size now
+    if (!img.complete) img.addEventListener("load", settle, { once: true });
   }
 
   /**
@@ -2389,11 +2490,14 @@ export class Timeline {
     const el = this.getMessageElementById(eventId);
     if (!el) return false;
     el.scrollIntoView({ block: "center" });
-    // Synchronously update _scrolledUp from the new scrollTop. WebKit fires the
-    // scroll event asynchronously, so if we leave _scrolledUp stale, image load
-    // handlers or appendMessage will see the old value and call _scrollToBottom(),
-    // overriding the position we just set.
-    this._scrolledUp = this._el.scrollHeight - this._el.scrollTop - this._el.clientHeight > 40;
+    // Synchronously update scroll state from the new scrollTop. WebKit fires the
+    // scroll event asynchronously, so if we leave it stale, appendMessage or the
+    // stick observer could see the old value and call _scrollToBottom(),
+    // overriding the position we just set. A jump targets a specific message,
+    // not the tail — disengage stick.
+    this._scrolledUp = this._distanceFromBottom > 40;
+    this._stickToBottom = false;
+    this._prevScrollTop = this._el.scrollTop;
     this._updateJumpToLatestVisibility();
     // Select the message so keyboard navigation (j/k, r, e, etc.) targets it.
     this._setSelected(idx);
@@ -2618,39 +2722,80 @@ export class Timeline {
   }
 
   private _scrollToBottom(): void {
-    this._el.scrollTop = this._el.scrollHeight;
+    // column-reverse: the live tail is scrollTop 0.
+    this._el.scrollTop = 0;
     this._scrolledUp = false;
+    this._stickToBottom = true;
+    this._prevScrollTop = 0;
     this._updateJumpToLatestVisibility();
+  }
+
+  /** Distance in px from the live tail (bottom). 0 = pinned to the newest message.
+   *  Under `flex-direction: column-reverse` scrollTop is 0 at the bottom and goes
+   *  negative scrolling up, so distance-from-bottom is simply -scrollTop. */
+  private get _distanceFromBottom(): number {
+    return -this._el.scrollTop;
+  }
+
+  /** Distance in px from the oldest rendered message (top). 0 = at the very top. */
+  private get _distanceFromTop(): number {
+    return this._el.scrollHeight - this._el.clientHeight + this._el.scrollTop;
+  }
+
+  /** Build a DocumentFragment of grouped message DOM for `msgs`. Shared by
+   *  prepend/append/extend; grouping is computed over the given slice only, so a
+   *  group split across a chunk boundary may show an extra sender header at the
+   *  seam (same long-standing behaviour as prependMessages). */
+  private _buildGroupedFragment(msgs: MessageData[]): DocumentFragment {
+    const groups = groupMessages(msgs);
+    const fragment = document.createDocumentFragment();
+    for (const entry of groups) {
+      if (Array.isArray(entry)) {
+        fragment.appendChild(buildMessageGroup(entry));
+      } else if ("type" in entry && entry.type === "time-separator") {
+        fragment.appendChild(buildTimeSeparator(entry.timestamp));
+      } else {
+        const el = buildMessageElement(entry as MessageData);
+        el.classList.add("message--ungrouped");
+        fragment.appendChild(el);
+      }
+    }
+    return fragment;
+  }
+
+  /** First message element visible from the top of the viewport, with its offset
+   *  relative to the scroll container's top edge. Used for cull re-anchoring. */
+  private _firstVisibleMessage(): { id: string; top: number } | null {
+    const containerTop = this._el.getBoundingClientRect().top;
+    const els = this._listEl.querySelectorAll<HTMLElement>("[data-message-id]");
+    for (const el of els) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom > containerTop) {
+        return { id: el.dataset.messageId!, top: r.top - containerTop };
+      }
+    }
+    return null;
+  }
+
+  /** Current viewport-relative top of a message by id, or null if not rendered. */
+  private _viewportTopOf(id: string): number | null {
+    const el = this.getMessageElementById(id);
+    if (!el) return null;
+    return el.getBoundingClientRect().top - this._el.getBoundingClientRect().top;
   }
 
   // ── Windowed rendering ───────────────────────────────────────────────────
 
-  /** Re-render the current window, preserving the user's apparent scroll
-   *  position. `anchor` controls how scrollTop is adjusted:
-   *  - "top": content was added/removed above the viewport — compensate scrollTop
-   *           by the height delta so the visible content stays put.
-   *  - "bottom": content was added/removed below the viewport — leave scrollTop
-   *           alone so the top of the viewport is unchanged. */
-  private _rebuildWindow(anchor: "top" | "bottom"): void {
-    const oldScrollHeight = this._el.scrollHeight;
-    const oldScrollTop = this._el.scrollTop;
-    this._renderAll();
-    if (anchor === "top") {
-      this._el.scrollTop = oldScrollTop + (this._el.scrollHeight - oldScrollHeight);
-    } else {
-      this._el.scrollTop = oldScrollTop;
-    }
-    // Synchronously refresh _scrolledUp so the image-load handler (which fires
-    // when cached images in the freshly rendered DOM resolve in the same tick)
-    // doesn't read a stale value and snap the viewport to the bottom — that
-    // race would re-trigger _handleScrollNearBottom in a loop.
-    this._scrolledUp = this._el.scrollHeight - this._el.scrollTop - this._el.clientHeight > 40;
-  }
-
   private _handleScrollNearTop(): void {
     if (this._renderStart > 0) {
+      // More buffered (already-fetched) history to render. Inserting a chunk at
+      // the top is anchored by `column-reverse` with no scrollTop write, so it
+      // stays smooth under a fast fling — no momentum to fight.
       this._extendWindowUp();
     } else {
+      // Reached the oldest rendered message: a real server fetch starts. The
+      // prepend that follows inserts at the top and is anchored by `column-reverse`
+      // with no scrollTop write — nothing for WebKit's momentum engine to clobber.
       this._onScrollTopCallback?.();
     }
   }
@@ -2663,48 +2808,90 @@ export class Timeline {
     }
   }
 
-  /** Render an additional chunk of older messages from the buffer into the DOM,
-   *  preserving scroll position. Culls the bottom of the window if it exceeds
-   *  MAX_RENDERED. */
+  /** Render an additional chunk of older messages from the buffer at the top of
+   *  the DOM. Incremental (insertBefore, no teardown) so `column-reverse` anchors
+   *  the bottom and the viewport stays put with no scrollTop write — the up
+   *  direction is clobber-free. The over-cap trim is deferred to settle. */
   private _extendWindowUp(): void {
     const newStart = Math.max(0, this._renderStart - Timeline.RENDER_CHUNK);
     if (newStart === this._renderStart) return;
+    const added = this._messages.slice(newStart, this._renderStart);
     this._renderStart = newStart;
-    this._rebuildWindow("top");
-    this._cullBottomIfNeeded();
+    this._listEl.insertBefore(this._buildGroupedFragment(added), this._listEl.firstChild);
+    this._scheduleCull();
   }
 
-  /** Render an additional chunk of newer messages from the buffer into the DOM.
-   *  Culls the top of the window if it exceeds MAX_RENDERED. */
+  /** Render an additional chunk of newer messages at the bottom of the DOM. This
+   *  is the DOWN direction: under `column-reverse` appending at the bottom would
+   *  make the viewport follow the new tail, so we compensate scrollTop by the
+   *  added height to keep the reading position fixed (the rare, agreed-upon write
+   *  — only happens in context-view forward scrolling). The over-cap trim is
+   *  deferred to settle. */
   private _extendWindowDown(): void {
     const newEnd = Math.min(this._messages.length, this._renderEnd + Timeline.RENDER_CHUNK);
     if (newEnd === this._renderEnd) return;
+    const added = this._messages.slice(this._renderEnd, newEnd);
     this._renderEnd = newEnd;
-    this._rebuildWindow("bottom");
-    this._cullTopIfNeeded();
+    const oldH = this._el.scrollHeight;
+    this._listEl.appendChild(this._buildGroupedFragment(added));
+    this._el.scrollTop -= this._el.scrollHeight - oldH;
+    this._prevScrollTop = this._el.scrollTop;
+    this._scheduleCull();
   }
 
-  /** Drop oldest rendered messages if window exceeds MAX_RENDERED, adjusting
-   *  scrollTop so the visible content stays put. */
-  private _cullTopIfNeeded(): void {
-    const overflow = this._renderEnd - this._renderStart - Timeline.MAX_RENDERED;
-    if (overflow <= 0) return;
-    this._renderStart += overflow;
-    this._rebuildWindow("top");
+  /** Trim the rendered window back to MAX_RENDERED once the scroll has settled.
+   *
+   *  Culling removes DOM nodes; trimming the *bottom* (newest rendered, the side
+   *  that grows when paging history up) needs a scrollTop write to stay anchored
+   *  under `column-reverse`, which WebKit momentum would clobber mid-fling. So we
+   *  never cull during an active fling — the window may briefly exceed the cap,
+   *  which is pure DOM-size housekeeping, not correctness. A debounced timer runs
+   *  the trim only after scrolling goes quiet (no scroll event for ~120ms). */
+  private _scheduleCull(): void {
+    if (typeof setTimeout === "undefined") return;
+    if (this._cullTimer !== null) clearTimeout(this._cullTimer);
+    this._cullTimer = setTimeout(() => {
+      this._cullTimer = null;
+      this._cullWindow();
+    }, 120);
   }
 
-  /** Drop newest rendered messages if window exceeds MAX_RENDERED. ScrollTop
-   *  is unchanged since the dropped content was below the viewport. */
-  private _cullBottomIfNeeded(): void {
-    const overflow = this._renderEnd - this._renderStart - Timeline.MAX_RENDERED;
-    if (overflow <= 0) return;
-    this._renderEnd -= overflow;
-    this._rebuildWindow("bottom");
+  /** Trim the window to MAX_RENDERED, centered on the message at the top of the
+   *  viewport, re-rendering once and re-anchoring on that pivot. Runs only at
+   *  settle (see _scheduleCull), so the scrollTop restore is safe from momentum. */
+  private _cullWindow(): void {
+    if (this._renderEnd - this._renderStart <= Timeline.MAX_RENDERED) return;
+    // Anchor on the message currently at the top of the viewport so its on-screen
+    // position is preserved across the rebuild.
+    const pivot = this._firstVisibleMessage();
+    const pivotIdx = pivot ? this._messages.findIndex((m) => m.id === pivot.id) : -1;
+
+    const half = Math.floor(Timeline.MAX_RENDERED / 2);
+    const center = pivotIdx >= 0 ? pivotIdx : this._renderStart;
+    let newStart = Math.max(0, center - half);
+    let newEnd = Math.min(this._messages.length, newStart + Timeline.MAX_RENDERED);
+    newStart = Math.max(0, newEnd - Timeline.MAX_RENDERED);
+    if (newStart === this._renderStart && newEnd === this._renderEnd) return;
+
+    this._renderStart = newStart;
+    this._renderEnd = newEnd;
+    this._renderAll();
+
+    // Re-anchor: nudge scrollTop so the pivot returns to its previous on-screen
+    // offset. Safe to write — we're idle (this only runs at settle).
+    if (pivot) {
+      const after = this._viewportTopOf(pivot.id);
+      if (after !== null) {
+        this._el.scrollTop += after - pivot.top;
+        this._prevScrollTop = this._el.scrollTop;
+      }
+    }
   }
 
   /** Ensure `idx` (a position in the full buffer) is within the rendered window.
-   *  If not, extend the window in that direction far enough to include it
-   *  (plus a margin), and re-render. Returns true if the window changed. */
+   *  If not, set the window to include it (plus a margin), capped at MAX_RENDERED,
+   *  and re-render. The caller positions the viewport afterward (scrollIntoView),
+   *  so no scroll compensation is done here. Returns true if the window changed. */
   private _ensureInWindow(idx: number): boolean {
     if (idx < 0 || idx >= this._messages.length) return false;
     if (idx >= this._renderStart && idx < this._renderEnd) return false;
@@ -2712,13 +2899,12 @@ export class Timeline {
     const margin = Timeline.RENDER_CHUNK;
     if (idx < this._renderStart) {
       this._renderStart = Math.max(0, idx - margin);
-      this._rebuildWindow("top");
-      this._cullBottomIfNeeded();
+      this._renderEnd = Math.min(this._messages.length, this._renderStart + Timeline.MAX_RENDERED);
     } else {
       this._renderEnd = Math.min(this._messages.length, idx + 1 + margin);
-      this._rebuildWindow("bottom");
-      this._cullTopIfNeeded();
+      this._renderStart = Math.max(0, this._renderEnd - Timeline.MAX_RENDERED);
     }
+    this._renderAll();
     return true;
   }
 
@@ -2731,9 +2917,13 @@ export class Timeline {
    */
   private _scrollAnimated(): void {
     const prevScrollTop = this._el.scrollTop;
-    this._el.scrollTop = this._el.scrollHeight;
+    // column-reverse: the live tail is scrollTop 0. `delta` is how far we jumped
+    // (prevScrollTop is negative when scrolled up, so 0 - prev > 0).
+    this._el.scrollTop = 0;
     this._scrolledUp = false;
-    const delta = this._el.scrollTop - prevScrollTop;
+    this._stickToBottom = true;
+    this._prevScrollTop = 0;
+    const delta = -prevScrollTop;
     if (delta <= 0) return;
 
     // Defer the visual counter-offset so measurements in the current frame are clean

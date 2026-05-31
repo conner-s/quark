@@ -1133,25 +1133,58 @@ body {
 
 /* ── Timeline ────────────────────────────────────────────────────────────── */
 
+.timeline-wrap {
+  /* Non-scrolling positioning context for the timeline overlays. Occupies the
+     content-area row the scroller used to fill directly; the scroller fills it
+     in turn. The loading indicator and jump-to-latest button are absolute
+     children of THIS element (not the scroller), so they pin to the timeline
+     viewport instead of scrolling away with the column-reverse content — an
+     absolutely positioned descendant of a scroll container scrolls with its
+     content, which had left the jump button stuck at the bottom and off-screen. */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
 .timeline {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  overflow-anchor: none; /* disable browser scroll anchoring — all adjustments are manual */
+  /* WebKit (incl. WKWebView) does NOT implement `overflow-anchor`, so the browser
+     can't keep the scroll position stable when content is inserted/resized above
+     the viewport. Manually writing scrollTop to compensate is fought by WebKit's
+     inertial-momentum engine: a programmatic scrollTop set during an active fling
+     is overridden on the next compositor frame, which produced the "huge jump
+     through history on fast flick".
+     The fix is structural: `flex-direction: column-reverse` anchors the scroll
+     position to the BOTTOM, so the browser itself keeps the visible content
+     stationary when older messages are prepended (or media grows) above — with NO
+     JS scrollTop write at all. No write → nothing for momentum to fight.
+     Consequence of bottom-anchoring: scrollTop is 0 at the live tail and goes
+     NEGATIVE scrolling up toward history (range [-(scrollHeight-clientHeight), 0]).
+     All scroll math in Timeline.ts is written for that convention — see the
+     _distanceFromBottom / _distanceFromTop helpers. Its only in-flow child is
+     _listEl, which keeps the reverse anchoring clean; the loading indicator and
+     jump-to-latest button live in .timeline-wrap (above), not in here. */
+  overflow-anchor: none; /* belt-and-suspenders; unsupported on WebKit anyway */
+  /* Also disable the timeline's own rubber-band: a column-reverse scroller still
+     overscrolls past the tail, and the bounce-back spring can override a write. */
+  overscroll-behavior-y: none;
   scrollbar-gutter: stable; /* always reserve scrollbar space so message-bubble right edges stay fixed */
   padding: 10px 12px;
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-direction: column-reverse; /* bottom-anchored scroll — see note above */
   min-height: 0;
-  position: relative; /* positioning context for the absolute loading indicator */
 }
 
 .timeline__loading-more {
-  /* Taken out of the layout flow so it never shifts _listEl or affects scrollHeight.
-     This prevents the "jump on pagination" caused by the indicator appearing/disappearing
-     inside a flex container with gap. It renders as an overlay at the top of the viewport
-     while the user is scrolled near the top. */
+  /* Overlay anchored to .timeline-wrap (not the scroller), so it stays pinned to
+     the top of the timeline viewport and never shifts _listEl or affects the
+     scroller's scrollHeight — avoiding the "jump on pagination" the in-flow
+     indicator used to cause. Shown while the user is scrolled near the top. */
   position: absolute;
   top: 0;
   left: 0;
@@ -1165,9 +1198,14 @@ body {
 }
 
 .timeline__jump-to-latest {
-  position: sticky;
+  /* Overlay anchored to .timeline-wrap (the non-scrolling parent), floated to
+     the bottom-right of the timeline viewport. It deliberately lives OUTSIDE the
+     scroller: an absolute child of the column-reverse scroll container would
+     scroll with the content and pin to the content's bottom edge (off-screen),
+     which is the bug this fixes. */
+  position: absolute;
   bottom: 12px;
-  align-self: flex-end;
+  right: 16px;
   background: var(--bg-secondary, var(--bg));
   color: var(--accent);
   border: var(--border-width) solid var(--border-color);
@@ -1665,6 +1703,17 @@ body {
   cursor: zoom-in;
 }
 
+/* Reserve vertical space for an image whose dimensions weren't in the event
+   (no info.w/h). Without this the <img> is 0px tall until it decodes, so
+   prepended history doesn't grow scrollHeight — the scroll-position restore and
+   the near-top prefetch margin both rely on it. updateMessageMedia removes this
+   class and sets the real width/height once the bitmap loads. The placeholder
+   is intentionally modest so the decoded-size correction is small in either
+   direction. */
+.message__image--unsized {
+  min-height: 200px;
+}
+
 /* MSC2530 caption rendered beneath an image message */
 .message__image-caption {
   margin-top: 4px;
@@ -1906,6 +1955,12 @@ body {
   object-fit: contain;
   object-position: left;
   margin-top: 4px;
+}
+
+/* Placeholder reservation for a sticker with no dimensions in the event — see
+   .message__image--unsized. Stickers are small, so reserve their max box. */
+.message__sticker--unsized {
+  min-height: var(--sticker-max-size);
 }
 
 /* ── Custom emoji (inline) ───────────────────────────────────────────────── */

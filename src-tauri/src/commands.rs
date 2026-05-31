@@ -1432,6 +1432,27 @@ pub async fn search_gifs(
     }
 }
 
+/// Parse the pixel dimensions from the GIF header (logical screen descriptor).
+///
+/// A GIF starts with the 6-byte signature "GIF87a"/"GIF89a" followed by the
+/// logical screen width and height as little-endian u16s. GIF providers (and
+/// remote clients) frequently omit dimensions, leaving the frontend to reserve
+/// no layout space and jump as the image decodes — so we read them straight
+/// from the bytes we already downloaded. Returns None if the data isn't a GIF
+/// or the dimensions are zero.
+fn gif_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    if bytes.len() < 10 || &bytes[0..3] != b"GIF" {
+        return None;
+    }
+    let w = u16::from_le_bytes([bytes[6], bytes[7]]) as u32;
+    let h = u16::from_le_bytes([bytes[8], bytes[9]]) as u32;
+    if w == 0 || h == 0 {
+        None
+    } else {
+        Some((w, h))
+    }
+}
+
 /// Download a GIF from an external URL, upload it to the homeserver, and send
 /// it as an `m.image` event. This avoids leaking external URLs to recipients.
 #[tauri::command]
@@ -1463,6 +1484,17 @@ pub async fn send_gif(
         .map_err(|e| format!("Failed to read GIF bytes: {e}"))?
         .to_vec();
 
+    // Prefer dimensions probed from the actual bytes — providers often pass 0×0
+    // (e.g. when no HD rendition metadata is available), which would leave the
+    // recipient's client with no layout space to reserve. Fall back to the
+    // caller's values only when they're non-zero, else send None. Computed
+    // before the upload moves `bytes`.
+    let (w, h) = match gif_dimensions(&bytes) {
+        Some((w, h)) => (Some(w as u64), Some(h as u64)),
+        None if width > 0 && height > 0 => (Some(width as u64), Some(height as u64)),
+        None => (None, None),
+    };
+
     // Upload to the homeserver and get an mxc:// URL.
     let mxc_url = crate::matrix::media::upload_media(
         &client,
@@ -1473,16 +1505,37 @@ pub async fn send_gif(
     .await?;
 
     // Send as m.image event.
-    crate::matrix::timeline::send_image(
-        &client,
-        &room_id,
-        &title,
-        &mxc_url,
-        "image/gif",
-        Some(width as u64),
-        Some(height as u64),
-    )
-    .await
+    crate::matrix::timeline::send_image(&client, &room_id, &title, &mxc_url, "image/gif", w, h)
+        .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::gif_dimensions;
+
+    /// Minimal GIF header: "GIF89a" + logical screen width/height as LE u16.
+    fn gif_header(w: u16, h: u16) -> Vec<u8> {
+        let mut b = b"GIF89a".to_vec();
+        b.extend_from_slice(&w.to_le_bytes());
+        b.extend_from_slice(&h.to_le_bytes());
+        b.extend_from_slice(&[0u8; 4]); // packed fields etc. — unused by the parser
+        b
+    }
+
+    #[test]
+    fn reads_dimensions_from_header() {
+        assert_eq!(gif_dimensions(&gif_header(480, 270)), Some((480, 270)));
+        assert_eq!(gif_dimensions(&gif_header(1, 1)), Some((1, 1)));
+    }
+
+    #[test]
+    fn rejects_non_gif_or_zero_or_truncated() {
+        assert_eq!(gif_dimensions(b"PNG\x89 not a gif here"), None);
+        assert_eq!(gif_dimensions(&gif_header(0, 200)), None);
+        assert_eq!(gif_dimensions(&gif_header(200, 0)), None);
+        assert_eq!(gif_dimensions(b"GIF"), None); // too short
+        assert_eq!(gif_dimensions(&[]), None);
+    }
 }
 
 // ─── App Config Commands ──────────────────────────────────────────────────────
