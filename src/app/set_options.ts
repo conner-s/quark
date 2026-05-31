@@ -23,6 +23,7 @@ export function applySetOptions(cfg: AppConfig, sets: SetOption[]): AppConfig {
     media: { ...cfg.media },
     gif: { ...cfg.gif },
     emoji: { ...cfg.emoji },
+    cache: { ...cfg.cache },
   };
 
   for (const { name, value } of sets) {
@@ -50,6 +51,9 @@ export function applySetOptions(cfg: AppConfig, sets: SetOption[]): AppConfig {
       // emoji
       case "shortcode_autocomplete": if (typeof value === "boolean") updated.emoji.shortcode_autocomplete = value; break;
       case "autocomplete_min_chars": if (typeof value === "number")  updated.emoji.autocomplete_min_chars = value; break;
+      // cache
+      case "image_memory_mb":   if (typeof value === "number")  updated.cache.image_memory_mb = value; break;
+      case "timeline_rooms":    if (typeof value === "number")  updated.cache.timeline_rooms = value; break;
       default:
         console.warn(`[quarkrc] unknown set option: "${name}"`);
     }

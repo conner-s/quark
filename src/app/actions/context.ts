@@ -107,10 +107,73 @@ export const _memberDisplayName = new Map<string, string>();
 export const _memberAvatarMxc = new Map<string, string>();
 /** mxc:// URL → blob: URL, populated as thumbnails are downloaded */
 export const _avatarDataUrl = new Map<string, string>();
-/** mxc:// URL → blob: URL for message images/stickers, so revisiting a room
- *  shows already-fetched media instantly instead of re-downloading + decoding
- *  (~1s round-trip) on every open. */
-export const _messageMediaCache = new Map<string, string>();
+/**
+ * LRU cache of decoded message images/stickers (mxc:// → blob: URL), so
+ * revisiting a room shows already-fetched media instantly instead of
+ * re-downloading + decoding (~1s round-trip) on every open. Bounded by a byte
+ * budget (configurable; default 150 MB): once exceeded, the least-recently-used
+ * blobs are evicted and their object URLs revoked to actually free memory.
+ *
+ * Note: an evicted image that's still off-screen in the *current* room would
+ * show broken until the room is re-opened (re-open re-downloads on a cache
+ * miss). The default budget is high enough that this is rare; switching rooms
+ * always self-heals because the open path re-fetches misses.
+ */
+class MediaBlobCache {
+  private map = new Map<string, { url: string; size: number }>();
+  private totalBytes = 0;
+  private maxBytes = 150 * 1024 * 1024;
+
+  /** Set the byte budget (MB). Evicts immediately if now over. */
+  setMaxMb(mb: number): void {
+    this.maxBytes = Math.max(0, mb) * 1024 * 1024;
+    this._evict();
+  }
+
+  has(key: string): boolean {
+    return this.map.has(key);
+  }
+
+  /** Get the blob URL, marking it most-recently-used. */
+  get(key: string): string | undefined {
+    const entry = this.map.get(key);
+    if (!entry) return undefined;
+    this.map.delete(key);
+    this.map.set(key, entry); // re-insert → newest in iteration order
+    return entry.url;
+  }
+
+  /** Insert/replace a blob URL with its decoded byte size; evicts as needed. */
+  set(key: string, url: string, size: number): void {
+    const existing = this.map.get(key);
+    if (existing) {
+      this.totalBytes -= existing.size;
+      if (existing.url !== url) URL.revokeObjectURL(existing.url);
+      this.map.delete(key);
+    }
+    this.map.set(key, { url, size });
+    this.totalBytes += size;
+    this._evict();
+  }
+
+  private _evict(): void {
+    // Keep at least one entry so a single oversized image still displays.
+    while (this.totalBytes > this.maxBytes && this.map.size > 1) {
+      const oldest = this.map.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      const entry = this.map.get(oldest)!;
+      this.map.delete(oldest);
+      this.totalBytes -= entry.size;
+      URL.revokeObjectURL(entry.url);
+    }
+  }
+}
+export const _messageMediaCache = new MediaBlobCache();
+
+/** Apply the configured in-memory image cache budget (MB). */
+export function setMediaCacheLimit(mb: number): void {
+  _messageMediaCache.setMaxMb(mb);
+}
 /** roomId → resolved blob: URL for the room avatar */
 export const _roomAvatarDataUrl = new Map<string, string>();
 /** userId → known DM room ID, populated when a DM room is entered */
@@ -439,7 +502,9 @@ export function _downloadMessageImages(events: TimelineEvent[], timeline: { upda
     }
     downloadMedia(mxc, e.media_encryption_info).then((dl) => {
       const url = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
-      _messageMediaCache.set(mxc, url);
+      // Decoded byte size ≈ 3/4 of the base64 length (ignoring padding).
+      const size = Math.floor((dl.data_base64.length * 3) / 4);
+      _messageMediaCache.set(mxc, url, size);
       timeline.updateMessageMedia(eventId, url);
     }).catch((err) => {
       console.error(`[media] failed to download ${mxc}:`, err);

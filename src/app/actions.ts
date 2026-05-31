@@ -34,6 +34,7 @@ export {
   jumpToLatest,
   reloadCurrentRoomTimeline,
   appendRoomTimelineCache,
+  applyCacheConfig,
   selectSpace,
   joinRoom,
   refreshRooms,

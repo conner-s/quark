@@ -41,12 +41,20 @@ export interface EmojiConfig {
   autocomplete_min_chars: number;
 }
 
+export interface CacheConfig {
+  /** In-memory cap (MB) for decoded message images/stickers (LRU). */
+  image_memory_mb: number;
+  /** Number of rooms whose timeline tail is kept in memory for instant re-open (LRU). */
+  timeline_rooms: number;
+}
+
 export interface AppConfig {
   general: GeneralConfig;
   sync: SyncConfig;
   media: MediaConfig;
   gif: GifConfig;
   emoji: EmojiConfig;
+  cache: CacheConfig;
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
@@ -55,6 +63,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   media: { auto_load_images: true, max_image_width: 600, max_image_height: 400, sticker_max_size: 256, cache_size_mb: 500 },
   gif: { provider: "tenor", api_key: "", rating: "pg", cache_results: true },
   emoji: { shortcode_autocomplete: true, autocomplete_min_chars: 2 },
+  cache: { image_memory_mb: 150, timeline_rooms: 30 },
 };
 
 export async function getAppConfig(): Promise<AppConfig> {

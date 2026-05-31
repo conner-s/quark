@@ -29,6 +29,16 @@ export async function setCacheSizeLimit(limitMb: number): Promise<void> {
   return invoke<void>("set_cache_size_limit", { sizeMb: limitMb });
 }
 
+/** On-disk size (bytes) of the event-cache SQLite store (search persistence). */
+export async function getEventCacheSize(): Promise<number> {
+  return invoke<number>("get_event_cache_size");
+}
+
+/** Clear the event-cache store (search persistence). Safe & rebuildable. */
+export async function clearEventCache(): Promise<void> {
+  return invoke<void>("clear_event_cache");
+}
+
 /**
  * Download media from an mxc:// URL.
  * Returns a MediaDownload containing base64-encoded content and MIME type.

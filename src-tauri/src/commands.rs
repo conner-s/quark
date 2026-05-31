@@ -1652,6 +1652,52 @@ pub async fn set_cache_size_limit(
     cache_state.0.set_max_size_mb(size_mb)
 }
 
+/// On-disk size of the matrix-sdk event-cache store (the SQLite DB that
+/// server-side search persists scanned events into). Sums the main DB plus its
+/// `-wal`/`-shm` sidecars. This is typically the largest local store, and grows
+/// with deep history searches — surfaced so the user can clear it.
+#[tauri::command]
+pub async fn get_event_cache_size(app_handle: AppHandle) -> Result<u64, String> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not resolve data dir: {e}"))?;
+    let mut total = 0u64;
+    for suffix in ["", "-wal", "-shm"] {
+        let path = data_dir.join(format!("matrix-sdk-event-cache.sqlite3{suffix}"));
+        if let Ok(meta) = std::fs::metadata(&path) {
+            total += meta.len();
+        }
+    }
+    Ok(total)
+}
+
+/// Clear the matrix-sdk event-cache store. The event cache only backs
+/// server-side search now (the live timeline uses raw `room.messages()`), so
+/// this is a safe, rebuildable cache to wipe — it just means the next search
+/// re-fetches from the homeserver. Clears the persisted chunks at the store
+/// level, with no per-room reload.
+///
+/// Notes: (1) SQLite frees the pages for reuse but doesn't shrink the file on
+/// disk until it's compacted on a later restart, so the on-disk size may not
+/// drop immediately even though the content is gone. (2) Rooms whose cache was
+/// already loaded into memory this session keep that copy until restart; the
+/// persisted store is what's wiped.
+#[tauri::command]
+pub async fn clear_event_cache(state: State<'_, MatrixState>) -> Result<(), String> {
+    let client = get_client(&state)?;
+    let store = client.event_cache_store();
+    let locked = store
+        .lock()
+        .await
+        .map_err(|e| format!("Event cache store lock failed: {e}"))?;
+    locked
+        .clear_all_rooms_chunks()
+        .await
+        .map_err(|e| format!("Failed to clear event cache: {e}"))?;
+    Ok(())
+}
+
 // ─── Notification Commands ────────────────────────────────────────────────────
 
 /// Return the current notification configuration.

@@ -71,7 +71,7 @@ export {
 } from "./emoji.js";
 
 // ─── Media ────────────────────────────────────────────────────────────────────
-export { downloadMedia, getThumbnail, uploadMedia, sendPastedImage, sendFile, sendVideo, saveMediaToTemp, saveMediaToPath, getDefaultSaveDir, openMediaExternally, getCacheStats, clearMediaCache, setCacheSizeLimit, getUrlPreview } from "./media.js";
+export { downloadMedia, getThumbnail, uploadMedia, sendPastedImage, sendFile, sendVideo, saveMediaToTemp, saveMediaToPath, getDefaultSaveDir, openMediaExternally, getCacheStats, clearMediaCache, setCacheSizeLimit, getEventCacheSize, clearEventCache, getUrlPreview } from "./media.js";
 export type { CacheStats, UrlPreview } from "./media.js";
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -124,4 +124,4 @@ export {
 export { loadTheme, listCustomThemes, parseQuarkrc } from "./config.js";
 export type { CustomThemeEntry } from "./config.js";
 export { getAppConfig, setAppConfig, DEFAULT_APP_CONFIG } from "./app_config.js";
-export type { AppConfig, GeneralConfig, SyncConfig, MediaConfig, GifConfig, GifRating, EmojiConfig } from "./app_config.js";
+export type { AppConfig, GeneralConfig, SyncConfig, MediaConfig, GifConfig, GifRating, EmojiConfig, CacheConfig } from "./app_config.js";

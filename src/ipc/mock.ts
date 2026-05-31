@@ -478,11 +478,15 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
         media: { auto_load_images: true, max_image_width: 600, max_image_height: 400, sticker_max_size: 256, cache_size_mb: 500 },
         gif: { provider: "tenor", api_key: "", rating: "pg", cache_results: true },
         emoji: { shortcode_autocomplete: true, autocomplete_min_chars: 2 },
+        cache: { image_memory_mb: 150, timeline_rooms: 30 },
       };
+    case "get_event_cache_size":
+      return 487654321;
     case "set_app_config":
     case "set_notification_config":
     case "clear_media_cache":
     case "set_cache_size_limit":
+    case "clear_event_cache":
     case "mute_room":
     case "unmute_room":
       return null;

@@ -9,14 +9,20 @@ import {
   logout as ipcLogout,
   getOwnProfile,
   downloadMedia,
+  getAppConfig,
 } from "../../ipc/index.js";
 
 import { showMainLayout } from "../../ui/App.js";
 import { showSuccess } from "../../ui/NotificationToast.js";
 
 import { getComponents } from "./context.js";
-import { refreshRooms } from "./rooms.js";
+import { refreshRooms, applyCacheConfig } from "./rooms.js";
 import { loadThemeFromConfig } from "./theme.js";
+
+/** Apply the in-memory cache budgets from config at session start (non-critical). */
+function _applyCacheConfig(): void {
+  void getAppConfig().then(applyCacheConfig).catch(() => { /* defaults stand */ });
+}
 
 /** Fetch own profile and store userId + displayName in AppState. Non-critical. */
 async function _loadOwnProfile(): Promise<void> {
@@ -94,6 +100,7 @@ export async function login(homeserver: string, username: string, password: stri
 
     void _loadOwnProfile();
     await loadThemeFromConfig();
+    _applyCacheConfig();
     await refreshRooms();
     // First-login race: the Rust sync loop is up but hasn't returned rooms yet.
     // Keep retrying in the background so the user doesn't have to relaunch.
@@ -123,6 +130,7 @@ export async function attemptSessionRestore(components: import("../../ui/App.js"
     showMainLayout(components);
     void _loadOwnProfile();
     await loadThemeFromConfig();
+    _applyCacheConfig();
     await refreshRooms();
     // Persisted sync state usually makes getRooms() instant on restore, but if
     // the store hasn't hydrated yet (cold start) the first call can be empty —

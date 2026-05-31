@@ -120,6 +120,8 @@ pub fn run() {
             commands::get_cache_stats,
             commands::clear_media_cache,
             commands::set_cache_size_limit,
+            commands::get_event_cache_size,
+            commands::clear_event_cache,
             // Crypto
             commands::get_verification_status,
             commands::get_cross_signing_status,

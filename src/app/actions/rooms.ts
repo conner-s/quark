@@ -23,6 +23,7 @@ import {
 import { getPseudoSpace, sortByRecency } from "../pseudo_spaces.js";
 
 import type { RoomMember, TimelineEvent } from "../../ipc/types.js";
+import type { AppConfig } from "../../ipc/app_config.js";
 import type { RoomSection } from "../../ui/RoomList.js";
 import type { SpaceItem } from "../../ui/SpaceStrip.js";
 
@@ -49,6 +50,7 @@ import {
   _downloadMemberAvatars,
   ensureSenderAvatarDownloaded,
   isInContextView,
+  setMediaCacheLimit,
 } from "./context.js";
 import { closeThread } from "./threads.js";
 import { cancelReply } from "./messages.js";
@@ -66,11 +68,44 @@ interface CachedRoomTimeline {
   events: TimelineEvent[];
   reachedStart: boolean;
 }
+// Insertion order doubles as LRU recency: every open re-`set`s the room, moving
+// it to newest; eviction drops the oldest (least-recently-opened) entries.
 const _roomTimelineCache = new Map<string, CachedRoomTimeline>();
 /** Max events retained per room (cap memory; the live tail is what matters). */
 const ROOM_TIMELINE_CACHE_CAP = 200;
 /** Events fetched for the first paint. Smaller = faster first-ever open. */
 const ROOM_OPEN_LIMIT = 50;
+/** Max rooms whose tail is kept cached (LRU). Configurable via [cache].timeline_rooms. */
+let _roomCacheMaxRooms = 30;
+
+/** Update the cached-room limit (from config) and evict down to it immediately. */
+export function setRoomCacheLimit(rooms: number): void {
+  _roomCacheMaxRooms = Math.max(1, rooms);
+  _evictRoomCache();
+}
+
+/** Push the `[cache]` config values into the live in-memory caches (the room
+ *  timeline cache here + the message-image cache in context). Called at startup
+ *  and after the user changes the limits in Settings. */
+export function applyCacheConfig(config: AppConfig): void {
+  setRoomCacheLimit(config.cache.timeline_rooms);
+  setMediaCacheLimit(config.cache.image_memory_mb);
+}
+
+/** Store/refresh a room's cached tail (marks it most-recently-used) + evict. */
+function _putRoomTimeline(roomId: string, events: TimelineEvent[], reachedStart: boolean): void {
+  _roomTimelineCache.delete(roomId); // re-insert so it lands as newest
+  _roomTimelineCache.set(roomId, { events: events.slice(-ROOM_TIMELINE_CACHE_CAP), reachedStart });
+  _evictRoomCache();
+}
+
+function _evictRoomCache(): void {
+  while (_roomTimelineCache.size > _roomCacheMaxRooms) {
+    const oldest = _roomTimelineCache.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    _roomTimelineCache.delete(oldest);
+  }
+}
 
 /** True if two event lists share the same newest event and length — i.e. the
  *  background refresh found nothing new, so a re-render would just flicker. */
@@ -222,10 +257,7 @@ export async function selectRoom(roomId: string): Promise<void> {
     paginationState.reachedStart = reached_start;
 
     AppState.set("currentTimeline", events);
-    _roomTimelineCache.set(roomId, {
-      events: events.slice(-ROOM_TIMELINE_CACHE_CAP),
-      reachedStart: reached_start,
-    });
+    _putRoomTimeline(roomId, events, reached_start);
 
     // Re-render only if the fresh fetch differs from what we painted (or we had
     // nothing cached) — an unchanged revisit keeps its scroll position, no flash.
@@ -539,10 +571,7 @@ export async function jumpToLatest(): Promise<void> {
     paginationState.inContextView = false;
 
     AppState.set("currentTimeline", page.events);
-    _roomTimelineCache.set(roomId, {
-      events: page.events.slice(-ROOM_TIMELINE_CACHE_CAP),
-      reachedStart: page.reached_start,
-    });
+    _putRoomTimeline(roomId, page.events, page.reached_start);
     const threadRootCounts = _buildThreadRootCounts(page.events);
     const mainEvents = _applyEdits(page.events).filter((e) => !e.thread_root);
     const messages = mainEvents.map((e) => timelineEventToMessage(e, page.events, threadRootCounts));
@@ -585,10 +614,7 @@ export async function reloadCurrentRoomTimeline(): Promise<void> {
   const { events, reached_start } = page;
   paginationState.reachedStart = reached_start;
   AppState.set("currentTimeline", events);
-  _roomTimelineCache.set(roomId, {
-    events: events.slice(-ROOM_TIMELINE_CACHE_CAP),
-    reachedStart: reached_start,
-  });
+  _putRoomTimeline(roomId, events, reached_start);
 
   const threadRootCounts = _buildThreadRootCounts(events);
   const mainEvents = _applyEdits(events).filter((e) => !e.thread_root);

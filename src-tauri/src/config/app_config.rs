@@ -99,6 +99,19 @@ pub struct EmojiConfig {
     pub autocomplete_min_chars: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CacheConfig {
+    /// In-memory cap (MB) for decoded message images/stickers. Bounds the
+    /// blob-URL cache that makes revisited images paint instantly; LRU eviction
+    /// frees the oldest blobs past this limit.
+    #[serde(default = "default_image_memory_mb")]
+    pub image_memory_mb: u64,
+    /// Number of rooms whose timeline tail is kept in memory for instant
+    /// re-open (LRU). Events per room are separately bounded.
+    #[serde(default = "default_timeline_rooms")]
+    pub timeline_rooms: u32,
+}
+
 // ─── Root config ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -113,6 +126,8 @@ pub struct AppConfig {
     pub gif: GifConfig,
     #[serde(default)]
     pub emoji: EmojiConfig,
+    #[serde(default)]
+    pub cache: CacheConfig,
 }
 
 // ─── Default impls ────────────────────────────────────────────────────────────
@@ -128,6 +143,8 @@ fn default_cache_size_mb() -> u64 { 500 }
 fn default_gif_provider() -> GifProvider { GifProvider::Tenor }
 fn default_gif_rating() -> GifRating { GifRating::Pg }
 fn default_autocomplete_min_chars() -> u32 { 2 }
+fn default_image_memory_mb() -> u64 { 150 }
+fn default_timeline_rooms() -> u32 { 30 }
 
 impl Default for GeneralConfig {
     fn default() -> Self {
@@ -165,6 +182,12 @@ impl Default for EmojiConfig {
     }
 }
 
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self { image_memory_mb: default_image_memory_mb(), timeline_rooms: default_timeline_rooms() }
+    }
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -173,6 +196,7 @@ impl Default for AppConfig {
             media: MediaConfig::default(),
             gif: GifConfig::default(),
             emoji: EmojiConfig::default(),
+            cache: CacheConfig::default(),
         }
     }
 }

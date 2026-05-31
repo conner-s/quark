@@ -4,11 +4,11 @@ import { getConfig, setNotificationConfig } from "../app/notifications.js";
 import type { NotificationConfig } from "../app/notifications.js";
 import { testNotification } from "../ipc/notifications.js";
 import { showSuccess, showError } from "./NotificationToast.js";
-import { getCacheStats, clearMediaCache, setCacheSizeLimit } from "../ipc/media.js";
+import { getCacheStats, clearMediaCache, getEventCacheSize, clearEventCache } from "../ipc/media.js";
 import type { CacheStats } from "../ipc/media.js";
 import { getAppConfig, setAppConfig } from "../ipc/app_config.js";
 import type { AppConfig } from "../ipc/app_config.js";
-import { loadTheme } from "../app/actions.js";
+import { loadTheme, applyCacheConfig } from "../app/actions.js";
 import { listCustomThemes } from "../ipc/config.js";
 import type { CustomThemeEntry } from "../ipc/config.js";
 import { AppState } from "../app/state.js";
@@ -306,9 +306,14 @@ export class SettingsDialog extends DialogBase {
 
     let cfg: AppConfig | null = null;
     let stats: CacheStats | null = null;
+    let eventCacheBytes = 0;
 
     try {
-      [cfg, stats] = await Promise.all([getAppConfig(), getCacheStats()]);
+      [cfg, stats, eventCacheBytes] = await Promise.all([
+        getAppConfig(),
+        getCacheStats(),
+        getEventCacheSize().catch(() => 0),
+      ]);
     } catch {
       loading.textContent = "Failed to load media config.";
       return;
@@ -370,36 +375,67 @@ export class SettingsDialog extends DialogBase {
       return row;
     };
 
-    section.appendChild(makeReadRow("Usage", `${stats.usage_percent.toFixed(1)}%`));
-    section.appendChild(makeReadRow("Cached files", String(stats.entry_count)));
-    section.appendChild(makeReadRow("Cache size", fmtBytes(stats.total_size_bytes)));
-
+    // Media cache (disk) — downloaded image/file bytes.
+    section.appendChild(makeReadRow("Media cache (disk)", `${fmtBytes(stats.total_size_bytes)} · ${stats.entry_count} files · ${stats.usage_percent.toFixed(1)}%`));
     section.appendChild(this._makeNumberRow(
-      "Cache size limit (MB)",
+      "Media cache limit (MB)",
       draft.media.cache_size_mb,
       10, 10000,
       (v) => { draft = { ...draft, media: { ...draft.media, cache_size_mb: v } }; },
     ));
 
-    // Actions row: save + clear cache
+    // Search cache (disk) — the matrix-sdk event-cache store that search
+    // persists scanned events into. Usually the largest store; growable by
+    // deep searches and safe to clear (search just re-fetches afterward).
+    section.appendChild(makeReadRow("Search cache (disk)", fmtBytes(eventCacheBytes)));
+
+    // In-memory caches — bound RAM used by the instant-open speedups.
+    section.appendChild(this._makeNumberRow(
+      "In-memory image cache (MB)",
+      draft.cache.image_memory_mb,
+      0, 4096,
+      (v) => { draft = { ...draft, cache: { ...draft.cache, image_memory_mb: v } }; },
+    ));
+    section.appendChild(this._makeNumberRow(
+      "Rooms to keep cached",
+      draft.cache.timeline_rooms,
+      1, 500,
+      (v) => { draft = { ...draft, cache: { ...draft.cache, timeline_rooms: v } }; },
+    ));
+
+    // Actions row: save + clear buttons. Save also pushes the new in-memory caps
+    // into the live caches so they apply without a restart.
     const actions = document.createElement("div");
     actions.className = "settings-dialog__section settings-dialog__actions";
-    actions.appendChild(this._makeSaveButton(() => setAppConfig(draft)));
+    actions.appendChild(this._makeSaveButton(async () => {
+      await setAppConfig(draft);
+      applyCacheConfig(draft);
+    }));
 
-    const clearBtn = document.createElement("button");
-    clearBtn.type = "button";
-    clearBtn.className = "settings-dialog__btn settings-dialog__btn--danger";
-    clearBtn.textContent = "[clear cache]";
-    clearBtn.addEventListener("click", async () => {
-      try {
-        await clearMediaCache();
-        clearBtn.textContent = "[cleared!]";
-      } catch {
-        clearBtn.textContent = "[error]";
-      }
-      setTimeout(() => { clearBtn.textContent = "[clear cache]"; }, 1500);
-    });
-    actions.appendChild(clearBtn);
+    const makeClearBtn = (label: string, action: () => Promise<void>): HTMLButtonElement => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "settings-dialog__btn settings-dialog__btn--danger";
+      btn.textContent = `[${label}]`;
+      btn.addEventListener("click", async () => {
+        try {
+          await action();
+          btn.textContent = "[cleared!]";
+        } catch {
+          btn.textContent = "[error]";
+        }
+        setTimeout(() => { btn.textContent = `[${label}]`; }, 1500);
+      });
+      return btn;
+    };
+
+    actions.appendChild(makeClearBtn("clear media cache", () => clearMediaCache()));
+    // Clearing wipes content; the on-disk file shrinks only after a restart (SQLite).
+    actions.appendChild(makeClearBtn("clear search cache", async () => {
+      await clearEventCache();
+      const updated = await getEventCacheSize().catch(() => eventCacheBytes);
+      eventCacheBytes = updated;
+    }));
 
     section.appendChild(actions);
   }
