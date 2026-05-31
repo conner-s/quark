@@ -3,7 +3,7 @@
 import { AppState } from "./state.js";
 import type { AppComponents } from "../ui/App.js";
 import type { TimelineEvent, RoomInfo } from "../ipc/types.js";
-import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage, resolveSenderAvatarUrl, ensureSenderAvatarDownloaded, applyIncomingRedaction, stripReplyFallback, isInContextView } from "./actions.js";
+import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage, resolveSenderAvatarUrl, ensureSenderAvatarDownloaded, applyIncomingRedaction, stripReplyFallback, isInContextView, reloadCurrentRoomTimeline } from "./actions.js";
 import { showToast } from "../ui/NotificationToast.js";
 import { handleIncomingMessage } from "./notifications.js";
 
@@ -46,6 +46,10 @@ interface SyncVerificationRequestPayload {
 interface SyncRedactionPayload {
   room_id: string;
   redacted_event_id: string;
+}
+
+interface RoomKeysReceivedPayload {
+  room_ids: string[];
 }
 
 // ── Tauri event listener shim ─────────────────────────────────────────────────
@@ -332,6 +336,19 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     }
   );
 
+  // ── quark://sync/room_keys ────────────────────────────────────────────────
+  // New room keys arrived (e.g. after verification). If we're showing one of the
+  // affected rooms, reload it so stale "unable to decrypt" events re-decrypt.
+  const unlistenRoomKeys = await tauriListen<RoomKeysReceivedPayload>(
+    "quark://sync/room_keys",
+    (payload) => {
+      const currentRoom = AppState.get("currentRoomId");
+      if (currentRoom && payload.room_ids.includes(currentRoom)) {
+        void reloadCurrentRoomTimeline();
+      }
+    }
+  );
+
   _unlisteners = [
     unlistenMessage,
     unlistenRooms,
@@ -341,6 +358,7 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     unlistenReaction,
     unlistenVerification,
     unlistenRedaction,
+    unlistenRoomKeys,
   ];
 
   // Mark as online

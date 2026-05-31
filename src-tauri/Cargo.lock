@@ -4085,10 +4085,11 @@ dependencies = [
 
 [[package]]
 name = "quark"
-version = "0.13.1"
+version = "0.13.2"
 dependencies = [
  "chrono",
  "directories",
+ "futures-util",
  "matrix-sdk",
  "mime",
  "rand 0.8.5",

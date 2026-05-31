@@ -5442,7 +5442,10 @@ body.quark-mobile .profile-edit-dialog__panel {
    viewport rect so scroll position and overflow:auto don't affect it. */
 .skeleton-overlay {
   position: fixed;
-  z-index: 200;
+  /* Below the modal/dialog layer (200) so dialogs (settings, etc.) opened while
+     a room is loading aren't hidden behind the skeleton, but above timeline
+     content (≤100) so it still covers the loading messages. */
+  z-index: 150;
   background-color: var(--bg);
   display: flex;
   flex-direction: column;

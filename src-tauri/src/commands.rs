@@ -344,35 +344,58 @@ pub async fn paginate_forward(
     crate::matrix::timeline::paginate_forward(&client, &room_id, after, limit.unwrap_or(50)).await
 }
 
-/// Open a room's timeline from the event cache (cache-backed live path).
+/// Open a room's live timeline via the raw `room.messages()` API (transient,
+/// bounded — does not persist into the event cache). Fetches the most recent
+/// `limit` events and remembers the backward-pagination token for subsequent
+/// `load_older_timeline` calls. Cancels any in-flight search first so the open
+/// isn't queued behind a long scan.
 #[tauri::command]
 pub async fn open_room_timeline(
     state: State<'_, MatrixState>,
     search_state: State<'_, crate::matrix::client::SearchState>,
-    pagination_lock: State<'_, crate::matrix::client::PaginationLock>,
+    tokens: State<'_, crate::matrix::client::TimelineTokens>,
     room_id: String,
     limit: Option<usize>,
 ) -> Result<crate::matrix::timeline::CachedTimelinePage, String> {
     let client = get_client(&state)?;
-    // Stop any in-flight scan, then serialize on the shared paginator.
     search_state.0.store(true, std::sync::atomic::Ordering::Relaxed);
-    let _guard = pagination_lock.0.lock().await;
-    crate::matrix::timeline::open_room_timeline(&client, &room_id, limit.unwrap_or(100)).await
+    let page =
+        crate::matrix::timeline::get_timeline(&client, &room_id, limit.unwrap_or(100), None).await?;
+    let reached_start = page.prev_batch.is_none();
+    tokens.0.lock().await.insert(room_id.clone(), page.prev_batch);
+    Ok(crate::matrix::timeline::CachedTimelinePage { events: page.events, reached_start })
 }
 
-/// Load older history into the cache and return the newly-prepended events.
+/// Load older history for the live timeline via raw `room.messages()`, resuming
+/// from the stored backward-pagination token, and return the newly-fetched
+/// events (oldest-first) for prepending.
 #[tauri::command]
 pub async fn load_older_timeline(
     state: State<'_, MatrixState>,
-    search_state: State<'_, crate::matrix::client::SearchState>,
-    pagination_lock: State<'_, crate::matrix::client::PaginationLock>,
+    tokens: State<'_, crate::matrix::client::TimelineTokens>,
     room_id: String,
     batch_size: Option<usize>,
 ) -> Result<crate::matrix::timeline::CachedTimelinePage, String> {
     let client = get_client(&state)?;
-    search_state.0.store(true, std::sync::atomic::Ordering::Relaxed);
-    let _guard = pagination_lock.0.lock().await;
-    crate::matrix::timeline::load_older_timeline(&client, &room_id, batch_size.unwrap_or(300)).await
+
+    // Resume from the token left by the last open/load. A missing entry or a
+    // stored `None` means we've already reached the start of history.
+    let before = match tokens.0.lock().await.get(&room_id) {
+        Some(Some(tok)) => tok.clone(),
+        _ => {
+            return Ok(crate::matrix::timeline::CachedTimelinePage {
+                events: Vec::new(),
+                reached_start: true,
+            })
+        }
+    };
+
+    let page =
+        crate::matrix::timeline::get_timeline(&client, &room_id, batch_size.unwrap_or(300), Some(before))
+            .await?;
+    let reached_start = page.prev_batch.is_none();
+    tokens.0.lock().await.insert(room_id.clone(), page.prev_batch);
+    Ok(crate::matrix::timeline::CachedTimelinePage { events: page.events, reached_start })
 }
 
 /// Tier 2 — search locally cached/persisted events (offline, fast).

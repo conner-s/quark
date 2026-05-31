@@ -920,6 +920,8 @@ export class Timeline {
   private _loadingEl: HTMLElement;
   /** Floating skeleton overlay shown while a room loads; null when not active */
   private _skeletonEl: HTMLElement | null = null;
+  /** Keeps the (position:fixed) skeleton aligned to the timeline as it resizes. */
+  private _skeletonResizeObserver: ResizeObserver | null = null;
   /** Timestamp when the skeleton was last shown, used to enforce a minimum display time */
   private _skeletonShownAt = 0;
   /** Whether the user has scrolled up away from the bottom */
@@ -1266,6 +1268,23 @@ export class Timeline {
     this._loadingEl.style.display = "none";
   }
 
+  /** Align the fixed skeleton overlay to the timeline's current viewport rect. */
+  private _positionSkeleton(): void {
+    if (!this._skeletonEl) return;
+    const rect = this._el.getBoundingClientRect();
+    this._skeletonEl.style.top = `${rect.top}px`;
+    this._skeletonEl.style.left = `${rect.left}px`;
+    this._skeletonEl.style.width = `${rect.width}px`;
+    this._skeletonEl.style.height = `${rect.height}px`;
+  }
+
+  private _disconnectSkeletonResize(): void {
+    if (this._skeletonResizeObserver) {
+      this._skeletonResizeObserver.disconnect();
+      this._skeletonResizeObserver = null;
+    }
+  }
+
   /**
    * Show a floating skeleton overlay while a room's timeline is loading.
    * The overlay sits on top of the existing content so real messages can render
@@ -1278,20 +1297,21 @@ export class Timeline {
       this._skeletonEl.remove();
       this._skeletonEl = null;
     }
+    this._disconnectSkeletonResize();
 
     this._skeletonShownAt = Date.now();
 
     // Use position:fixed coordinates matching the timeline's viewport rect so
     // the overlay isn't clipped or scrolled by the timeline's overflow:auto.
-    const rect = this._el.getBoundingClientRect();
-
     const overlay = document.createElement("div");
     overlay.className = "skeleton-overlay";
-    overlay.style.top = `${rect.top}px`;
-    overlay.style.left = `${rect.left}px`;
-    overlay.style.width = `${rect.width}px`;
-    overlay.style.height = `${rect.height}px`;
     this._skeletonEl = overlay;
+    this._positionSkeleton();
+
+    // Keep it aligned as the timeline resizes (window resize, sidebar/panel
+    // drag) — fixed px geometry would otherwise go stale.
+    this._skeletonResizeObserver = new ResizeObserver(() => this._positionSkeleton());
+    this._skeletonResizeObserver.observe(this._el);
 
     const groups: Array<{ nameWidth: number; lines: number[] }> = [
       { nameWidth: 38, lines: [72, 48] },
@@ -1354,6 +1374,7 @@ export class Timeline {
     const doFade = () => {
       // Guard against a new skeleton being shown before this fires
       if (this._skeletonEl !== skeleton) return;
+      this._disconnectSkeletonResize();
       skeleton.classList.add("skeleton-overlay--out");
       skeleton.addEventListener("transitionend", () => skeleton.remove(), { once: true });
       this._skeletonEl = null;

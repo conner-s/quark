@@ -32,6 +32,7 @@ export {
   selectRoom,
   jumpToMessage,
   jumpToLatest,
+  reloadCurrentRoomTimeline,
   selectSpace,
   joinRoom,
   refreshRooms,

@@ -17,7 +17,7 @@ use matrix_sdk::{
 };
 use matrix_sdk::ruma::events::relation::RelationType;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use tracing::info;
 
 use crate::matrix::reactions::ReactionGroup;
@@ -381,125 +381,6 @@ pub async fn search_messages(
         reached_start,
         canceled,
     })
-}
-
-/// Open a room's timeline from the event cache (no pagination-token model).
-/// Returns the events currently cached for the room (oldest-first, reactions
-/// aggregated). The Timeline UI virtualizes its DOM, so returning the full
-/// cached chunk is safe. On a cold cache (nothing synced/persisted yet) this
-/// drives one back-pagination batch so the first screen isn't blank.
-pub async fn open_room_timeline(
-    client: &Client,
-    room_id: &str,
-    limit: usize,
-) -> Result<CachedTimelinePage, String> {
-    use std::ops::ControlFlow;
-
-    let room_id_parsed = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
-    let room = client
-        .get_room(&room_id_parsed)
-        .ok_or_else(|| format!("Room {} not found", room_id_parsed))?;
-    let own_user_id = client.user_id().map(|u| u.to_string()).unwrap_or_default();
-
-    let (room_cache, _drop_handles) = room
-        .event_cache()
-        .await
-        .map_err(|e| format!("Event cache unavailable: {e}"))?;
-
-    let (cached, _updates) = room_cache
-        .subscribe()
-        .await
-        .map_err(|e| format!("Event cache read failed: {e}"))?;
-
-    let chunk = if cached.is_empty() {
-        // Cold cache: pull one batch from the server so the room isn't blank.
-        // Soft-recover from a busy paginator — we still return whatever is cached.
-        let batch = limit.clamp(20, u16::MAX as usize) as u16;
-        if let Err(e) = room_cache
-            .pagination()
-            .run_backwards(batch, |_o, _r| {
-                std::future::ready(ControlFlow::<(), ()>::Break(()))
-            })
-            .await
-        {
-            tracing::warn!("initial back-pagination failed: {e}");
-        }
-        room_cache
-            .subscribe()
-            .await
-            .map_err(|e| format!("Event cache read failed: {e}"))?
-            .0
-    } else {
-        cached
-    };
-
-    let events = aggregate_chunk(chunk.into_iter().map(|e| e.raw().clone()), &own_user_id);
-    let reached_start = room_cache.pagination().hit_timeline_start();
-    Ok(CachedTimelinePage { events, reached_start })
-}
-
-/// Load older history into the cache via one back-pagination batch, returning
-/// only the newly-prepended events (oldest-first). Reactions are aggregated
-/// over the *full* post-pagination chunk so a reaction whose target message
-/// lands in a different batch still attaches correctly; only the new events are
-/// returned for prepending.
-pub async fn load_older_timeline(
-    client: &Client,
-    room_id: &str,
-    batch_size: usize,
-) -> Result<CachedTimelinePage, String> {
-    use std::ops::ControlFlow;
-
-    let room_id_parsed = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
-    let room = client
-        .get_room(&room_id_parsed)
-        .ok_or_else(|| format!("Room {} not found", room_id_parsed))?;
-    let own_user_id = client.user_id().map(|u| u.to_string()).unwrap_or_default();
-
-    let (room_cache, _drop_handles) = room
-        .event_cache()
-        .await
-        .map_err(|e| format!("Event cache unavailable: {e}"))?;
-
-    // Snapshot the event-ids currently displayable, to diff what gets prepended.
-    let (before, _u1) = room_cache
-        .subscribe()
-        .await
-        .map_err(|e| format!("Event cache read failed: {e}"))?;
-    let before_ids: HashSet<String> =
-        aggregate_chunk(before.into_iter().map(|e| e.raw().clone()), &own_user_id)
-            .into_iter()
-            .map(|e| e.event_id)
-            .collect();
-
-    let batch = batch_size.clamp(20, u16::MAX as usize) as u16;
-    let mut reached_start = false;
-    // Soft-recover: a busy shared paginator (or any pagination error) just means
-    // no new older events this attempt; the frontend can retry on the next
-    // scroll rather than seeing an error.
-    if let Err(e) = room_cache
-        .pagination()
-        .run_backwards(batch, |outcome, _r| {
-            reached_start = outcome.reached_start;
-            std::future::ready(ControlFlow::<(), ()>::Break(()))
-        })
-        .await
-    {
-        tracing::warn!("load_older back-pagination failed: {e}");
-    }
-
-    let (after, _u2) = room_cache
-        .subscribe()
-        .await
-        .map_err(|e| format!("Event cache read failed: {e}"))?;
-    let events: Vec<TimelineEvent> =
-        aggregate_chunk(after.into_iter().map(|e| e.raw().clone()), &own_user_id)
-            .into_iter()
-            .filter(|e| !before_ids.contains(&e.event_id))
-            .collect();
-
-    let reached_start = reached_start || room_cache.pagination().hit_timeline_start();
-    Ok(CachedTimelinePage { events, reached_start })
 }
 
 /// Fetch newer events from a forward-pagination token.

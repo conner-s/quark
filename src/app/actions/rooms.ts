@@ -48,6 +48,7 @@ import {
   _downloadInlineEmoji,
   _downloadMemberAvatars,
   ensureSenderAvatarDownloaded,
+  isInContextView,
 } from "./context.js";
 import { closeThread } from "./threads.js";
 import { cancelReply } from "./messages.js";
@@ -482,6 +483,44 @@ export async function jumpToLatest(): Promise<void> {
   } catch (err) {
     showError(`Failed to load latest messages: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+/**
+ * Re-load the current room's timeline from the event cache and re-render in
+ * place (preserving scroll). Called when new room keys arrive (post-verification
+ * / key-backup restore) so stale "🔒 unable to decrypt" placeholders refresh to
+ * plaintext — the backend re-decrypts with the now-available keys on load.
+ *
+ * No-op while in context view: that path uses raw `room.messages()`, which
+ * already decrypts fresh, and reloading would yank the user out of the window.
+ */
+export async function reloadCurrentRoomTimeline(): Promise<void> {
+  if (isInContextView()) return;
+  const roomId = AppState.get("currentRoomId");
+  if (!roomId) return;
+
+  const { timeline } = getComponents();
+  let page;
+  try {
+    page = await openRoomTimeline(roomId, 100);
+  } catch {
+    return; // non-fatal: leave the current render in place
+  }
+  // A room switch may have happened during the await.
+  if (roomId !== AppState.get("currentRoomId")) return;
+
+  const { events, reached_start } = page;
+  paginationState.reachedStart = reached_start;
+  AppState.set("currentTimeline", events);
+
+  const threadRootCounts = _buildThreadRootCounts(events);
+  const mainEvents = _applyEdits(events).filter((e) => !e.thread_root);
+  const messages = mainEvents.map((e) => timelineEventToMessage(e, events, threadRootCounts));
+  timeline.setMessages(messages, { preserveScroll: true });
+
+  _downloadMessageImages(events, timeline);
+  _downloadInlineEmoji(timeline);
+  void _downloadReactionEmoji(events, timeline);
 }
 
 /**

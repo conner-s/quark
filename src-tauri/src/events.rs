@@ -97,6 +97,10 @@ pub const EVENT_UNREAD_COUNT: &str = "quark://sync/unread_count";
 pub const EVENT_CONNECTED: &str = "quark://sync/connected";
 pub const EVENT_REACTION: &str = "quark://sync/reaction";
 pub const EVENT_REDACTION: &str = "quark://sync/redaction";
+/// Emitted when new room (megolm) keys are received — e.g. after the session is
+/// verified or key backup is restored — so the frontend can retry decryption of
+/// rooms it's showing.
+pub const EVENT_ROOM_KEYS: &str = "quark://sync/room_keys";
 
 /// Emitted for each message that matches an in-progress server-side search.
 pub const EVENT_SEARCH_HIT: &str = "quark://search/hit";
@@ -162,6 +166,13 @@ pub struct SyncRoomUnreadCount {
 pub struct SyncRedactionUpdate {
     pub room_id: String,
     pub redacted_event_id: String,
+}
+
+/// Emitted when new room keys arrive, listing the affected rooms so the
+/// frontend can re-decrypt/refresh any it is displaying.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoomKeysReceived {
+    pub room_ids: Vec<String>,
 }
 
 /// Emitted for each message matching an in-progress server-side search.

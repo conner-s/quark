@@ -32,13 +32,22 @@ pub struct SyncState {
 #[derive(Default)]
 pub struct SearchState(pub std::sync::atomic::AtomicBool);
 
-/// Serializes all event-cache back-pagination (search, timeline open, and
-/// "load older"). The matrix-sdk `RoomPagination` is a single per-room resource;
-/// overlapping `run_backwards` calls error with "expected Idle, observed
-/// Paginating". Callers set the search cancel flag first (to stop any in-flight
-/// scan promptly) then acquire this lock, so only one pagination runs at a time.
+/// Serializes event-cache back-pagination used by server-side search. The
+/// matrix-sdk `RoomPagination` is a single per-room resource; overlapping
+/// `run_backwards` calls error with "expected Idle, observed Paginating".
+/// Searches set the cancel flag first (to stop any in-flight scan promptly)
+/// then acquire this lock, so only one scan paginates the cache at a time.
 #[derive(Default)]
 pub struct PaginationLock(pub tokio::sync::Mutex<()>);
+
+/// Per-room backward-pagination token for the live timeline. The initial-open
+/// and "load older" commands fetch history with the raw `room.messages()` API
+/// (transient, bounded — it does *not* persist into the event cache, so a room's
+/// first open never deserializes a search-bloated cache). This map remembers the
+/// `prev_batch` token between an `open_room_timeline` and subsequent
+/// `load_older_timeline` calls. `None` value = start of history reached.
+#[derive(Default)]
+pub struct TimelineTokens(pub tokio::sync::Mutex<std::collections::HashMap<String, Option<String>>>);
 
 /// Serializable session info for persistence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,6 +188,36 @@ const MAX_BACKOFF_SECS: u64 = 120;
 /// If an `app_handle` is provided, sync event handlers are registered before
 /// the sync loop starts so the frontend receives push notifications for new
 /// messages, typing indicators, and other sync events.
+/// Listen for newly-received room keys (e.g. after verification or key-backup
+/// restore) and forward the affected room IDs to the frontend so it can retry
+/// decryption of any room it's showing. The base event cache doesn't re-decrypt
+/// stored events when keys arrive, so this is what makes a displayed room
+/// refresh from `🔒 unable to decrypt` to plaintext without a manual re-open.
+fn spawn_room_key_listener(client: Client, app_handle: tauri::AppHandle) {
+    use futures_util::StreamExt;
+    tokio::spawn(async move {
+        let Some(mut stream) = client.encryption().room_keys_received_stream().await else {
+            warn!("room_keys_received_stream unavailable (no olm machine)");
+            return;
+        };
+        while let Some(update) = stream.next().await {
+            let Ok(infos) = update else { continue }; // lagged broadcast — skip
+            let mut room_ids: Vec<String> = infos.into_iter().map(|i| i.room_id.to_string()).collect();
+            room_ids.sort();
+            room_ids.dedup();
+            if room_ids.is_empty() {
+                continue;
+            }
+            if let Err(e) = app_handle.emit(
+                crate::events::EVENT_ROOM_KEYS,
+                crate::events::RoomKeysReceived { room_ids },
+            ) {
+                error!("Failed to emit {}: {}", crate::events::EVENT_ROOM_KEYS, e);
+            }
+        }
+    });
+}
+
 pub async fn start_sync(
     client: Client,
     app_handle: Option<tauri::AppHandle>,
@@ -201,6 +240,7 @@ pub async fn start_sync(
         if !*registered {
             info!("Registering sync event handlers");
             crate::events::setup_sync_event_handlers(&client, handle);
+            spawn_room_key_listener(client.clone(), handle.clone());
             *registered = true;
         } else {
             warn!("Skipping event handler registration — already registered on this client");
