@@ -50,10 +50,13 @@ export {
   getTimeline,
   getEventContext,
   paginateForward,
+  openRoomTimeline,
+  loadOlderTimeline,
   sendMessage,
   editMessage,
   redactMessage,
 } from "./timeline.js";
+export type { CachedTimelinePage } from "./timeline.js";
 
 // ─── Reactions ────────────────────────────────────────────────────────────────
 export { sendReaction, getReactions } from "./reactions.js";

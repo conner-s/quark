@@ -1,5 +1,41 @@
 # Quark — A CLI-Styled Matrix Client
 
+## Verification queue — 0.13.0 event-cache-backed timeline + search
+
+Branch `feature/search-implementation`. Routes the live timeline's backward loading **and** message search through the matrix-sdk event cache (`RoomEventCache::pagination().run_backwards`), which persists decrypted events to the SQLite cache so scrolling and searching feed one growing store. Fixes three issues found testing 0.12.0 search: (a) the local-cache search tier was nearly empty, (b) "search back to date" returned different results on repeat runs (E2EE decryption timing), (c) historical search was slow. `pnpm test` green (468); `cargo test` green.
+
+### Backend
+- [x] **`search_messages` on the event cache** — scans already-cached events first (instant, offline), then `run_backwards` (BATCH_SIZE 300) persisting each batch; stop decision extracted to the unit-tested `search_should_break`. Re-running a search is now fast and consistent.
+- [x] **Cache-backed live timeline** — new `open_room_timeline` (reads the cached chunk; cold-cache pulls one batch) and `load_older_timeline` (one back-pagination batch, returns the newly-prepended diff). Reaction aggregation extracted to `aggregate_chunk` (shared by `get_timeline`/`paginate_forward`/the new fns), aggregating over the full chunk so cross-batch reactions attach. New `CachedTimelinePage { events, reached_start }` replaces the `prev_batch` token on the live path.
+- **Constraint:** the 0.9 event cache has no forward pagination / context-jump API, so `paginate_forward` + `get_event_context` (context view) stay on raw `room.messages()`. The live and context-view backward paths are mutually exclusive via `inContextView`.
+
+### Frontend
+- [x] `selectRoom` opens via `openRoomTimeline`; `loadMoreMessages` branches on `inContextView` (context view keeps the raw `getTimeline`/`prevBatch` path; live uses `loadOlderTimeline`/`reachedStart`); `jumpToLatest` returns to the cache-backed live timeline.
+- [x] **Search input guards** — min query length (3), debounced live loaded-tier (~180ms), and a 200-row render cap (counts stay exact). Stops the lag spike from 1–2 char queries matching a huge fraction of the now-large cached buffer.
+- [x] **Concurrency/UX fixes** — all event-cache back-pagination (search, scroll, room-open) serialized via a `PaginationLock` with cancel-first hand-off (fixes the "expected Idle, observed Paginating" error); pagination errors now soft-recover with partial results; "Back to date" starts on date-pick (`change`), not just Enter.
+
+### To verify manually (needs a real account)
+- [ ] Re-open a room **offline** → renders from persisted cache.
+- [ ] Scroll up repeatedly → older loads, scroll position preserved, reactions on older messages render; reaching room start stops the spinner.
+- [ ] "Search back to date" **twice** → identical results; second run near-instant; local-cache tier then returns the scanned range.
+- [ ] Jump-to-message context view + jump-to-latest still work; live reactions/edits/redactions still update.
+
+---
+
+## Verification queue — 0.12.0 in-room message search
+
+Branch `feature/search-implementation`. Adds message search: a 🔍 button in the room header (and `:search [query]`) opens a four-tier search dialog — **loaded** (instant filter of the on-screen timeline) · **local cache** (matrix-sdk event cache, offline) · **back to date** · **entire history**. The server tiers stream hits incrementally via Tauri events (`EVENT_SEARCH_HIT`/`EVENT_SEARCH_PROGRESS`) with a cancelable, bounded-memory backward scan. The event cache is enabled at startup (`event_cache().subscribe()` + `enable_storage()`). `pnpm test` green (469).
+
+### Backend
+- [x] `search_room_cache` (tier 2, reads the event cache) + `search_room_messages` (tiers 3/4, streaming) + `cancel_room_search`; `SearchState(AtomicBool)` cancel flag; `event_matches` skips undecryptable events.
+
+### Frontend
+- [x] `RoomHeader` 🔍 button (`setSearchHandler`) opens `SearchDialog` (extends `DialogBase`); scope control styled as a tab bar; results highlight the matched substring and click-to-jump via `jumpToMessage`; `Timeline.searchLoaded` powers the instant tier; `:search` registered in `vim/commands.ts`.
+
+> Superseded by 0.13.0, which re-routed these tiers (and the timeline) through the event cache to fix coverage/consistency/speed issues found here.
+
+---
+
 ## Verification queue — 0.11.2 bug patch batch
 
 Branch `v0.11.2`. Four bug fixes (#59, #60, #61, #63) plus a small timeline-load tweak. `pnpm test` green (460); `cargo test` green (190).

@@ -4800,6 +4800,42 @@ body.quark-mobile .profile-edit-dialog__panel {
   background-color: var(--surface-subtle);
 }
 
+/* Sort dropdown — a compact select pushed to the right of the scope row.
+   `appearance: none` is required: WebKitGTK otherwise paints native selects
+   with the GTK theme (white background), ignoring the CSS background. Stripping
+   the native appearance lets the theme bg apply; we draw our own caret. */
+.search-dialog__sort {
+  margin: 0 6px 0 auto;
+  align-self: center;
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5L5 6.5L8 3.5' fill='none' stroke='%23888888' stroke-width='1.4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 8px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 2px;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 2px);
+  padding: 1px 18px 1px 6px;
+  cursor: pointer;
+  outline: none;
+}
+
+.search-dialog__sort:hover,
+.search-dialog__sort:focus {
+  border-color: var(--accent-primary);
+}
+
+/* Best-effort theming of the popup options (honored by Chromium; WebKitGTK
+   draws the open list natively and may ignore these). */
+.search-dialog__sort option {
+  background-color: var(--bg);
+  color: var(--fg);
+}
+
 .search-dialog__date-row {
   display: flex;
   align-items: center;

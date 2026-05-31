@@ -15,6 +15,8 @@ import {
   markRoomRead,
   getEventContext,
   paginateForward,
+  openRoomTimeline,
+  loadOlderTimeline,
   downloadMedia,
 } from "../../ipc/index.js";
 
@@ -72,6 +74,7 @@ export async function selectRoom(roomId: string): Promise<void> {
   _memberDisplayName.clear();
   paginationState.prevBatch = null;
   paginationState.nextBatch = null;
+  paginationState.reachedStart = false;
   paginationState.inContextView = false;
   paginationState.paginationLoading = false;
   paginationState.paginationLoadingForward = false;
@@ -139,12 +142,14 @@ export async function selectRoom(roomId: string): Promise<void> {
   try {
     // Fetch timeline first for fast initial render; members come in parallel
     // but we don't wait for them before rendering (cached display names are used).
-    const timelinePromise = getTimeline(roomId, { limit: 50 });
+    // Cache-backed open: returns events already cached (oldest-first) and grows
+    // as the user scrolls/searches; `reached_start` replaces the prev_batch token.
+    const timelinePromise = openRoomTimeline(roomId, 100);
     const membersPromise = getRoomMembers(roomId).catch(() => [] as RoomMember[]);
 
     const page = await timelinePromise;
-    const { events, prev_batch } = page;
-    paginationState.prevBatch = prev_batch;
+    const { events, reached_start } = page;
+    paginationState.reachedStart = reached_start;
 
     AppState.set("currentTimeline", events);
 
@@ -247,13 +252,27 @@ export async function selectRoom(roomId: string): Promise<void> {
  * blocks re-triggering.
  */
 async function loadMoreMessages(): Promise<void> {
-  if (paginationState.paginationLoading || !paginationState.prevBatch) return;
+  if (paginationState.paginationLoading) return;
   const roomId = AppState.get("currentRoomId");
   if (!roomId) return;
+
+  // Two backward paths: context view (a window around a jumped-to message) uses
+  // the raw `getTimeline`/`prevBatch` token path; the live timeline uses the
+  // cache-backed `loadOlderTimeline`/`reachedStart` path. They're mutually
+  // exclusive — `inContextView` is fixed for the duration of this load.
+  const inCtx = paginationState.inContextView;
+  if (inCtx) {
+    if (!paginationState.prevBatch) return;
+  } else if (paginationState.reachedStart) {
+    return;
+  }
 
   const { timeline } = getComponents();
   paginationState.paginationLoading = true;
   timeline.showLoadingMore();
+
+  // True once the relevant path has reached the start of history.
+  const atStart = () => (inCtx ? !paginationState.prevBatch : paginationState.reachedStart);
 
   try {
     // Loop to skip over pages whose events are all non-displayable (reactions,
@@ -262,32 +281,42 @@ async function loadMoreMessages(): Promise<void> {
     const MAX_EMPTY_PAGES = 10;
     let emptyPages = 0;
 
-    while (paginationState.prevBatch && roomId === AppState.get("currentRoomId")) {
-      const page = await getTimeline(roomId, { limit: 50, before: paginationState.prevBatch });
-      paginationState.prevBatch = page.prev_batch;
+    while (roomId === AppState.get("currentRoomId")) {
+      if (atStart()) break;
 
-      if (page.events.length === 0) {
+      let events;
+      if (inCtx) {
+        const page = await getTimeline(roomId, { limit: 50, before: paginationState.prevBatch! });
+        paginationState.prevBatch = page.prev_batch;
+        events = page.events;
+      } else {
+        const page = await loadOlderTimeline(roomId, 300);
+        paginationState.reachedStart = page.reached_start;
+        events = page.events;
+      }
+
+      if (events.length === 0) {
         emptyPages++;
-        if (!paginationState.prevBatch || emptyPages >= MAX_EMPTY_PAGES) break;
+        if (atStart() || emptyPages >= MAX_EMPTY_PAGES) break;
         // History remains but page was all filtered events — keep going
         continue;
       }
 
       const existingEvents = AppState.get("currentTimeline");
-      AppState.set("currentTimeline", [...page.events, ...existingEvents]);
+      AppState.set("currentTimeline", [...events, ...existingEvents]);
 
-      const threadRootCounts = _buildThreadRootCounts(page.events);
-      const mainEvents = _applyEdits(page.events).filter((e) => !e.thread_root);
-      const messages = mainEvents.map((e) => timelineEventToMessage(e, page.events, threadRootCounts));
+      const threadRootCounts = _buildThreadRootCounts(events);
+      const mainEvents = _applyEdits(events).filter((e) => !e.thread_root);
+      const messages = mainEvents.map((e) => timelineEventToMessage(e, events, threadRootCounts));
       timeline.prependMessages(messages);
 
-      _downloadMessageImages(page.events, timeline);
+      _downloadMessageImages(events, timeline);
       _downloadInlineEmoji(timeline);
-      void _downloadReactionEmoji(page.events, timeline);
+      void _downloadReactionEmoji(events, timeline);
       // Download avatars for senders not yet cached (e.g., older messages
       // from users whose avatars weren't in the initial timeline page).
       const seenSenders = new Set<string>();
-      for (const e of page.events) {
+      for (const e of events) {
         if (!seenSenders.has(e.sender)) {
           seenSenders.add(e.sender);
           ensureSenderAvatarDownloaded(e.sender, timeline);
@@ -432,9 +461,11 @@ export async function jumpToLatest(): Promise<void> {
   }
 
   try {
-    const page = await getTimeline(roomId, { limit: 50 });
-    paginationState.prevBatch = page.prev_batch;
+    // Leaving context view → return to the cache-backed live timeline.
+    const page = await openRoomTimeline(roomId, 100);
+    paginationState.prevBatch = null;
     paginationState.nextBatch = null;
+    paginationState.reachedStart = page.reached_start;
     paginationState.inContextView = false;
 
     AppState.set("currentTimeline", page.events);

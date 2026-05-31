@@ -1,9 +1,33 @@
 // Timeline IPC calls
 
 import { invoke } from "./invoke.js";
-import type { TimelineEvent, TimelinePage, EventContextPage, TimelineForwardPage } from "./types.js";
+import type { TimelineEvent, TimelinePage, EventContextPage, TimelineForwardPage, CachedTimelinePage } from "./types.js";
 
-export type { TimelineEvent, TimelinePage, EventContextPage, TimelineForwardPage };
+export type { TimelineEvent, TimelinePage, EventContextPage, TimelineForwardPage, CachedTimelinePage };
+
+/**
+ * Open a room's timeline from the matrix-sdk event cache (the cache-backed live
+ * path). Returns currently-cached events oldest-first; `reached_start` replaces
+ * the `prev_batch` token. Matches the Rust `open_room_timeline` command.
+ */
+export async function openRoomTimeline(
+  roomId: string,
+  limit?: number,
+): Promise<CachedTimelinePage> {
+  return invoke<CachedTimelinePage>("open_room_timeline", { roomId, limit });
+}
+
+/**
+ * Load older history into the cache and return only the newly-prepended events
+ * (oldest-first). `reached_start === true` means the start of the room has been
+ * reached. Matches the Rust `load_older_timeline` command.
+ */
+export async function loadOlderTimeline(
+  roomId: string,
+  batchSize?: number,
+): Promise<CachedTimelinePage> {
+  return invoke<CachedTimelinePage>("load_older_timeline", { roomId, batchSize });
+}
 
 /**
  * Fetch a page of timeline events for a room.

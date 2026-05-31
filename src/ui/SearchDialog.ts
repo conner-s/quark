@@ -22,9 +22,22 @@ import { DialogBase } from "./DialogBase.js";
 import type { Timeline } from "./Timeline.js";
 
 type Scope = "loaded" | "cache" | "date" | "all";
+type SortOrder = "newest" | "oldest";
 
 /** Safety cap on events scanned by a server-side (date/all) search. */
 const MAX_EVENTS = 50_000;
+
+/** Minimum query length before any search runs. Short queries (1–2 chars) match
+ *  a huge fraction of messages, which is rarely useful and expensive to render. */
+const MIN_QUERY_LENGTH = 3;
+
+/** Debounce for the live loaded-tier search so fast typing doesn't re-run the
+ *  (synchronous) scan + render on every keystroke. */
+const LIVE_SEARCH_DEBOUNCE_MS = 180;
+
+/** Cap on result rows rendered into the dialog. Match *counts* are still exact;
+ *  this only bounds DOM nodes so a broad query can't build thousands of rows. */
+const MAX_RENDERED_RESULTS = 200;
 
 const SCOPE_LABELS: [Scope, string][] = [
   ["loaded", "Loaded"],
@@ -46,10 +59,20 @@ export class SearchDialog extends DialogBase {
   private _statusEl!: HTMLElement;
   private _cancelBtn!: HTMLButtonElement;
   private _scopeBtns = new Map<Scope, HTMLButtonElement>();
+  private _sortSelect!: HTMLSelectElement;
 
   private _scope: Scope = "loaded";
+  private _sort: SortOrder = "newest";
   private _query = "";
   private _onJumpToMessage: ((eventId: string) => void) | null = null;
+
+  /** All matches for the current run, in arrival order; rendered (sorted +
+   *  capped) by `_renderResultList`. */
+  private _results: SearchResult[] = [];
+  /** Query backing the currently-rendered results (for re-render on sort change). */
+  private _activeQuery = "";
+  /** Throttle for re-rendering while streaming hits arrive. */
+  private _renderThrottle: ReturnType<typeof setTimeout> | null = null;
 
   // Async run bookkeeping: every search bumps `_runId` so stale callbacks from
   // a superseded run can be ignored.
@@ -57,6 +80,12 @@ export class SearchDialog extends DialogBase {
   private _unlisten: (() => void) | null = null;
   private _seenIds = new Set<string>();
   private _matchCount = 0;
+  /** Rows actually rendered (bounded by MAX_RENDERED_RESULTS). */
+  private _renderedCount = 0;
+  /** Whether the "showing first N" note has been appended this run. */
+  private _capNoted = false;
+  /** Pending debounce timer for the live loaded-tier search. */
+  private _debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(timeline: Timeline) {
     super({ prefix: "search-dialog", ariaLabel: "Search messages" });
@@ -72,8 +101,9 @@ export class SearchDialog extends DialogBase {
     this._queryInput.setAttribute("aria-label", "Search query");
     this._queryInput.addEventListener("input", () => {
       this._query = this._queryInput.value;
-      // The loaded tier is free, so search live as the user types.
-      if (this._scope === "loaded") void this._run();
+      // The loaded tier searches live as you type, but debounced so a fast
+      // typist doesn't trigger a scan+render on every keystroke.
+      if (this._scope === "loaded") this._scheduleRun();
     });
     this._queryInput.addEventListener("keydown", (e) => {
       if (e.key === "Escape") return; // bubble to base → close
@@ -81,7 +111,7 @@ export class SearchDialog extends DialogBase {
       if (e.key === "Enter") {
         e.preventDefault();
         this._query = this._queryInput.value;
-        void this._run();
+        void this._run(); // immediate — cancels any pending debounce
       }
     });
     this.content.appendChild(this._queryInput);
@@ -103,6 +133,32 @@ export class SearchDialog extends DialogBase {
       this._scopeBtns.set(scope, btn);
       scopeRow.appendChild(btn);
     }
+
+    // Sort dropdown — pushed to the right end of the scope row.
+    this._sortSelect = document.createElement("select");
+    this._sortSelect.className = "search-dialog__sort";
+    this._sortSelect.setAttribute("aria-label", "Sort results");
+    for (const [value, label] of [
+      ["newest", "Newest first"],
+      ["oldest", "Oldest first"],
+    ] as [SortOrder, string][]) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = label;
+      this._sortSelect.appendChild(opt);
+    }
+    this._sortSelect.value = this._sort;
+    this._sortSelect.addEventListener("change", () => {
+      this._sort = this._sortSelect.value as SortOrder;
+      this._renderResultList();
+    });
+    // Let the native select own its keys (arrows/enter); only Escape bubbles to
+    // the dialog so it can still close.
+    this._sortSelect.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") e.stopPropagation();
+    });
+    scopeRow.appendChild(this._sortSelect);
+
     this.content.appendChild(scopeRow);
 
     // Date row (revealed only for the "date" scope)
@@ -112,12 +168,21 @@ export class SearchDialog extends DialogBase {
     const dateLabel = document.createElement("span");
     dateLabel.className = "search-dialog__date-label";
     dateLabel.textContent = "Search back to:";
+    // A plain text field rather than `<input type="date">`: the native
+    // WebKitGTK date-picker popup is unreliable to dismiss (it ignores blur and
+    // can trap focus), and a typed `YYYY-MM-DD` fits the terminal aesthetic. The
+    // search runs on Enter or when the field commits (blur/`change`).
     this._dateInput = document.createElement("input");
-    this._dateInput.type = "date";
+    this._dateInput.type = "text";
     this._dateInput.className = "search-dialog__date";
-    this._dateInput.setAttribute("aria-label", "Search back to date");
+    this._dateInput.placeholder = "YYYY-MM-DD";
+    this._dateInput.setAttribute("inputmode", "numeric");
+    this._dateInput.setAttribute("aria-label", "Search back to date (YYYY-MM-DD)");
+    this._dateInput.addEventListener("change", () => {
+      if (this._query.trim()) void this._run();
+    });
     this._dateInput.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") return;
+      if (e.key === "Escape") return; // bubble to base → close
       e.stopPropagation();
       if (e.key === "Enter") {
         e.preventDefault();
@@ -160,6 +225,9 @@ export class SearchDialog extends DialogBase {
   show(initialQuery = ""): void {
     this._query = initialQuery;
     this._queryInput.value = initialQuery;
+    // Always open sorted newest-first, regardless of a prior session's choice.
+    this._sort = "newest";
+    this._sortSelect.value = "newest";
     this._listEl.innerHTML = "";
     this._seenIds.clear();
     this._matchCount = 0;
@@ -172,6 +240,14 @@ export class SearchDialog extends DialogBase {
   }
 
   protected override onHide(): void {
+    if (this._debounceTimer !== null) {
+      clearTimeout(this._debounceTimer);
+      this._debounceTimer = null;
+    }
+    if (this._renderThrottle !== null) {
+      clearTimeout(this._renderThrottle);
+      this._renderThrottle = null;
+    }
     this._cancelActive();
   }
 
@@ -216,17 +292,50 @@ export class SearchDialog extends DialogBase {
     this._statusEl.textContent = text;
   }
 
+  /** Parse the `YYYY-MM-DD` "back to date" field into an epoch-ms cutoff (local
+   *  midnight), or null if empty/invalid. */
+  private _parseUntilTs(): number | null {
+    const d = this._dateInput.value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    const ts = Date.parse(`${d}T00:00:00`);
+    return Number.isNaN(ts) ? null : ts;
+  }
+
+  /** Debounced trigger for the live loaded-tier search. */
+  private _scheduleRun(): void {
+    if (this._debounceTimer !== null) clearTimeout(this._debounceTimer);
+    this._debounceTimer = setTimeout(() => {
+      this._debounceTimer = null;
+      void this._run();
+    }, LIVE_SEARCH_DEBOUNCE_MS);
+  }
+
   private async _run(): Promise<void> {
+    // Cancel any pending debounce — this run supersedes it.
+    if (this._debounceTimer !== null) {
+      clearTimeout(this._debounceTimer);
+      this._debounceTimer = null;
+    }
     // Supersede any prior run.
     this._cancelActive();
     const runId = ++this._runId;
-    this._listEl.innerHTML = "";
     this._seenIds.clear();
     this._matchCount = 0;
+    this._results = [];
+    this._activeQuery = "";
+    if (this._renderThrottle !== null) {
+      clearTimeout(this._renderThrottle);
+      this._renderThrottle = null;
+    }
+    this._renderResultList(); // clears the list
 
     const q = this._query.trim();
     if (!q) {
       this._status("Type to search · Esc close");
+      return;
+    }
+    if (q.length < MIN_QUERY_LENGTH) {
+      this._status(`Type at least ${MIN_QUERY_LENGTH} characters…`);
       return;
     }
 
@@ -235,12 +344,14 @@ export class SearchDialog extends DialogBase {
       this._status("No room selected.");
       return;
     }
+    this._activeQuery = q;
 
     // Tier 1 — loaded window (instant, synchronous).
     if (this._scope === "loaded") {
-      const results = this._timeline.searchLoaded(q);
-      this._renderResults(results, q);
-      this._status(`${this._countLabel(results.length)} in loaded messages`);
+      this._results = this._timeline.searchLoaded(q);
+      this._matchCount = this._results.length;
+      this._renderResultList();
+      this._status(`${this._countLabel(this._matchCount)} in loaded messages`);
       return;
     }
 
@@ -250,9 +361,10 @@ export class SearchDialog extends DialogBase {
       try {
         const events = await searchRoomCache(roomId, q);
         if (runId !== this._runId) return;
-        const results = events.map(eventToResult);
-        this._renderResults(results, q);
-        this._status(`${this._countLabel(results.length)} in local cache`);
+        this._results = events.map(eventToResult);
+        this._matchCount = this._results.length;
+        this._renderResultList();
+        this._status(`${this._countLabel(this._matchCount)} in local cache`);
       } catch (err) {
         if (runId === this._runId) this._status(`Error: ${this._errMsg(err)}`);
       }
@@ -262,12 +374,12 @@ export class SearchDialog extends DialogBase {
     // Tiers 3/4 — streaming server scan.
     let untilTs: number | undefined;
     if (this._scope === "date") {
-      const d = this._dateInput.value;
-      if (!d) {
-        this._status("Pick a date to search back to.");
+      const parsed = this._parseUntilTs();
+      if (parsed === null) {
+        this._status("Enter a date as YYYY-MM-DD to search back to.");
         return;
       }
-      untilTs = new Date(d).getTime();
+      untilTs = parsed;
     }
 
     this._status("Searching…");
@@ -275,7 +387,7 @@ export class SearchDialog extends DialogBase {
     this._unlisten = await listenSearchEvents(
       (hit) => {
         if (runId !== this._runId || hit.room_id !== roomId) return;
-        this._addHit(eventToResult(hit.event), q);
+        this._addHit(eventToResult(hit.event));
       },
       (prog) => {
         if (runId !== this._runId) return;
@@ -302,6 +414,13 @@ export class SearchDialog extends DialogBase {
       if (runId === this._runId) {
         this._setCancelVisible(false);
         this._cleanupListener();
+        // Flush a final sorted render in case the last hits arrived after the
+        // most recent throttled render.
+        if (this._renderThrottle !== null) {
+          clearTimeout(this._renderThrottle);
+          this._renderThrottle = null;
+        }
+        this._renderResultList();
       }
     }
   }
@@ -314,31 +433,61 @@ export class SearchDialog extends DialogBase {
     return err instanceof Error ? err.message : String(err);
   }
 
-  /** Append a single streaming hit, deduping by event id. */
-  private _addHit(result: SearchResult, query: string): void {
-    if (this._seenIds.has(result.eventId)) return;
-    this._seenIds.add(result.eventId);
-    this._matchCount++;
+  /** Append a result row, but stop building DOM once the render cap is hit
+   *  (appending a one-time note instead). Match counts are tracked separately. */
+  private _appendCapped(result: SearchResult, query: string): void {
+    if (this._renderedCount >= MAX_RENDERED_RESULTS) {
+      if (!this._capNoted) {
+        this._capNoted = true;
+        const note = document.createElement("div");
+        note.className = "search-dialog__item search-dialog__item--empty";
+        note.textContent = `Showing first ${MAX_RENDERED_RESULTS.toLocaleString()} — refine your search to narrow results.`;
+        this._listEl.appendChild(note);
+      }
+      return;
+    }
+    this._renderedCount++;
     this._listEl.appendChild(this._buildItem(result, query));
   }
 
-  /** Render a finished result set (loaded/cache tiers), newest-first. */
-  private _renderResults(results: SearchResult[], query: string): void {
+  /** Record a streaming hit (deduped) and schedule a throttled re-render. */
+  private _addHit(result: SearchResult): void {
+    if (this._seenIds.has(result.eventId)) return;
+    this._seenIds.add(result.eventId);
+    this._matchCount++;
+    this._results.push(result);
+    this._scheduleRender();
+  }
+
+  /** Throttle re-renders while hits stream in (a full sorted render per hit
+   *  would thrash); coalesces bursts into one render. */
+  private _scheduleRender(): void {
+    if (this._renderThrottle !== null) return;
+    this._renderThrottle = setTimeout(() => {
+      this._renderThrottle = null;
+      this._renderResultList();
+    }, 150);
+  }
+
+  /** Render `_results` sorted by the active sort order, capped at
+   *  MAX_RENDERED_RESULTS. Used by every tier and on sort-order change. */
+  private _renderResultList(): void {
     this._listEl.innerHTML = "";
-    this._seenIds.clear();
-    this._matchCount = results.length;
-    const sorted = [...results].sort((a, b) => b.timestamp - a.timestamp);
-    if (sorted.length === 0) {
+    this._renderedCount = 0;
+    this._capNoted = false;
+    // Nothing searched yet — leave the list blank (status carries the prompt).
+    if (!this._activeQuery) return;
+    if (this._results.length === 0) {
       const empty = document.createElement("div");
       empty.className = "search-dialog__item search-dialog__item--empty";
       empty.textContent = "No matches.";
       this._listEl.appendChild(empty);
       return;
     }
-    for (const r of sorted) {
-      this._seenIds.add(r.eventId);
-      this._listEl.appendChild(this._buildItem(r, query));
-    }
+    const sorted = [...this._results].sort((a, b) =>
+      this._sort === "newest" ? b.timestamp - a.timestamp : a.timestamp - b.timestamp,
+    );
+    for (const r of sorted) this._appendCapped(r, this._activeQuery);
   }
 
   private _buildItem(r: SearchResult, query: string): HTMLElement {

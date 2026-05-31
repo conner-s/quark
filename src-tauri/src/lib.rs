@@ -6,7 +6,7 @@ pub mod matrix;
 pub mod media_cache;
 pub mod notifications;
 
-use matrix::client::{MatrixState, SearchState, SyncState};
+use matrix::client::{MatrixState, PaginationLock, SearchState, SyncState};
 use media_cache::MediaCache;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
@@ -54,6 +54,7 @@ pub fn run() {
             handlers_registered: Mutex::new(false),
         })
         .manage(SearchState::default())
+        .manage(PaginationLock::default())
         .manage(CacheState(Arc::new(initial_cache)))
         .manage(Mutex::new(config::app_config::AppConfig::default()))
         .manage(Mutex::new(notifications::NotificationConfig::default()))
@@ -86,6 +87,8 @@ pub fn run() {
             commands::get_timeline,
             commands::get_event_context,
             commands::paginate_forward,
+            commands::open_room_timeline,
+            commands::load_older_timeline,
             commands::search_room_cache,
             commands::search_room_messages,
             commands::cancel_room_search,

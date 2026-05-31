@@ -32,6 +32,14 @@ pub struct SyncState {
 #[derive(Default)]
 pub struct SearchState(pub std::sync::atomic::AtomicBool);
 
+/// Serializes all event-cache back-pagination (search, timeline open, and
+/// "load older"). The matrix-sdk `RoomPagination` is a single per-room resource;
+/// overlapping `run_backwards` calls error with "expected Idle, observed
+/// Paginating". Callers set the search cancel flag first (to stop any in-flight
+/// scan promptly) then acquire this lock, so only one pagination runs at a time.
+#[derive(Default)]
+pub struct PaginationLock(pub tokio::sync::Mutex<()>);
+
 /// Serializable session info for persistence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {

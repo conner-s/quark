@@ -72,10 +72,15 @@ export function consumeOwnSentEvent(eventId: string): boolean {
  * Held on a single object so reassignments are visible across modules.
  */
 export const paginationState = {
-  /** Pagination token for loading older messages; null when at the start of history. */
+  /** Pagination token for loading older messages in context view; null at the
+   *  start of history. Unused by the live timeline (cache-backed) path, which
+   *  tracks `reachedStart` instead. */
   prevBatch: null as string | null,
   /** Pagination token for loading newer messages; only set when in context view. */
   nextBatch: null as string | null,
+  /** Live (cache-backed) path: true once back-pagination has reached the start
+   *  of the room's history. Replaces the `prevBatch === null` signal there. */
+  reachedStart: false,
   /** True when the timeline is showing a context window around a jumped-to message, not the live end. */
   inContextView: false,
   /** Prevents concurrent backward "load more" fetches. */

@@ -10,13 +10,14 @@ use matrix_sdk::{
             sticker::StickerEventContent,
             AnySyncMessageLikeEvent, AnySyncTimelineEvent, SyncMessageLikeEvent,
         },
+        serde::Raw,
         EventId, OwnedEventId, RoomId, TransactionId, UInt,
     },
     Client,
 };
 use matrix_sdk::ruma::events::relation::RelationType;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tracing::info;
 
 use crate::matrix::reactions::ReactionGroup;
@@ -73,6 +74,17 @@ pub struct TimelineForwardPage {
     /// Token to pass as `after` to fetch the next (newer) page.
     /// `None` means the live tail of the timeline has been reached.
     pub next_batch: Option<String>,
+}
+
+/// A page of events served from the matrix-sdk event cache (used by the
+/// cache-backed live-timeline path: initial open + backward scroll).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CachedTimelinePage {
+    /// Events oldest-first.
+    pub events: Vec<TimelineEvent>,
+    /// True once back-pagination has reached the start of the room's history
+    /// (replaces the `prev_batch == None` signal of the raw-messages path).
+    pub reached_start: bool,
 }
 
 /// Events surrounding a specific event, returned by `get_event_context`.
@@ -147,68 +159,10 @@ pub async fn get_timeline(
 
     let own_user_id = client.user_id().map(|u| u.to_string()).unwrap_or_default();
 
-    let mut events: Vec<TimelineEvent> = Vec::new();
-    // target_event_id -> Vec<(key, sender_id, reaction_event_id)>
-    let mut reaction_raw: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
-
-    for timeline_event in messages.chunk {
-        if let Ok(deserialized) = timeline_event.raw().deserialize() {
-            match deserialized {
-                AnySyncTimelineEvent::MessageLike(
-                    AnySyncMessageLikeEvent::RoomMessage(SyncMessageLikeEvent::Original(ev)),
-                ) => {
-                    events.push(convert_sync_room_message(ev));
-                }
-                AnySyncTimelineEvent::MessageLike(
-                    AnySyncMessageLikeEvent::Sticker(SyncMessageLikeEvent::Original(ev)),
-                ) => {
-                    events.push(convert_sync_sticker(ev));
-                }
-                AnySyncTimelineEvent::MessageLike(
-                    AnySyncMessageLikeEvent::Reaction(SyncMessageLikeEvent::Original(ev)),
-                ) => {
-                    let target = ev.content.relates_to.event_id.to_string();
-                    let key = ev.content.relates_to.key.clone();
-                    let sender = ev.sender.to_string();
-                    let rev_id = ev.event_id.to_string();
-                    reaction_raw.entry(target).or_default().push((key, sender, rev_id));
-                }
-                AnySyncTimelineEvent::MessageLike(
-                    AnySyncMessageLikeEvent::RoomEncrypted(SyncMessageLikeEvent::Original(ev)),
-                ) => {
-                    events.push(convert_sync_encrypted(ev));
-                }
-                _ => {}
-            }
-        }
-    }
-
-    // Aggregate and attach reactions to their target messages
-    for ev in &mut events {
-        if let Some(rxns) = reaction_raw.get(&ev.event_id) {
-            let mut agg: HashMap<String, (u64, Vec<String>, bool, Option<String>)> =
-                HashMap::new();
-            for (key, sender, rev_id) in rxns {
-                let e = agg.entry(key.clone()).or_insert((0, Vec::new(), false, None));
-                e.0 += 1;
-                e.1.push(sender.clone());
-                if sender == &own_user_id {
-                    e.2 = true;
-                    e.3 = Some(rev_id.clone());
-                }
-            }
-            ev.reactions = agg
-                .into_iter()
-                .map(|(key, (count, senders, own_reaction, own_event_id))| ReactionGroup {
-                    key,
-                    count,
-                    senders,
-                    own_reaction,
-                    own_event_id,
-                })
-                .collect();
-        }
-    }
+    let mut events = aggregate_chunk(
+        messages.chunk.into_iter().map(|e| e.raw().clone()),
+        &own_user_id,
+    );
 
     // Reverse so oldest messages come first
     events.reverse();
@@ -252,13 +206,41 @@ pub async fn search_room_cache(
     Ok(out)
 }
 
-/// Tiers 3/4 — server-side streaming search. Paginates the room backward one
-/// page at a time, matching as it goes and emitting each hit via
-/// `EVENT_SEARCH_HIT` (plus periodic `EVENT_SEARCH_PROGRESS`). Only one page
-/// plus transient hits are ever held in memory, so peak memory is independent
-/// of room size. Stops at the start of history, when an event crosses
-/// `until_ts` (date-range scan), when `max_events` is exhausted, or when
-/// `cancel` is set.
+/// Pure stop decision for a search scan, extracted so it can be unit-tested
+/// without a live client. Returns true when the scan should halt.
+fn search_should_break(
+    scanned: u64,
+    cap: u64,
+    oldest_ts: Option<u64>,
+    until_ts: Option<u64>,
+    reached_start: bool,
+    canceled: bool,
+) -> bool {
+    if canceled || reached_start || scanned >= cap {
+        return true;
+    }
+    // Date-range stop: we've paginated to an event older than the cutoff, so
+    // the requested range is fully covered.
+    if let (Some(until), Some(oldest)) = (until_ts, oldest_ts) {
+        if oldest <= until {
+            return true;
+        }
+    }
+    false
+}
+
+/// Tiers 3/4 — server-side streaming search, backed by the matrix-sdk event
+/// cache. First scans the events already cached for the room (no network),
+/// then drives `RoomPagination::run_backwards` to page older history. Crucially,
+/// `run_backwards` *persists* each (decrypted) batch into the SQLite-backed
+/// cache, so: tier-2 (`search_room_cache`) becomes meaningful, re-running the
+/// same search is fast and returns consistent results (no E2EE decryption
+/// race), and only one batch plus transient hits live in memory at a time.
+///
+/// Matches are emitted incrementally via `EVENT_SEARCH_HIT` (+ periodic
+/// `EVENT_SEARCH_PROGRESS`). Stops at the start of history, when an event
+/// crosses `until_ts` (date-range scan), when `max_events` is exhausted, or
+/// when `cancel` is set.
 pub async fn search_messages(
     client: &Client,
     app_handle: &tauri::AppHandle,
@@ -268,48 +250,33 @@ pub async fn search_messages(
     max_events: Option<u32>,
     cancel: &std::sync::atomic::AtomicBool,
 ) -> Result<SearchSummary, String> {
+    use matrix_sdk::event_cache::{BackPaginationOutcome, TimelineHasBeenResetWhilePaginating};
+    use std::future::ready;
+    use std::ops::ControlFlow;
     use std::sync::atomic::Ordering;
     use tauri::Emitter;
 
-    let room_id_parsed = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
-    let room = client
-        .get_room(&room_id_parsed)
-        .ok_or_else(|| format!("Room {} not found", room_id_parsed))?;
-
-    const PAGE_SIZE: u32 = 100;
-    let cap = max_events.map(|m| m as u64).unwrap_or(u64::MAX);
-    let q = query.to_lowercase();
-
-    let mut from: Option<String> = None;
-    let mut scanned: u64 = 0;
-    let mut matched: u64 = 0;
-    let mut reached_start = false;
-    let mut canceled = false;
-
-    loop {
-        if cancel.load(Ordering::Relaxed) {
-            canceled = true;
-            break;
-        }
-
-        let mut opts = MessagesOptions::backward();
-        opts.limit = UInt::from(PAGE_SIZE);
-        opts.from = from.clone();
-
-        let messages = room
-            .messages(opts)
-            .await
-            .map_err(|e| format!("Search failed: {e}"))?;
-        let next_from = messages.end.clone();
-
+    /// Per-batch matcher shared by the cache pre-scan and back-pagination:
+    /// counts events, emits hits, and tracks the oldest timestamp seen.
+    /// Takes raw events so it's agnostic to the SDK's event-wrapper type (the
+    /// cache subscribe and back-pagination return different wrappers, both of
+    /// which expose `.raw()`).
+    fn scan_batch(
+        raws: impl IntoIterator<Item = Raw<AnySyncTimelineEvent>>,
+        q: &str,
+        room_id: &str,
+        app_handle: &tauri::AppHandle,
+        scanned: &mut u64,
+        matched: &mut u64,
+    ) -> Option<u64> {
         let mut oldest_ts: Option<u64> = None;
-        for tev in messages.chunk {
-            scanned += 1;
-            if let Ok(any) = tev.raw().deserialize() {
+        for raw in raws {
+            *scanned += 1;
+            if let Ok(any) = raw.deserialize() {
                 if let Some(te) = convert_sync_timeline_event(any) {
                     oldest_ts = Some(oldest_ts.map_or(te.timestamp, |o| o.min(te.timestamp)));
-                    if event_matches(&te, &q) {
-                        matched += 1;
+                    if event_matches(&te, q) {
+                        *matched += 1;
                         let _ = app_handle.emit(
                             crate::events::EVENT_SEARCH_HIT,
                             crate::events::SearchHit {
@@ -321,30 +288,90 @@ pub async fn search_messages(
                 }
             }
         }
+        oldest_ts
+    }
 
-        let _ = app_handle.emit(
-            crate::events::EVENT_SEARCH_PROGRESS,
-            crate::events::SearchProgress { scanned },
-        );
+    const BATCH_SIZE: u16 = 300;
+    let cap = max_events.map(|m| m as u64).unwrap_or(u64::MAX);
+    let q = query.to_lowercase();
 
-        // Date-range stop: this page already contains events older than the
-        // cutoff, so the requested range is fully covered.
-        if let (Some(until), Some(oldest)) = (until_ts, oldest_ts) {
-            if oldest <= until {
-                break;
-            }
-        }
+    let room_id_parsed = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id_parsed)
+        .ok_or_else(|| format!("Room {} not found", room_id_parsed))?;
+    let (room_cache, _drop_handles) = room
+        .event_cache()
+        .await
+        .map_err(|e| format!("Event cache unavailable: {e}"))?;
 
-        if scanned >= cap {
-            break;
-        }
+    let mut scanned: u64 = 0;
+    let mut matched: u64 = 0;
+    let mut reached_start = false;
+    let mut canceled = cancel.load(Ordering::Relaxed);
 
-        match next_from {
-            Some(tok) => from = Some(tok),
-            None => {
-                reached_start = true;
-                break;
-            }
+    // 1. Scan events already cached for this room (no network). run_backwards
+    //    below extends the chunk *older* than these, so there's no overlap.
+    let (cached, _updates) = room_cache
+        .subscribe()
+        .await
+        .map_err(|e| format!("Event cache read failed: {e}"))?;
+    let mut oldest = scan_batch(
+        cached.into_iter().map(|e| e.raw().clone()),
+        &q,
+        room_id,
+        app_handle,
+        &mut scanned,
+        &mut matched,
+    );
+    let _ = app_handle.emit(
+        crate::events::EVENT_SEARCH_PROGRESS,
+        crate::events::SearchProgress { scanned },
+    );
+
+    // 2. Page older history through the cache (persisting as it goes), unless
+    //    the cached range already satisfies the stop condition.
+    if !search_should_break(scanned, cap, oldest, until_ts, reached_start, canceled) {
+        let outcome = room_cache
+            .pagination()
+            .run_backwards(
+                BATCH_SIZE,
+                |outcome: BackPaginationOutcome, _reset: TimelineHasBeenResetWhilePaginating| {
+                    if cancel.load(Ordering::Relaxed) {
+                        canceled = true;
+                        return ready(ControlFlow::Break(()));
+                    }
+                    oldest = scan_batch(
+                        outcome.events.into_iter().map(|e| e.raw().clone()),
+                        &q,
+                        room_id,
+                        app_handle,
+                        &mut scanned,
+                        &mut matched,
+                    );
+                    let _ = app_handle.emit(
+                        crate::events::EVENT_SEARCH_PROGRESS,
+                        crate::events::SearchProgress { scanned },
+                    );
+                    if outcome.reached_start {
+                        reached_start = true;
+                    }
+                    if search_should_break(scanned, cap, oldest, until_ts, reached_start, canceled) {
+                        ready(ControlFlow::Break(()))
+                    } else {
+                        ready(ControlFlow::Continue(()))
+                    }
+                },
+            )
+            .await;
+        // Recover silently: if the shared paginator was busy (or any pagination
+        // error), keep whatever we matched from the cache pre-scan / earlier
+        // batches rather than surfacing an error. Emit a final progress tick.
+        if let Err(e) = outcome {
+            tracing::warn!("search back-pagination stopped early: {e}");
+            let _ = app_handle.emit(
+                crate::events::EVENT_SEARCH_PROGRESS,
+                crate::events::SearchProgress { scanned },
+            );
         }
     }
 
@@ -354,6 +381,125 @@ pub async fn search_messages(
         reached_start,
         canceled,
     })
+}
+
+/// Open a room's timeline from the event cache (no pagination-token model).
+/// Returns the events currently cached for the room (oldest-first, reactions
+/// aggregated). The Timeline UI virtualizes its DOM, so returning the full
+/// cached chunk is safe. On a cold cache (nothing synced/persisted yet) this
+/// drives one back-pagination batch so the first screen isn't blank.
+pub async fn open_room_timeline(
+    client: &Client,
+    room_id: &str,
+    limit: usize,
+) -> Result<CachedTimelinePage, String> {
+    use std::ops::ControlFlow;
+
+    let room_id_parsed = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id_parsed)
+        .ok_or_else(|| format!("Room {} not found", room_id_parsed))?;
+    let own_user_id = client.user_id().map(|u| u.to_string()).unwrap_or_default();
+
+    let (room_cache, _drop_handles) = room
+        .event_cache()
+        .await
+        .map_err(|e| format!("Event cache unavailable: {e}"))?;
+
+    let (cached, _updates) = room_cache
+        .subscribe()
+        .await
+        .map_err(|e| format!("Event cache read failed: {e}"))?;
+
+    let chunk = if cached.is_empty() {
+        // Cold cache: pull one batch from the server so the room isn't blank.
+        // Soft-recover from a busy paginator — we still return whatever is cached.
+        let batch = limit.clamp(20, u16::MAX as usize) as u16;
+        if let Err(e) = room_cache
+            .pagination()
+            .run_backwards(batch, |_o, _r| {
+                std::future::ready(ControlFlow::<(), ()>::Break(()))
+            })
+            .await
+        {
+            tracing::warn!("initial back-pagination failed: {e}");
+        }
+        room_cache
+            .subscribe()
+            .await
+            .map_err(|e| format!("Event cache read failed: {e}"))?
+            .0
+    } else {
+        cached
+    };
+
+    let events = aggregate_chunk(chunk.into_iter().map(|e| e.raw().clone()), &own_user_id);
+    let reached_start = room_cache.pagination().hit_timeline_start();
+    Ok(CachedTimelinePage { events, reached_start })
+}
+
+/// Load older history into the cache via one back-pagination batch, returning
+/// only the newly-prepended events (oldest-first). Reactions are aggregated
+/// over the *full* post-pagination chunk so a reaction whose target message
+/// lands in a different batch still attaches correctly; only the new events are
+/// returned for prepending.
+pub async fn load_older_timeline(
+    client: &Client,
+    room_id: &str,
+    batch_size: usize,
+) -> Result<CachedTimelinePage, String> {
+    use std::ops::ControlFlow;
+
+    let room_id_parsed = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id_parsed)
+        .ok_or_else(|| format!("Room {} not found", room_id_parsed))?;
+    let own_user_id = client.user_id().map(|u| u.to_string()).unwrap_or_default();
+
+    let (room_cache, _drop_handles) = room
+        .event_cache()
+        .await
+        .map_err(|e| format!("Event cache unavailable: {e}"))?;
+
+    // Snapshot the event-ids currently displayable, to diff what gets prepended.
+    let (before, _u1) = room_cache
+        .subscribe()
+        .await
+        .map_err(|e| format!("Event cache read failed: {e}"))?;
+    let before_ids: HashSet<String> =
+        aggregate_chunk(before.into_iter().map(|e| e.raw().clone()), &own_user_id)
+            .into_iter()
+            .map(|e| e.event_id)
+            .collect();
+
+    let batch = batch_size.clamp(20, u16::MAX as usize) as u16;
+    let mut reached_start = false;
+    // Soft-recover: a busy shared paginator (or any pagination error) just means
+    // no new older events this attempt; the frontend can retry on the next
+    // scroll rather than seeing an error.
+    if let Err(e) = room_cache
+        .pagination()
+        .run_backwards(batch, |outcome, _r| {
+            reached_start = outcome.reached_start;
+            std::future::ready(ControlFlow::<(), ()>::Break(()))
+        })
+        .await
+    {
+        tracing::warn!("load_older back-pagination failed: {e}");
+    }
+
+    let (after, _u2) = room_cache
+        .subscribe()
+        .await
+        .map_err(|e| format!("Event cache read failed: {e}"))?;
+    let events: Vec<TimelineEvent> =
+        aggregate_chunk(after.into_iter().map(|e| e.raw().clone()), &own_user_id)
+            .into_iter()
+            .filter(|e| !before_ids.contains(&e.event_id))
+            .collect();
+
+    let reached_start = reached_start || room_cache.pagination().hit_timeline_start();
+    Ok(CachedTimelinePage { events, reached_start })
 }
 
 /// Fetch newer events from a forward-pagination token.
@@ -384,11 +530,31 @@ pub async fn paginate_forward(
 
     let own_user_id = client.user_id().map(|u| u.to_string()).unwrap_or_default();
 
+    // Forward fetch returns events oldest-first already.
+    let events = aggregate_chunk(
+        messages.chunk.into_iter().map(|e| e.raw().clone()),
+        &own_user_id,
+    );
+
+    Ok(TimelineForwardPage { events, next_batch })
+}
+
+/// Convert a batch of raw timeline events into displayable `TimelineEvent`s,
+/// aggregating any reaction events found in the batch onto their target
+/// messages. Input order is preserved (callers reverse if they need
+/// oldest-first). Takes raw events so it works with any SDK event wrapper
+/// (`room.messages()` chunks and event-cache chunks expose different types,
+/// both with `.raw()`).
+fn aggregate_chunk(
+    raws: impl IntoIterator<Item = Raw<AnySyncTimelineEvent>>,
+    own_user_id: &str,
+) -> Vec<TimelineEvent> {
     let mut events: Vec<TimelineEvent> = Vec::new();
+    // target_event_id -> Vec<(key, sender_id, reaction_event_id)>
     let mut reaction_raw: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
 
-    for timeline_event in messages.chunk {
-        if let Ok(deserialized) = timeline_event.raw().deserialize() {
+    for raw in raws {
+        if let Ok(deserialized) = raw.deserialize() {
             match deserialized {
                 AnySyncTimelineEvent::MessageLike(
                     AnySyncMessageLikeEvent::RoomMessage(SyncMessageLikeEvent::Original(ev)),
@@ -419,15 +585,15 @@ pub async fn paginate_forward(
         }
     }
 
+    // Aggregate and attach reactions to their target messages.
     for ev in &mut events {
         if let Some(rxns) = reaction_raw.get(&ev.event_id) {
-            let mut agg: HashMap<String, (u64, Vec<String>, bool, Option<String>)> =
-                HashMap::new();
+            let mut agg: HashMap<String, (u64, Vec<String>, bool, Option<String>)> = HashMap::new();
             for (key, sender, rev_id) in rxns {
                 let e = agg.entry(key.clone()).or_insert((0, Vec::new(), false, None));
                 e.0 += 1;
                 e.1.push(sender.clone());
-                if sender == &own_user_id {
+                if sender == own_user_id {
                     e.2 = true;
                     e.3 = Some(rev_id.clone());
                 }
@@ -445,8 +611,7 @@ pub async fn paginate_forward(
         }
     }
 
-    // Forward fetch returns events oldest-first already.
-    Ok(TimelineForwardPage { events, next_batch })
+    events
 }
 
 fn convert_sync_timeline_event(event: AnySyncTimelineEvent) -> Option<TimelineEvent> {
@@ -1250,5 +1415,99 @@ mod tests {
         assert_eq!(back.matched, 7);
         assert!(back.reached_start);
         assert!(!back.canceled);
+    }
+
+    // --- Search stop decision ---
+
+    #[test]
+    fn test_search_should_break_keeps_going_by_default() {
+        // Mid-scan, no limits hit: keep paginating.
+        assert!(!search_should_break(50, u64::MAX, Some(1_700_000_000_000), None, false, false));
+    }
+
+    #[test]
+    fn test_search_should_break_on_cancel_start_and_cap() {
+        assert!(search_should_break(10, u64::MAX, None, None, false, true), "canceled");
+        assert!(search_should_break(10, u64::MAX, None, None, true, false), "reached_start");
+        assert!(search_should_break(5000, 5000, None, None, false, false), "cap reached");
+        assert!(search_should_break(5001, 5000, None, None, false, false), "past cap");
+    }
+
+    // --- aggregate_chunk ---
+
+    fn raw_event(json: serde_json::Value) -> Raw<AnySyncTimelineEvent> {
+        Raw::new(&json).expect("serialize raw event").cast()
+    }
+
+    #[test]
+    fn test_aggregate_chunk_attaches_reactions() {
+        // A message plus two reactions targeting it (one from us, one from a peer).
+        let chunk = vec![
+            raw_event(serde_json::json!({
+                "type": "m.room.message",
+                "event_id": "$msg:example.com",
+                "sender": "@alice:example.com",
+                "origin_server_ts": 1_700_000_000_000u64,
+                "content": { "msgtype": "m.text", "body": "hello" }
+            })),
+            raw_event(serde_json::json!({
+                "type": "m.reaction",
+                "event_id": "$rx1:example.com",
+                "sender": "@me:example.com",
+                "origin_server_ts": 1_700_000_001_000u64,
+                "content": { "m.relates_to": { "rel_type": "m.annotation", "event_id": "$msg:example.com", "key": "👍" } }
+            })),
+            raw_event(serde_json::json!({
+                "type": "m.reaction",
+                "event_id": "$rx2:example.com",
+                "sender": "@bob:example.com",
+                "origin_server_ts": 1_700_000_002_000u64,
+                "content": { "m.relates_to": { "rel_type": "m.annotation", "event_id": "$msg:example.com", "key": "👍" } }
+            })),
+        ];
+
+        let out = aggregate_chunk(chunk, "@me:example.com");
+
+        // Reaction events are not returned as their own messages.
+        assert_eq!(out.len(), 1);
+        let msg = &out[0];
+        assert_eq!(msg.event_id, "$msg:example.com");
+        assert_eq!(msg.reactions.len(), 1);
+        let group = &msg.reactions[0];
+        assert_eq!(group.key, "👍");
+        assert_eq!(group.count, 2);
+        assert!(group.own_reaction, "our own reaction should be flagged");
+        assert_eq!(group.own_event_id.as_deref(), Some("$rx1:example.com"));
+    }
+
+    #[test]
+    fn test_aggregate_chunk_preserves_input_order() {
+        let chunk = vec![
+            raw_event(serde_json::json!({
+                "type": "m.room.message", "event_id": "$a:example.com", "sender": "@a:example.com",
+                "origin_server_ts": 1u64, "content": { "msgtype": "m.text", "body": "first" }
+            })),
+            raw_event(serde_json::json!({
+                "type": "m.room.message", "event_id": "$b:example.com", "sender": "@a:example.com",
+                "origin_server_ts": 2u64, "content": { "msgtype": "m.text", "body": "second" }
+            })),
+        ];
+        let out = aggregate_chunk(chunk, "@me:example.com");
+        assert_eq!(out.iter().map(|e| e.event_id.as_str()).collect::<Vec<_>>(),
+                   vec!["$a:example.com", "$b:example.com"]);
+    }
+
+    #[test]
+    fn test_search_should_break_date_cutoff() {
+        let cutoff = 1_700_000_000_000u64;
+        // Oldest event is still newer than the cutoff → keep going.
+        assert!(!search_should_break(100, u64::MAX, Some(cutoff + 5_000), Some(cutoff), false, false));
+        // Oldest event has crossed (== or older than) the cutoff → stop.
+        assert!(search_should_break(100, u64::MAX, Some(cutoff), Some(cutoff), false, false));
+        assert!(search_should_break(100, u64::MAX, Some(cutoff - 5_000), Some(cutoff), false, false));
+        // No cutoff set → date rule never fires.
+        assert!(!search_should_break(100, u64::MAX, Some(0), None, false, false));
+        // Cutoff set but no events seen yet → can't decide on date, keep going.
+        assert!(!search_should_break(0, u64::MAX, None, Some(cutoff), false, false));
     }
 }

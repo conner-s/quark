@@ -68,6 +68,13 @@ export interface TimelinePage {
   prev_batch: string | null;
 }
 
+/** A page served from the event cache (cache-backed live path) — matches matrix::timeline::CachedTimelinePage */
+export interface CachedTimelinePage {
+  events: TimelineEvent[];
+  /** True once back-pagination has reached the start of the room's history. */
+  reached_start: boolean;
+}
+
 /** Events surrounding a specific event — matches matrix::timeline::EventContextPage */
 export interface EventContextPage {
   events: TimelineEvent[];

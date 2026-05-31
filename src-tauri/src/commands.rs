@@ -344,6 +344,37 @@ pub async fn paginate_forward(
     crate::matrix::timeline::paginate_forward(&client, &room_id, after, limit.unwrap_or(50)).await
 }
 
+/// Open a room's timeline from the event cache (cache-backed live path).
+#[tauri::command]
+pub async fn open_room_timeline(
+    state: State<'_, MatrixState>,
+    search_state: State<'_, crate::matrix::client::SearchState>,
+    pagination_lock: State<'_, crate::matrix::client::PaginationLock>,
+    room_id: String,
+    limit: Option<usize>,
+) -> Result<crate::matrix::timeline::CachedTimelinePage, String> {
+    let client = get_client(&state)?;
+    // Stop any in-flight scan, then serialize on the shared paginator.
+    search_state.0.store(true, std::sync::atomic::Ordering::Relaxed);
+    let _guard = pagination_lock.0.lock().await;
+    crate::matrix::timeline::open_room_timeline(&client, &room_id, limit.unwrap_or(100)).await
+}
+
+/// Load older history into the cache and return the newly-prepended events.
+#[tauri::command]
+pub async fn load_older_timeline(
+    state: State<'_, MatrixState>,
+    search_state: State<'_, crate::matrix::client::SearchState>,
+    pagination_lock: State<'_, crate::matrix::client::PaginationLock>,
+    room_id: String,
+    batch_size: Option<usize>,
+) -> Result<crate::matrix::timeline::CachedTimelinePage, String> {
+    let client = get_client(&state)?;
+    search_state.0.store(true, std::sync::atomic::Ordering::Relaxed);
+    let _guard = pagination_lock.0.lock().await;
+    crate::matrix::timeline::load_older_timeline(&client, &room_id, batch_size.unwrap_or(300)).await
+}
+
 /// Tier 2 — search locally cached/persisted events (offline, fast).
 #[tauri::command]
 pub async fn search_room_cache(
@@ -362,6 +393,7 @@ pub async fn search_room_cache(
 pub async fn search_room_messages(
     state: State<'_, MatrixState>,
     search_state: State<'_, crate::matrix::client::SearchState>,
+    pagination_lock: State<'_, crate::matrix::client::PaginationLock>,
     app_handle: AppHandle,
     room_id: String,
     query: String,
@@ -369,6 +401,11 @@ pub async fn search_room_messages(
     max_events: Option<u32>,
 ) -> Result<crate::matrix::timeline::SearchSummary, String> {
     let client = get_client(&state)?;
+    // Ask any in-flight scan to stop, then serialize on the shared paginator.
+    // Reset our own cancel flag only *after* acquiring the lock, so the prior
+    // scan (which we just signalled) isn't confused with this fresh run.
+    search_state.0.store(true, std::sync::atomic::Ordering::Relaxed);
+    let _guard = pagination_lock.0.lock().await;
     search_state.0.store(false, std::sync::atomic::Ordering::Relaxed);
     crate::matrix::timeline::search_messages(
         &client,

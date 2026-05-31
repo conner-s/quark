@@ -165,6 +165,11 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return MOCK_ROOMS;
     case "get_timeline":
       return { events: MOCK_TIMELINE, prev_batch: null };
+    case "open_room_timeline":
+      return { events: MOCK_TIMELINE, reached_start: true };
+    case "load_older_timeline":
+      // Mock has no deeper history; report the start of the room reached.
+      return { events: [], reached_start: true };
     case "get_message_revisions": {
       // Return a couple of fake revision events for mock mode
       const origId = args?.eventId as string ?? "";
