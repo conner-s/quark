@@ -28,6 +28,8 @@ export class RoomHeader {
   private _memberCountClickHandler: (() => void) | null = null;
   private _pinnedClickHandler: (() => void) | null = null;
   private _pinnedBtnEl: HTMLButtonElement;
+  private _searchBtnEl: HTMLButtonElement;
+  private _searchClickHandler: (() => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -65,11 +67,28 @@ export class RoomHeader {
 
     this._el.appendChild(left);
 
-    // ── Right section: pinned + member count + encryption ────────────────────
+    // ── Right section: search + pinned + member count + encryption ───────────
     this._metaEl = document.createElement("div");
     this._metaEl.className = "room-header__meta";
 
-    // Pinned messages button — leftmost in meta section
+    // Search button — leftmost in meta section. Opens the search dialog
+    // (handled via the delegated click listener below), mirroring the pinned
+    // button pattern.
+    this._searchBtnEl = document.createElement("button");
+    this._searchBtnEl.type = "button";
+    this._searchBtnEl.className = "room-header__search-btn";
+    this._searchBtnEl.title = "Search messages (:search)";
+    this._searchBtnEl.setAttribute("aria-label", "Search messages in room");
+    this._searchBtnEl.textContent = "🔍 search";
+    this._metaEl.appendChild(this._searchBtnEl);
+
+    const searchSep = document.createElement("span");
+    searchSep.className = "room-header__sep";
+    searchSep.setAttribute("aria-hidden", "true");
+    searchSep.textContent = " │ ";
+    this._metaEl.appendChild(searchSep);
+
+    // Pinned messages button
     this._pinnedBtnEl = document.createElement("button");
     this._pinnedBtnEl.type = "button";
     this._pinnedBtnEl.className = "room-header__pinned-btn";
@@ -117,6 +136,11 @@ export class RoomHeader {
       if (this._pinnedClickHandler &&
           (e.target === this._pinnedBtnEl || this._pinnedBtnEl.contains(e.target as Node))) {
         this._pinnedClickHandler();
+        return;
+      }
+      if (this._searchClickHandler &&
+          (e.target === this._searchBtnEl || this._searchBtnEl.contains(e.target as Node))) {
+        this._searchClickHandler();
       }
     });
 
@@ -159,6 +183,14 @@ export class RoomHeader {
    */
   setPinnedClickHandler(handler: (() => void) | null): void {
     this._pinnedClickHandler = handler;
+  }
+
+  /**
+   * Register a callback to invoke when the header search button is clicked
+   * (opens the search dialog). Pass null to remove the handler.
+   */
+  setSearchHandler(handler: (() => void) | null): void {
+    this._searchClickHandler = handler;
   }
 
   /**

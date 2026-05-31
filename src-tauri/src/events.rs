@@ -98,6 +98,11 @@ pub const EVENT_CONNECTED: &str = "quark://sync/connected";
 pub const EVENT_REACTION: &str = "quark://sync/reaction";
 pub const EVENT_REDACTION: &str = "quark://sync/redaction";
 
+/// Emitted for each message that matches an in-progress server-side search.
+pub const EVENT_SEARCH_HIT: &str = "quark://search/hit";
+/// Emitted periodically during a server-side search to report scan progress.
+pub const EVENT_SEARCH_PROGRESS: &str = "quark://search/progress";
+
 // ─── Event Payload Structs ────────────────────────────────────────────────────
 
 /// Emitted when a new message arrives in a room.
@@ -157,6 +162,19 @@ pub struct SyncRoomUnreadCount {
 pub struct SyncRedactionUpdate {
     pub room_id: String,
     pub redacted_event_id: String,
+}
+
+/// Emitted for each message matching an in-progress server-side search.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchHit {
+    pub room_id: String,
+    pub event: TimelineEvent,
+}
+
+/// Emitted periodically during a server-side search to report progress.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchProgress {
+    pub scanned: u64,
 }
 
 /// Emitted when a reaction is added to an event in a room.

@@ -123,6 +123,33 @@ export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+// ── Mock event bus ──────────────────────────────────────────────────────────
+// A tiny pub/sub so mock-mode commands can simulate backend-pushed Tauri events
+// (e.g. streaming search hits) for browser dev mode. Mirrors the subset of the
+// Tauri event API that the frontend uses.
+type MockEventListener = (payload: unknown) => void;
+const _mockListeners = new Map<string, Set<MockEventListener>>();
+
+/** Subscribe to a mock event. Returns an unlisten function. */
+export function mockListen(event: string, cb: MockEventListener): () => void {
+  let set = _mockListeners.get(event);
+  if (!set) {
+    set = new Set();
+    _mockListeners.set(event, set);
+  }
+  set.add(cb);
+  return () => {
+    set?.delete(cb);
+  };
+}
+
+/** Emit a mock event to all current listeners. */
+function mockEmit(event: string, payload: unknown): void {
+  const set = _mockListeners.get(event);
+  if (!set) return;
+  for (const cb of [...set]) cb(payload);
+}
+
 // Mock invoke that returns fake data
 export async function mockInvoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
   // Simulate a small network delay
@@ -299,6 +326,34 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       }
       return MOCK_GIFS;
     }
+    case "search_room_cache": {
+      const q = ((args?.query as string) ?? "").toLowerCase();
+      if (!q) return [] as TimelineEvent[];
+      return MOCK_TIMELINE.filter(
+        (e) => e.body && e.body.toLowerCase().includes(q),
+      ) as TimelineEvent[];
+    }
+    case "search_room_messages": {
+      // Mock streaming search: emit each match as a hit event (the dialog has
+      // already subscribed before awaiting this call), then return a summary.
+      const q = ((args?.query as string) ?? "").toLowerCase();
+      const roomId = (args?.roomId as string) ?? "";
+      const hits = q
+        ? MOCK_TIMELINE.filter((e) => e.body && e.body.toLowerCase().includes(q))
+        : [];
+      for (const event of hits) {
+        mockEmit("quark://search/hit", { room_id: roomId, event });
+      }
+      mockEmit("quark://search/progress", { scanned: MOCK_TIMELINE.length });
+      return {
+        scanned: MOCK_TIMELINE.length,
+        matched: hits.length,
+        reached_start: true,
+        canceled: false,
+      };
+    }
+    case "cancel_room_search":
+      return null;
     case "send_gif": {
       const title = (args?.title as string) ?? "GIF";
       MOCK_TIMELINE.push({

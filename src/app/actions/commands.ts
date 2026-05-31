@@ -26,6 +26,7 @@ import {
   openSettings,
   openRoomInfo,
   openPinnedMessages,
+  openSearch,
   openRoomDirectory,
   openRoomSettings,
   openSpaceSettings,
@@ -124,6 +125,11 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
 
     case "pinned": {
       void openPinnedMessages();
+      break;
+    }
+
+    case "search": {
+      openSearch(parsed.args.join(" "));
       break;
     }
 

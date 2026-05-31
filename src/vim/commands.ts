@@ -32,6 +32,7 @@ const KNOWN_COMMANDS: string[] = [
   "settings",
   "info",
   "pinned",
+  "search",
   "directory",
   "roomsettings",
   "spacesettings",

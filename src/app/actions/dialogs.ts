@@ -32,6 +32,15 @@ export async function openPinnedMessages(): Promise<void> {
 }
 
 /**
+ * Open the message search dialog for the current room, optionally seeded with
+ * an initial query.
+ */
+export function openSearch(query = ""): void {
+  const { searchDialog } = getComponents();
+  searchDialog.show(query);
+}
+
+/**
  * Open the room directory dialog.
  */
 export function openRoomDirectory(): void {

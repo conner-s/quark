@@ -344,6 +344,53 @@ pub async fn paginate_forward(
     crate::matrix::timeline::paginate_forward(&client, &room_id, after, limit.unwrap_or(50)).await
 }
 
+/// Tier 2 — search locally cached/persisted events (offline, fast).
+#[tauri::command]
+pub async fn search_room_cache(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    query: String,
+) -> Result<Vec<TimelineEvent>, String> {
+    let client = get_client(&state)?;
+    crate::matrix::timeline::search_room_cache(&client, &room_id, &query).await
+}
+
+/// Tiers 3/4 — streaming server-side search. Emits hits/progress as Tauri
+/// events; resolves with a summary when the scan ends. Resets the cancel flag
+/// on entry so a prior cancel doesn't abort this run.
+#[tauri::command]
+pub async fn search_room_messages(
+    state: State<'_, MatrixState>,
+    search_state: State<'_, crate::matrix::client::SearchState>,
+    app_handle: AppHandle,
+    room_id: String,
+    query: String,
+    until_ts: Option<u64>,
+    max_events: Option<u32>,
+) -> Result<crate::matrix::timeline::SearchSummary, String> {
+    let client = get_client(&state)?;
+    search_state.0.store(false, std::sync::atomic::Ordering::Relaxed);
+    crate::matrix::timeline::search_messages(
+        &client,
+        &app_handle,
+        &room_id,
+        &query,
+        until_ts,
+        max_events,
+        &search_state.0,
+    )
+    .await
+}
+
+/// Request cancellation of an in-progress server-side search.
+#[tauri::command]
+pub async fn cancel_room_search(
+    search_state: State<'_, crate::matrix::client::SearchState>,
+) -> Result<(), String> {
+    search_state.0.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn send_message(
     state: State<'_, MatrixState>,

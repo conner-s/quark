@@ -2,6 +2,7 @@
 
 import { createReactionBar, updateReactionBar, type ReactionGroup } from "./Reactions.js";
 import { invoke } from "../ipc/invoke.js";
+import type { SearchResult } from "../ipc/types.js";
 import type { ThreadMessageData } from "./ThreadView.js";
 import { isAnimatedUrl } from "../app/animated_urls.js";
 import { hashColor } from "./avatarColors.js";
@@ -1156,6 +1157,31 @@ export class Timeline {
 
   getElement(): HTMLElement {
     return this._el;
+  }
+
+  /**
+   * Search the messages currently loaded in the timeline (the "instant" search
+   * tier). Case-insensitive substring match against the plain-text body. Skips
+   * system messages. Returns oldest-first results in a shape shared with the
+   * server/cache search tiers.
+   */
+  searchLoaded(query: string): SearchResult[] {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const out: SearchResult[] = [];
+    for (const msg of this._messages) {
+      if (msg.type === "system") continue;
+      if (!msg.body) continue;
+      if (msg.body.toLowerCase().includes(q)) {
+        out.push({
+          eventId: msg.id,
+          sender: msg.senderName || msg.senderId || "",
+          timestamp: Date.parse(msg.timestamp) || 0,
+          body: msg.body,
+        });
+      }
+    }
+    return out;
   }
 
   /** Register a callback fired when the user scrolls near the top and the

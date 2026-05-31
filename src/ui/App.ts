@@ -23,6 +23,7 @@ import { ProfileEditDialog } from "./ProfileEditDialog.js";
 import { SettingsDialog } from "./SettingsDialog.js";
 import { RoomInfoDialog } from "./RoomInfoDialog.js";
 import { PinnedMessagesDialog } from "./PinnedMessagesDialog.js";
+import { SearchDialog } from "./SearchDialog.js";
 import { RoomDirectoryDialog } from "./RoomDirectoryDialog.js";
 import { ImageLightbox } from "./ImageLightbox.js";
 import { QuickNavPalette } from "./QuickNavPalette.js";
@@ -72,6 +73,7 @@ export interface AppComponents {
   settingsDialog: SettingsDialog;
   roomInfoDialog: RoomInfoDialog;
   pinnedMessagesDialog: PinnedMessagesDialog;
+  searchDialog: SearchDialog;
   roomDirectoryDialog: RoomDirectoryDialog;
   imageLightbox: ImageLightbox;
   quickNavPalette: QuickNavPalette;
@@ -128,6 +130,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   const settingsDialog = new SettingsDialog();
   const roomInfoDialog = new RoomInfoDialog();
   const pinnedMessagesDialog = new PinnedMessagesDialog();
+  const searchDialog = new SearchDialog(timeline);
   const roomDirectoryDialog = new RoomDirectoryDialog();
   const imageLightbox = new ImageLightbox();
   const quickNavPalette = new QuickNavPalette();
@@ -298,6 +301,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   document.body.appendChild(settingsDialog.getElement());
   document.body.appendChild(roomInfoDialog.getElement());
   document.body.appendChild(pinnedMessagesDialog.getElement());
+  document.body.appendChild(searchDialog.getElement());
   document.body.appendChild(roomDirectoryDialog.getElement());
   document.body.appendChild(imageLightbox.getElement());
   document.body.appendChild(quickNavPalette.getElement());
@@ -330,6 +334,7 @@ export function mountApp(container: HTMLElement): AppComponents {
     settingsDialog,
     roomInfoDialog,
     pinnedMessagesDialog,
+    searchDialog,
     roomDirectoryDialog,
     imageLightbox,
     quickNavPalette,

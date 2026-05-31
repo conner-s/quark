@@ -1,7 +1,8 @@
 // Room IPC calls
 
 import { invoke } from "./invoke.js";
-import type { RoomInfo, CreateRoomOptions, RoomMember, PinnedEventInfo, PublicRoomInfo } from "./types.js";
+import { isTauri, mockListen } from "./mock.js";
+import type { RoomInfo, CreateRoomOptions, RoomMember, PinnedEventInfo, PublicRoomInfo, TimelineEvent, SearchSummary } from "./types.js";
 
 export type { RoomInfo, CreateRoomOptions, RoomMember, PinnedEventInfo, PublicRoomInfo };
 
@@ -102,4 +103,86 @@ export async function banUser(roomId: string, userId: string, reason?: string): 
  */
 export async function unbanUser(roomId: string, userId: string): Promise<void> {
   return invoke<void>("unban_user", { roomId, userId });
+}
+
+// ─── Message search ───────────────────────────────────────────────────────────
+
+/** Tauri event names emitted by the streaming server-side search command. */
+export const EVENT_SEARCH_HIT = "quark://search/hit";
+export const EVENT_SEARCH_PROGRESS = "quark://search/progress";
+
+/** Payload of an `EVENT_SEARCH_HIT` event — one matched message. */
+export interface SearchHitPayload {
+  room_id: string;
+  event: TimelineEvent;
+}
+
+/** Payload of an `EVENT_SEARCH_PROGRESS` event. */
+export interface SearchProgressPayload {
+  scanned: number;
+}
+
+/**
+ * Tier 2 — search the locally cached/persisted events (matrix-sdk event cache)
+ * for the given room. Fast, offline, bounded result set. Matches the Rust
+ * `search_room_cache` command.
+ */
+export async function searchRoomCache(roomId: string, query: string): Promise<TimelineEvent[]> {
+  return invoke<TimelineEvent[]>("search_room_cache", { roomId, query });
+}
+
+/**
+ * Tiers 3/4 — server-side streaming search. Paginates the room backward,
+ * matching as it goes and emitting each hit via `EVENT_SEARCH_HIT` plus
+ * progress via `EVENT_SEARCH_PROGRESS`. Subscribe with `listenSearchEvents`
+ * *before* calling this. Resolves with a summary when the scan ends.
+ *
+ * @param untilTs   epoch ms; stop once events are older than this (date-range
+ *                  scan). Omit to scan to the start of the room.
+ * @param maxEvents safety cap on events scanned.
+ * Matches the Rust `search_room_messages` command.
+ */
+export async function searchRoomMessages(
+  roomId: string,
+  query: string,
+  untilTs?: number,
+  maxEvents?: number,
+): Promise<SearchSummary> {
+  return invoke<SearchSummary>("search_room_messages", {
+    roomId,
+    query,
+    untilTs: untilTs ?? null,
+    maxEvents: maxEvents ?? null,
+  });
+}
+
+/** Cancel an in-progress server-side search. Matches `cancel_room_search`. */
+export async function cancelRoomSearch(): Promise<void> {
+  return invoke<void>("cancel_room_search");
+}
+
+/**
+ * Subscribe to streaming search events. Works in both Tauri (real backend) and
+ * mock/browser dev mode. Returns an unlisten function that removes both
+ * listeners.
+ */
+export async function listenSearchEvents(
+  onHit: (p: SearchHitPayload) => void,
+  onProgress: (p: SearchProgressPayload) => void,
+): Promise<() => void> {
+  if (isTauri()) {
+    const { listen } = await import("@tauri-apps/api/event");
+    const unHit = await listen<SearchHitPayload>(EVENT_SEARCH_HIT, (e) => onHit(e.payload));
+    const unProg = await listen<SearchProgressPayload>(EVENT_SEARCH_PROGRESS, (e) => onProgress(e.payload));
+    return () => {
+      unHit();
+      unProg();
+    };
+  }
+  const unHit = mockListen(EVENT_SEARCH_HIT, (p) => onHit(p as SearchHitPayload));
+  const unProg = mockListen(EVENT_SEARCH_PROGRESS, (p) => onProgress(p as SearchProgressPayload));
+  return () => {
+    unHit();
+    unProg();
+  };
 }

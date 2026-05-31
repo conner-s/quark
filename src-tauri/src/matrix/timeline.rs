@@ -89,6 +89,37 @@ pub struct EventContextPage {
     pub next_batch: Option<String>,
 }
 
+/// Summary of a completed (or canceled) server-side search scan.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchSummary {
+    /// Total events examined across all paginated pages.
+    pub scanned: u64,
+    /// Number of events that matched the query (also emitted as hit events).
+    pub matched: u64,
+    /// True if pagination reached the start of the room's history.
+    pub reached_start: bool,
+    /// True if the scan was stopped early by a cancel request.
+    pub canceled: bool,
+}
+
+/// Case-insensitive substring match used by all search tiers. Matches against
+/// the plain body and, when present, the formatted (HTML) body. Skips
+/// undecryptable events so the "unable to decrypt" placeholder never matches.
+fn event_matches(ev: &TimelineEvent, query_lower: &str) -> bool {
+    if ev.msg_type == "m.room.encrypted" {
+        return false;
+    }
+    if ev.body.to_lowercase().contains(query_lower) {
+        return true;
+    }
+    if let Some(fb) = &ev.formatted_body {
+        if fb.to_lowercase().contains(query_lower) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Fetch recent timeline events for a room.
 /// Also aggregates any reaction events found in the same batch and attaches
 /// them to their target messages so the frontend can display them immediately.
@@ -182,6 +213,147 @@ pub async fn get_timeline(
     // Reverse so oldest messages come first
     events.reverse();
     Ok(TimelinePage { events, prev_batch })
+}
+
+/// Tier 2 — search the locally cached/persisted events for a room via the
+/// matrix-sdk event cache. No network round-trip: it reads whatever sync (and
+/// any cache-backed pagination) has already stored, decrypting in memory using
+/// the on-disk keys. Returns matches oldest-first.
+pub async fn search_room_cache(
+    client: &Client,
+    room_id: &str,
+    query: &str,
+) -> Result<Vec<TimelineEvent>, String> {
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {} not found", room_id))?;
+
+    let (room_cache, _drop_handles) = room
+        .event_cache()
+        .await
+        .map_err(|e| format!("Event cache unavailable: {e}"))?;
+    let (events, _updates) = room_cache
+        .subscribe()
+        .await
+        .map_err(|e| format!("Event cache read failed: {e}"))?;
+
+    let q = query.to_lowercase();
+    let mut out: Vec<TimelineEvent> = Vec::new();
+    for cached in events {
+        if let Ok(any) = cached.raw().deserialize() {
+            if let Some(te) = convert_sync_timeline_event(any) {
+                if event_matches(&te, &q) {
+                    out.push(te);
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Tiers 3/4 — server-side streaming search. Paginates the room backward one
+/// page at a time, matching as it goes and emitting each hit via
+/// `EVENT_SEARCH_HIT` (plus periodic `EVENT_SEARCH_PROGRESS`). Only one page
+/// plus transient hits are ever held in memory, so peak memory is independent
+/// of room size. Stops at the start of history, when an event crosses
+/// `until_ts` (date-range scan), when `max_events` is exhausted, or when
+/// `cancel` is set.
+pub async fn search_messages(
+    client: &Client,
+    app_handle: &tauri::AppHandle,
+    room_id: &str,
+    query: &str,
+    until_ts: Option<u64>,
+    max_events: Option<u32>,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<SearchSummary, String> {
+    use std::sync::atomic::Ordering;
+    use tauri::Emitter;
+
+    let room_id_parsed = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id_parsed)
+        .ok_or_else(|| format!("Room {} not found", room_id_parsed))?;
+
+    const PAGE_SIZE: u32 = 100;
+    let cap = max_events.map(|m| m as u64).unwrap_or(u64::MAX);
+    let q = query.to_lowercase();
+
+    let mut from: Option<String> = None;
+    let mut scanned: u64 = 0;
+    let mut matched: u64 = 0;
+    let mut reached_start = false;
+    let mut canceled = false;
+
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            canceled = true;
+            break;
+        }
+
+        let mut opts = MessagesOptions::backward();
+        opts.limit = UInt::from(PAGE_SIZE);
+        opts.from = from.clone();
+
+        let messages = room
+            .messages(opts)
+            .await
+            .map_err(|e| format!("Search failed: {e}"))?;
+        let next_from = messages.end.clone();
+
+        let mut oldest_ts: Option<u64> = None;
+        for tev in messages.chunk {
+            scanned += 1;
+            if let Ok(any) = tev.raw().deserialize() {
+                if let Some(te) = convert_sync_timeline_event(any) {
+                    oldest_ts = Some(oldest_ts.map_or(te.timestamp, |o| o.min(te.timestamp)));
+                    if event_matches(&te, &q) {
+                        matched += 1;
+                        let _ = app_handle.emit(
+                            crate::events::EVENT_SEARCH_HIT,
+                            crate::events::SearchHit {
+                                room_id: room_id.to_string(),
+                                event: te,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        let _ = app_handle.emit(
+            crate::events::EVENT_SEARCH_PROGRESS,
+            crate::events::SearchProgress { scanned },
+        );
+
+        // Date-range stop: this page already contains events older than the
+        // cutoff, so the requested range is fully covered.
+        if let (Some(until), Some(oldest)) = (until_ts, oldest_ts) {
+            if oldest <= until {
+                break;
+            }
+        }
+
+        if scanned >= cap {
+            break;
+        }
+
+        match next_from {
+            Some(tok) => from = Some(tok),
+            None => {
+                reached_start = true;
+                break;
+            }
+        }
+    }
+
+    Ok(SearchSummary {
+        scanned,
+        matched,
+        reached_start,
+        canceled,
+    })
 }
 
 /// Fetch newer events from a forward-pagination token.
@@ -1036,5 +1208,47 @@ mod tests {
         let json = serde_json::to_string(&ev).expect("serialize");
         let back: TimelineEvent = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back.timestamp, 0);
+    }
+
+    // --- Search matcher ---
+
+    #[test]
+    fn test_event_matches_is_case_insensitive() {
+        let ev = make_text_event("$e:example.com", "@a:example.com", "Hello World");
+        assert!(event_matches(&ev, "hello"));
+        assert!(event_matches(&ev, "WORLD".to_lowercase().as_str()));
+        assert!(!event_matches(&ev, "absent"));
+    }
+
+    #[test]
+    fn test_event_matches_searches_formatted_body() {
+        let ev = TimelineEvent {
+            body: "plain".to_string(),
+            formatted_body: Some("<b>fancy</b>".to_string()),
+            ..make_text_event("$e:example.com", "@a:example.com", "plain")
+        };
+        assert!(event_matches(&ev, "fancy"));
+    }
+
+    #[test]
+    fn test_event_matches_skips_undecryptable() {
+        // The placeholder body for an undecryptable event must never match, even
+        // if the query happens to appear in the placeholder text.
+        let ev = TimelineEvent {
+            msg_type: "m.room.encrypted".to_string(),
+            ..make_text_event("$e:example.com", "@a:example.com", "unable to decrypt")
+        };
+        assert!(!event_matches(&ev, "decrypt"));
+    }
+
+    #[test]
+    fn test_search_summary_roundtrip() {
+        let summary = SearchSummary { scanned: 1234, matched: 7, reached_start: true, canceled: false };
+        let json = serde_json::to_string(&summary).expect("serialize");
+        let back: SearchSummary = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.scanned, 1234);
+        assert_eq!(back.matched, 7);
+        assert!(back.reached_start);
+        assert!(!back.canceled);
     }
 }

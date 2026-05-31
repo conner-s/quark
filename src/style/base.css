@@ -1100,6 +1100,25 @@ body {
   color: var(--accent-primary);
 }
 
+/* Header search button — clicks to open the search dialog. Mirrors the pinned
+   button styling (flat text button, not a pill). */
+.room-header__search-btn {
+  background: none;
+  border: none;
+  color: color-mix(in srgb, var(--fg) 45%, transparent);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 1px);
+  cursor: pointer;
+  padding: 0px 4px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  transition: color 120ms;
+}
+
+.room-header__search-btn:hover {
+  color: var(--accent-primary);
+}
+
 /* ── Content area (column 3 of the grid) ────────────────────────────────── */
 
 .content-area {
@@ -4679,6 +4698,221 @@ body.quark-mobile .profile-edit-dialog__panel {
   font-size: calc(var(--font-size) - 2px);
   flex-shrink: 0;
   background-color: var(--surface-dim);
+}
+
+/* ── Search dialog ────────────────────────────────────────────────────────── */
+/* Structurally mirrors the pinned-messages dialog; reuses the same panel/list/
+   item shape with search-specific controls (query, scope, date, progress). */
+
+.search-dialog {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--overlay-bg);
+  z-index: 200;
+  animation: gif-picker-fade-in 0.1s ease;
+}
+
+.search-dialog__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100vw - 40px));
+  max-height: min(560px, calc(100vh - 80px));
+  background-color: var(--bg);
+  border: var(--border-width) solid var(--accent-primary);
+  box-shadow: 0 8px 32px var(--shadow-color), 0 0 0 1px var(--border-color);
+  overflow: hidden;
+  outline: none;
+}
+
+.search-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+  background-color: var(--surface-subtle);
+}
+
+.search-dialog__title {
+  color: var(--accent-primary);
+  font-size: calc(var(--font-size) - 1px);
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.search-dialog__close-hint {
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  opacity: 0.5;
+}
+
+.search-dialog__query {
+  margin: 8px 10px 6px;
+  padding: 4px 8px;
+  background: var(--surface-dim);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 2px;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+}
+
+.search-dialog__query:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+/* Scope control — styled as a flat tab bar, matching the SettingsDialog tabs
+   (squared, border-separated, uppercase) rather than pill buttons. */
+.search-dialog__scope {
+  display: flex;
+  border-top: var(--border-width) solid var(--border-color);
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.search-dialog__scope-btn {
+  background: transparent;
+  border: none;
+  border-right: var(--border-width) solid var(--border-color);
+  color: var(--roomlist-muted);
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 1px);
+  letter-spacing: 0.06em;
+  padding: 4px 14px;
+  text-transform: uppercase;
+  outline: none;
+}
+
+.search-dialog__scope-btn:hover {
+  color: var(--fg);
+  background-color: var(--surface-hover);
+}
+
+.search-dialog__scope-btn--active {
+  color: var(--accent-primary);
+  background-color: var(--surface-subtle);
+}
+
+.search-dialog__date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  flex-shrink: 0;
+}
+
+.search-dialog__date-label {
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+}
+
+.search-dialog__date {
+  background: var(--surface-dim);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 2px;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 1px);
+  padding: 1px 6px;
+}
+
+.search-dialog__list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 4px 0;
+}
+
+.search-dialog__item {
+  padding: 8px 12px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.search-dialog__item:last-child {
+  border-bottom: none;
+}
+
+.search-dialog__item:hover {
+  background-color: var(--surface-hover);
+  cursor: pointer;
+}
+
+.search-dialog__item:focus {
+  box-shadow: inset 0 0 0 var(--focus-width) var(--focus-color);
+  outline: none;
+}
+
+.search-dialog__item--empty {
+  color: var(--roomlist-muted);
+  font-style: italic;
+  padding: 16px 12px;
+}
+
+.search-dialog__sender {
+  color: var(--accent-primary);
+  font-weight: bold;
+  font-size: calc(var(--font-size) - 1px);
+}
+
+.search-dialog__ts {
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 3px);
+  margin-left: 8px;
+}
+
+.search-dialog__body {
+  color: var(--fg);
+  opacity: 0.85;
+  font-size: var(--font-size);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.search-dialog__match {
+  background-color: color-mix(in srgb, var(--accent-primary) 35%, transparent);
+  color: var(--fg);
+  border-radius: 2px;
+}
+
+.search-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  border-top: var(--border-width) solid var(--border-color);
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  flex-shrink: 0;
+  background-color: var(--surface-dim);
+}
+
+.search-dialog__cancel {
+  background: var(--surface-dim);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 2px;
+  color: var(--accent-primary);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 2px);
+  padding: 1px 8px;
+  cursor: pointer;
+}
+
+.search-dialog__cancel:hover {
+  border-color: var(--accent-primary);
 }
 
 /* ── Room Directory dialog ────────────────────────────────────────────────── */

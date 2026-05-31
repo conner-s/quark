@@ -26,6 +26,12 @@ pub struct SyncState {
     pub handlers_registered: Mutex<bool>,
 }
 
+/// Tauri state holding the cancel flag for an in-progress server-side message
+/// search. `search_room_messages` resets it on start and checks it each page;
+/// `cancel_room_search` sets it to request an early stop.
+#[derive(Default)]
+pub struct SearchState(pub std::sync::atomic::AtomicBool);
+
 /// Serializable session info for persistence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
@@ -191,6 +197,16 @@ pub async fn start_sync(
         } else {
             warn!("Skipping event handler registration — already registered on this client");
         }
+    }
+
+    // Enable the global event cache + persistent storage so message search can
+    // read locally-cached events offline (and they survive restarts). Both are
+    // idempotent and cheap; log on error but never block sync startup.
+    if let Err(e) = client.event_cache().subscribe() {
+        warn!("Failed to subscribe event cache: {e}");
+    }
+    if let Err(e) = client.event_cache().enable_storage() {
+        warn!("Failed to enable event cache storage: {e}");
     }
 
     let handle = tokio::spawn(async move {

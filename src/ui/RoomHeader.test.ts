@@ -119,4 +119,30 @@ describe("RoomHeader", () => {
       expect(topicEl?.textContent).toBe("");
     });
   });
+
+  describe("search button", () => {
+    function searchBtn(): HTMLButtonElement {
+      return header.getElement().querySelector<HTMLButtonElement>(".room-header__search-btn")!;
+    }
+
+    it("renders a search button in the header", () => {
+      const btn = searchBtn();
+      expect(btn).not.toBeNull();
+      expect(btn.tagName).toBe("BUTTON");
+      expect(btn.textContent).toBe("🔍 search");
+    });
+
+    it("fires the handler when clicked", () => {
+      let called = false;
+      header.setSearchHandler(() => { called = true; });
+
+      searchBtn().click();
+
+      expect(called).toBe(true);
+    });
+
+    it("does not throw when clicked with no handler registered", () => {
+      expect(() => searchBtn().click()).not.toThrow();
+    });
+  });
 });

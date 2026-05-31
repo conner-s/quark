@@ -116,6 +116,25 @@ export interface TimelineEvent {
   original_body?: string;
 }
 
+// ─── Search ───────────────────────────────────────────────────────────────────
+
+/** A single message search result, normalized across all search tiers. */
+export interface SearchResult {
+  eventId: string;
+  sender: string;
+  /** ms since the UNIX epoch */
+  timestamp: number;
+  body: string;
+}
+
+/** Summary returned by the streaming server-side search command. */
+export interface SearchSummary {
+  scanned: number;
+  matched: number;
+  reached_start: boolean;
+  canceled: boolean;
+}
+
 // ─── URL Preview ──────────────────────────────────────────────────────────────
 
 /** OpenGraph-like metadata returned by get_url_preview — matches commands::UrlPreview */

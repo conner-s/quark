@@ -261,4 +261,41 @@ describe("Timeline", () => {
       expect(bar).toBeNull();
     });
   });
+
+  describe("searchLoaded", () => {
+    beforeEach(() => {
+      timeline.setMessages([
+        makeMsg({ id: "e1", senderName: "Alice", body: "Hello world", timestamp: "2024-01-01T12:00:00Z" }),
+        makeMsg({ id: "e2", senderName: "Bob", body: "Goodbye WORLD", timestamp: "2024-01-01T12:05:00Z" }),
+        makeMsg({ id: "e3", senderName: "Carol", body: "unrelated", timestamp: "2024-01-01T12:10:00Z" }),
+        makeMsg({ id: "e4", senderName: "System", body: "Dave joined", type: "system", timestamp: "2024-01-01T12:15:00Z" }),
+      ]);
+    });
+
+    it("matches case-insensitively across loaded messages", () => {
+      const results = timeline.searchLoaded("world");
+      expect(results.map((r) => r.eventId).sort()).toEqual(["e1", "e2"]);
+    });
+
+    it("returns normalized fields including a numeric timestamp", () => {
+      const [hit] = timeline.searchLoaded("Hello");
+      expect(hit.eventId).toBe("e1");
+      expect(hit.sender).toBe("Alice");
+      expect(hit.body).toBe("Hello world");
+      expect(hit.timestamp).toBe(Date.parse("2024-01-01T12:00:00Z"));
+    });
+
+    it("skips system messages", () => {
+      expect(timeline.searchLoaded("joined")).toHaveLength(0);
+    });
+
+    it("returns nothing for an empty or whitespace query", () => {
+      expect(timeline.searchLoaded("")).toHaveLength(0);
+      expect(timeline.searchLoaded("   ")).toHaveLength(0);
+    });
+
+    it("returns nothing when there are no matches", () => {
+      expect(timeline.searchLoaded("zzz-nomatch")).toHaveLength(0);
+    });
+  });
 });

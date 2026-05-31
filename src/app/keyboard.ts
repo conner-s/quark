@@ -20,6 +20,7 @@ import {
   openDebugViewer,
   openDebugViewerForEvent,
   openPinnedMessages,
+  openSearch,
   openRoomDirectory,
   executeCommand,
   toggleMemberList,
@@ -770,7 +771,7 @@ export function setupKeyboard(components: AppComponents): void {
   // self-register with modalManager. Only components wired with callbacks below
   // are destructured.
   const { input, commandBar, shortcodePreview, mentionPreview, timeline,
-          quickReactPicker, pinnedMessagesDialog, revisionHistoryDialog,
+          quickReactPicker, pinnedMessagesDialog, searchDialog, revisionHistoryDialog,
           roomHeader, imageLightbox, quickNavPalette, contextMenu,
           spaceStrip, roomList } = components;
 
@@ -804,6 +805,12 @@ export function setupKeyboard(components: AppComponents): void {
 
   // Pinned messages button in the header opens the pinned messages dialog
   roomHeader.setPinnedClickHandler(() => void openPinnedMessages());
+
+  // Search button in the header opens the search dialog
+  roomHeader.setSearchHandler(() => openSearch());
+
+  // Clicking a search result jumps to it in the timeline
+  searchDialog.onJumpToMessage((eventId) => void jumpToMessage(eventId));
 
   // Clicking a pinned message jumps to it in the timeline
   pinnedMessagesDialog.onJumpToMessage((eventId) => void jumpToMessage(eventId));

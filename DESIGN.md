@@ -343,6 +343,7 @@ Scoped maps (`tmap`, `rmap`, `pmap`) take precedence over global `nmap` when tha
 :stickers                    Browse sticker packs
 :emoji                       Manage emoji packs
 :gif <query>                 Search and send a GIF
+:search [query]              Search messages in the current room
 :source <path>               Reload quarkrc or source a file
 :roomsettings                Open room settings (name/topic/access/permissions)
 :spacesettings               Open space settings (name/topic/children)
@@ -362,6 +363,7 @@ Scoped maps (`tmap`, `rmap`, `pmap`) take precedence over global `nmap` when tha
 - [x] Device verification: SAS emoji, QR code
 - [x] Room creation, join, leave, invite, kick, ban
 - [x] Room directory & federated room search
+- [x] In-room message search — header search box (`:search`) with four tiers: loaded window (instant) · local cache (matrix-sdk event cache, offline) · back-to-date · entire history. Server tiers stream results one page at a time (bounded memory) and are cancelable.
 - [x] Spaces: hierarchy display, space-scoped room lists, restricted joins
 - [x] Threads (m.thread relation)
 - [x] Rich replies (m.in_reply_to)
