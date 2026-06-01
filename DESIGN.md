@@ -1,6 +1,6 @@
 # Quark — A CLI-Styled Matrix Client
 
-## Verification queue — 0.14.0 search + raw-messages live timeline + instant re-open + cache controls
+## Verification queue — 0.12.0 search + raw-messages live timeline + instant re-open + cache controls
 
 Branch `feature/search-implementation`. Message **search** runs through the matrix-sdk event cache (`RoomEventCache::pagination().run_backwards`), which persists decrypted events to the SQLite cache so re-running a search is fast and consistent. The **live timeline** (initial open + backward scroll) loads via the raw `room.messages()` API. Fixes three issues found testing 0.12.0 search: (a) the local-cache search tier was nearly empty, (b) "search back to date" returned different results on repeat runs (E2EE decryption timing), (c) historical search was slow.
 
