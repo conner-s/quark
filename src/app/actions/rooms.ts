@@ -268,7 +268,14 @@ export async function selectRoom(roomId: string): Promise<void> {
       for (const [id, mxc] of cachedTimeline.memberAvatars) _memberAvatarMxc.set(id, mxc);
     }
     paginationState.reachedStart = cachedTimeline.reachedStart;
-    AppState.set("currentTimeline", cachedTimeline.events);
+    // Copy, don't alias: the live sync handler mutates the cache entry's events
+    // array in place (appendRoomTimelineCache → push). If currentTimeline were the
+    // same array object, that push would land in currentTimeline *before* the
+    // handler's dedup check reads it, so a message arriving in the brief window
+    // between this instant paint and the authoritative fetch would be seen as
+    // "already in state" and silently dropped from the render (only reappearing on
+    // re-entry). A distinct array keeps the dedup accurate.
+    AppState.set("currentTimeline", [...cachedTimeline.events]);
     renderEvents(cachedTimeline.events);
     registerScrollCallbacks();
     // Start media/emoji loads from the cached events *now* (not after the
