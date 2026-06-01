@@ -5,11 +5,13 @@
 Branch `feature/search-implementation`. Routes the live timeline's backward loading **and** message search through the matrix-sdk event cache (`RoomEventCache::pagination().run_backwards`), which persists decrypted events to the SQLite cache so scrolling and searching feed one growing store. Fixes three issues found testing 0.12.0 search: (a) the local-cache search tier was nearly empty, (b) "search back to date" returned different results on repeat runs (E2EE decryption timing), (c) historical search was slow. (0.13.1 = search/calendar UX polish on top of the 0.13.0 cache work.) `pnpm test` green (468); `cargo test` green.
 
 ### Backend
+
 - [x] **`search_messages` on the event cache** — scans already-cached events first (instant, offline), then `run_backwards` (BATCH_SIZE 300) persisting each batch; stop decision extracted to the unit-tested `search_should_break`. Re-running a search is now fast and consistent.
 - [x] **Cache-backed live timeline** — new `open_room_timeline` (reads the cached chunk; cold-cache pulls one batch) and `load_older_timeline` (one back-pagination batch, returns the newly-prepended diff). Reaction aggregation extracted to `aggregate_chunk` (shared by `get_timeline`/`paginate_forward`/the new fns), aggregating over the full chunk so cross-batch reactions attach. New `CachedTimelinePage { events, reached_start }` replaces the `prev_batch` token on the live path.
 - **Constraint:** the 0.9 event cache has no forward pagination / context-jump API, so `paginate_forward` + `get_event_context` (context view) stay on raw `room.messages()`. The live and context-view backward paths are mutually exclusive via `inContextView`.
 
 ### Frontend
+
 - [x] `selectRoom` opens via `openRoomTimeline`; `loadMoreMessages` branches on `inContextView` (context view keeps the raw `getTimeline`/`prevBatch` path; live uses `loadOlderTimeline`/`reachedStart`); `jumpToLatest` returns to the cache-backed live timeline.
 - [x] **Search input guards** — min query length (3), debounced live loaded-tier (~180ms), and a 200-row render cap (counts stay exact). Stops the lag spike from 1–2 char queries matching a huge fraction of the now-large cached buffer.
 - [x] **Results sort dropdown** — right end of the scope row; Newest-first (default, reset on each open) / Oldest-first. Results held in an array and re-rendered sorted+capped (streaming hits re-sort as they arrive, throttled).
@@ -18,6 +20,7 @@ Branch `feature/search-implementation`. Routes the live timeline's backward load
 - [x] **Sort-dropdown theming** — `appearance: none` so WebKitGTK honors the theme background (native selects paint white otherwise).
 
 ### To verify manually (needs a real account)
+
 - [ ] Re-open a room **offline** → renders from persisted cache.
 - [ ] Scroll up repeatedly → older loads, scroll position preserved, reactions on older messages render; reaching room start stops the spinner.
 - [ ] "Search back to date" **twice** → identical results; second run near-instant; local-cache tier then returns the scanned range.
@@ -32,9 +35,11 @@ Branch `feature/search-implementation`. Routes the live timeline's backward load
 Branch `feature/search-implementation`. Adds message search: a 🔍 button in the room header (and `:search [query]`) opens a four-tier search dialog — **loaded** (instant filter of the on-screen timeline) · **local cache** (matrix-sdk event cache, offline) · **back to date** · **entire history**. The server tiers stream hits incrementally via Tauri events (`EVENT_SEARCH_HIT`/`EVENT_SEARCH_PROGRESS`) with a cancelable, bounded-memory backward scan. The event cache is enabled at startup (`event_cache().subscribe()` + `enable_storage()`). `pnpm test` green (469).
 
 ### Backend
+
 - [x] `search_room_cache` (tier 2, reads the event cache) + `search_room_messages` (tiers 3/4, streaming) + `cancel_room_search`; `SearchState(AtomicBool)` cancel flag; `event_matches` skips undecryptable events.
 
 ### Frontend
+
 - [x] `RoomHeader` 🔍 button (`setSearchHandler`) opens `SearchDialog` (extends `DialogBase`); scope control styled as a tab bar; results highlight the matched substring and click-to-jump via `jumpToMessage`; `Timeline.searchLoaded` powers the instant tier; `:search` registered in `vim/commands.ts`.
 
 > Superseded by 0.13.0, which re-routed these tiers (and the timeline) through the event cache to fix coverage/consistency/speed issues found here.
@@ -46,12 +51,14 @@ Branch `feature/search-implementation`. Adds message search: a 🔍 button in th
 Branch `v0.11.2`. Four bug fixes (#59, #60, #61, #63) plus a small timeline-load tweak. `pnpm test` green (460); `cargo test` green (190).
 
 ### Cross-platform
+
 - [x] **#61 Image captions** — an `m.image` message with a media caption (MSC2530: a `body` distinct from its `filename`) now renders the caption beneath the image. Bare-filename bodies are still suppressed, so uncaptioned images are unchanged. *Rust surfaces `image.caption()` as a new `TimelineEvent.caption`; `Timeline` renders it as `.message__image-caption`.*
 - [x] **#60 Sticker aspect ratio** — non-square stickers no longer stretch in the timeline. *`.message__sticker` lacked `object-fit: contain` (the image and thread-inline rules already had it), so the bitmap filled the attribute-reserved box instead of letterboxing into it.*
 - [x] **#59 Double message render** — sending a message whose sync echo beats the send-IPC response no longer leaves a permanent duplicate. *Race: while the optimistic node still carried its `optimistic-…` ID, all three sync-path dedup checks missed, so the echo was appended; `confirmMessage` then renamed the optimistic node to the same event ID. It now drops the optimistic node when the echo already rendered the event.*
 - [x] **#63 Duplicate OS notifications** — a single message could raise ~20 system notifications. *The matrix-sdk message handler had no per-event dedup, so any re-delivery (the sync loop retries after a transient error and replays events from before the sync token advanced) fired another notification. Added a bounded event-ID set (`claim_notification`) so each event notifies once. Also hardened the frontend: `startSync` now tears down its prior listeners before re-registering, instead of orphaning them on a second call (logout→login), which would otherwise double every sync handler.*
 
 ### Performance
+
 - [x] **Timeline media loads in parallel with member fetch** — image / reaction-emoji / inline-emoji downloads depend only on the (already-fetched) timeline events, but were gated behind `await getRoomMembers(...)`. Moved ahead of the member round-trip so images start loading immediately after the timeline renders. (Larger wins — virtual scrolling, IPC payload size — are out of scope for a patch.)
 
 ---
@@ -61,19 +68,23 @@ Branch `v0.11.2`. Four bug fixes (#59, #60, #61, #63) plus a small timeline-load
 Branch `feature/compose-media-mobile-release`. Six features: #35, #44, #48, #50, #54, #45. `pnpm test` green (452). Mobile items need a fresh iOS/Android build to verify.
 
 ### Compose — cross-platform
+
 - [x] **#54 Rich text formatting** — markdown in the compose box compiles to `org.matrix.custom.html` on send: `**bold**`, `*italic*`, `__underline__`, `~~strike~~`, `||spoiler||`, `` `code` ``. Desktop: Ctrl/Cmd+B/I/U and Ctrl/Cmd+Shift+X wrap the selection. Mobile: a formatting toolbar above the compose box wraps the selection. *New `markdown.ts` (tested); the formatted-body builder delegates to it.*
 - [x] **#45 Full compose Normal mode** — leave Insert with content in the box (Esc) → vim editing of the textarea: motions `w/b/e/0/^/$/h/l/j/k` with counts, operators `d/c/y` (+ `dd/cc/yy`, `D/C/Y`), `x`, `r`, insert-entry `i/a/A/I/o/O`, internal register `p/P`. `v` still enters Visual select. *New `compose_normal.ts` (tested); routed ahead of the read-only text-select handler.*
-    - [x] **Compose vim now follows nav rebinds** — the editor was driven by raw keys, bypassing the keymap, so quarkrc nav remaps (e.g. the documented ijkl scheme) never reached it. `keyboard.ts` now translates each physical key through `keymapManager.actionForKey()` (a new non-buffering single-key lookup) into the canonical motion key before the editor sees it. Only nav actions are rebindable today — operators/word-motions have no keymap action — so those pass through literally.
+  - [x] **Compose vim now follows nav rebinds** — the editor was driven by raw keys, bypassing the keymap, so quarkrc nav remaps (e.g. the documented ijkl scheme) never reached it. `keyboard.ts` now translates each physical key through `keymapManager.actionForKey()` (a new non-buffering single-key lookup) into the canonical motion key before the editor sees it. Only nav actions are rebindable today — operators/word-motions have no keymap action — so those pass through literally.
 
 ### Media — cross-platform
+
 - [x] **#35 Video embeds** — pick a video via the attach button → sent as `m.video` (not `m.file`) so it renders as a playable embed; dimensions/duration are probed client-side for correct aspect ratio. *New `send_video` command + `timeline::send_video`.*
 - [x] **#48 Upload spinner** — sending an image/video/file shows a persistent braille spinner that resolves to ✓/error (matrix-sdk 0.9 has no byte-level progress). *New `showProgressToast()`.*
 
 ### Emoji — cross-platform
+
 - [x] **#44 Full emoji set** — the picker shows the full Unicode set (1914 emoji, 9 categories) with keyword search, not the old 184-item curated list. *Generated from emojibase-data via `pnpm gen:emoji`; glyphs are fully-qualified (U+FE0F).* Verify reactions still aggregate with other clients.
-    - [x] **Picker spacing loosened** — the 184-item layout used a tight `gap: 2px` with zero cell padding, which felt cramped once the full set filled the grid. Bumped to `gap: 6px`, grid padding `8px`, and `3px` cell padding in `base.css`.
+  - [x] **Picker spacing loosened** — the 184-item layout used a tight `gap: 2px` with zero cell padding, which felt cramped once the full set filled the grid. Bumped to `gap: 6px`, grid padding `8px`, and `3px` cell padding in `base.css`.
 
 ### Mobile (needs build)
+
 - [x] **#50 Drag-to-open drawer** — a horizontal drag from anywhere pulls the room-list drawer along with the finger and snaps open/closed on release by travel + velocity (Discord-style), replacing the edge-only canned slide. Pull-down-for-command-palette still works.
 - [x] **#44 emoji grid perf** — open the picker on a phone; category switching and search stay smooth across the full set.
 - [~] **#54 mobile toolbar** — *punted.* The custom HTML formatting toolbar has been **removed**; mobile users format by typing markdown, desktop keeps the Ctrl/Cmd shortcuts. Surfacing real B/I/U/strike/spoiler items in the native OS long-press menu (the desired behaviour) isn't reachable from web JS — it needs native `UIEditMenuInteraction` (iOS) + Android `ActionMode.Callback` work plus a selection bridge. Tracked as a future native task.
@@ -85,12 +96,14 @@ Branch `feature/compose-media-mobile-release`. Six features: #35, #44, #48, #50,
 Branch `v0.9.1`. A consistency pass (every vim feature reachable by mouse/touch; every overlay dismissable via UI, Esc, **and** Ctrl+[) plus patch fixes for #33/#40/#43/#45/#49/#52/#53. `pnpm test` green (319). Mobile items need a fresh iOS/Android build to verify.
 
 ### Consistency pass — cross-platform
+
 - [x] **Overlay dismissal via Ctrl+[** — open each and confirm Ctrl+[ closes it (the vim twin of Esc), matching Esc and the close button: GIF picker, device picker, command bar, reply preview, mention/shortcode autocomplete, image lightbox, verification dialog. *Fix: these handled Esc but not Ctrl+[, and the global keydown handler early-returns while they're visible, so each must handle it itself.*
 - [x] **Help reachable by mouse** — Settings → General → **[keybindings & help]** opens the help/keybindings screen. *Previously only `?` / `:help`.*
 - [x] **GIF button** — a **GIF** button sits beside 🙂 in the compose bar and opens the GIF picker. *Previously Ctrl+G only.*
-    - [x] **GIF button now follows the theme** — it inherited the icon buttons' `opacity: 0.5`, which reads fine on a coloured glyph but washed out the "GIF" text label. It now takes its colour from the theme (`--accent-secondary` text + `--border-color` badge, full opacity; inverts to accent-on-bg on hover).
+  - [x] **GIF button now follows the theme** — it inherited the icon buttons' `opacity: 0.5`, which reads fine on a coloured glyph but washed out the "GIF" text label. It now takes its colour from the theme (`--accent-secondary` text + `--border-color` badge, full opacity; inverts to accent-on-bg on hover).
 
 ### Mobile (needs build)
+
 - [x] **Command palette (pull-down)** — open the room-list drawer and pull down from the top of the list → the command palette (`:`) opens and focuses. Only fires when the list is scrolled to the top. *Command mode was keyboard-only and unreachable by touch; desktop still uses `:`.*
 - [x] **#52 Start in room list** — a fresh launch on mobile lands on the room list (drawer open), not an empty timeline. Selecting a room closes the drawer.
 - [x] **#49 Re-tap current room closes drawer** — with a room open, open the drawer and tap that same room: the drawer dismisses. *Re-selecting didn't change `currentRoomId`, so the close-on-change listener never fired; `selectRoom` now closes the drawer directly.*
@@ -98,6 +111,7 @@ Branch `v0.9.1`. A consistency pass (every vim feature reachable by mouse/touch;
 - [ ] **#33/#43 First-login room list** — fresh install, log in: the list populates without a relaunch even on a slow first sync. *Poll window extended from ~8s to ~30s with backoff, and it now also runs on session restore.*
 
 ### Cross-platform
+
 - [x] **#53 Selection contrast** — select message text under each built-in theme; the highlight is clearly visible and the text readable. *`::selection` now uses `--accent-primary` with the page `--bg` as text, instead of the near-invisible per-theme `selection_bg`. Vim text-select rules override it locally and are unaffected.*
 - [x] **#45 Shift+Enter newline** — in the compose box, Shift+Enter inserts a newline; Enter still sends. The box auto-grows with content up to ~6 lines, then scrolls. *Compose field is now a `<textarea>` (was an `<input>`); watch the send-fly animation and vim visual-select on the compose field.*
 
@@ -108,11 +122,13 @@ Branch `v0.9.1`. A consistency pass (every vim feature reachable by mouse/touch;
 Branch `fix/mobile-formatting-issues`. Covers issues #34, #37, #38, #40, #42. iOS needs a fresh install to pick up the new Info.plist permission keys.
 
 ### Cross-platform
+
 - [x] **#42 Spoiler text** — receive (or send from another client) a message containing a spoiler (`<span data-mx-spoiler>`). Confirm it renders blurred/blacked-out and reveals on click (desktop) or tap (mobile). A spoiler with a reason shows the reason as a tooltip. *Fix: `data-mx-spoiler` already survived into the DOM but had no styling/handler — added `setupSpoilers()` in Timeline + `.message__spoiler` CSS.*
 - [x] **#37 Edit/Delete in context menu** — right-click (desktop) or long-press (mobile) one of **your own** messages: the menu now shows **Edit** and **Delete** below the standard actions. Messages from others show neither. *Same callback feeds desktop + mobile, so this also resolves #34.*
 - [x] **#34 Long-hold delete on mobile** — long-press your own message → bottom sheet includes **Delete** (and **Edit**). Resolved together with #37.
 
 ### iOS (needs reinstall)
+
 - [x] **#38 Camera crash** — tap 📎 attach, choose "Take Photo". Camera opens instead of crashing the app. *Fix: added `NSCameraUsageDescription` / `NSMicrophoneUsageDescription` / `NSPhotoLibraryUsageDescription` to `gen/apple/quark_iOS/Info.plist` — accessing the camera without the usage-description key is a hard crash on iOS.*
 - [x] **#40 Autocorrect** — focus the compose field, type a misspelled / lowercase-first sentence. The soft keyboard now autocorrects, sentence-capitalises, and shows spellcheck. *Fix: the field hard-disabled `autocorrect`/`autocapitalize`/`spellcheck`; now enabled on mobile (where vim is off anyway), still off on desktop for the terminal feel.*
 
@@ -123,18 +139,21 @@ Branch `fix/mobile-formatting-issues`. Covers issues #34, #37, #38, #40, #42. iO
 Branch `fix/mobile-issues-25-33`. 0.8.2 needs a fresh iPhone install (re-run `xcrun devicectl`); Android still needs `make android-build` + sideload to verify. Delete this section once everything's confirmed.
 
 ### iOS (needs reinstall for 0.8.2)
+
 - [x] **#17 Link tap** — open a message with an http(s) link, tap it, confirm Safari opens. *0.8.2 fix: shell plugin's iOS Swift handler does `parseArgs(String)` but the standard JS wrapper sends `{path, with}` — silently failed to decode. Now routed through a Rust `open_external_url` command that calls `Shell::open` directly (which serializes the URL as a raw string for the mobile plugin to parse).*
 - [x] **#26 Long-press menu** — long-press a message, confirm bottom-sheet appears with Reply / React / Thread / Copy / View raw.
 - [x] **#28 Members button** — `@` button on right of top bar opens member list overlay.
 - [x] **#29 Profile edit** — tap avatar at bottom of space strip, tap `[edit profile]`, confirm: status field pre-fills, dialog appears at centre without jumping, save persists across relaunch.
-    - [x] **Status on profile view wraps long text** — 0.8.2 added `min-width: 0` so a long status doesn't overflow the dialog, but paired it with `overflow-wrap: anywhere` + `word-break: break-word`, which split ordinary status text mid-word. Switched to `overflow-wrap: break-word` + `word-break: normal`: wraps on word boundaries, only breaking inside a single unbreakable token (e.g. a long URL).
+  - [x] **Status on profile view wraps long text** — 0.8.2 added `min-width: 0` so a long status doesn't overflow the dialog, but paired it with `overflow-wrap: anywhere` + `word-break: break-word`, which split ordinary status text mid-word. Switched to `overflow-wrap: break-word` + `word-break: normal`: wraps on word boundaries, only breaking inside a single unbreakable token (e.g. a long URL).
 - [x] Member-list overlay has an opaque background (no timeline bleeding through).
 - [x] Drawer slide-out: edge-swipe from left ~32px feels responsive.
 - [x] Drawer drop-shadow only blooms when drawer is open.
 - [x] **Image viewer touch (0.8.4)** — open an image. Pinch to zoom (stays anchored under the fingers), drag with one finger to pan, double-tap to toggle fit ↔ 2.5×. Confirm the zoom +/- / 1:1 buttons are gone but `⬇ download` and `✕ close` remain. Tap the backdrop to close.
 
 ### Android (needs build)
+
 Run `make android-build` then sideload. All of the above iOS items apply, plus:
+
 - [x] **#27 OS notifications** — on first launch after install, accept POST_NOTIFICATIONS prompt. Background the app and have someone message you in an unmuted room. Verify the notification fires. (Settings → Notifications → `[test notification]` is a quicker round-trip.)
 - [x] **#30 Theme save** — Settings → Themes → pick a different theme. Confirm no "error" toast and the theme persists across relaunch. *Used to fail because `directories::ProjectDirs` returns None on Android.*
 - [x] **#31 Back button** — with an overlay open, back closes it. With drawer open, back closes drawer. With nothing open, back **opens** the drawer (per the issue's request — confirm this matches your intent; if it should exit instead, say the word and I'll flip it).
@@ -142,6 +161,7 @@ Run `make android-build` then sideload. All of the above iOS items apply, plus:
 - [x] **#33 Login flow** — fresh install, log in, confirm the room list populates within ~8s without needing to relaunch.
 
 ### Desktop (macOS — verified login works)
+
 - [x] Settings file is still at `~/Library/Application Support/quark/config.toml` (not the temporary `zone.derg.quark/quark/` from 0.8.0).
 - [x] Media cache still at `~/Library/Caches/quark/media_cache/` — confirm cached avatars persist across relaunch.
 - [x] Browser-style back-button gesture (mouse 4/5, trackpad swipe): closes overlays via popstate. If this was a no-op before and now feels weird, file it.
@@ -151,6 +171,7 @@ Run `make android-build` then sideload. All of the above iOS items apply, plus:
 - [x] All existing tests still passing: `pnpm test` (currently 317).
 
 ### Cross-platform regression watch
+
 - [x] First-login `_pollUntilRoomsLoaded` runs everywhere now; should be invisible on desktop. Watch for unnecessary re-renders or flicker.
 - [x] Context menu now also listens to `touchstart` for outside-dismiss — touchscreen laptops on desktop might dismiss menus on touches that previously didn't.
 - [x] `ProfileDialog.show()` rewrote DM/edit button visibility independently. Sanity check that the dialog for *other* users (sender of a message, member-list focus) still hides the edit button and shows the message button.
@@ -190,6 +211,7 @@ Quark is a keyboard-driven, CLI-aesthetic Matrix client that renders in a GUI wi
 The backend handles all Matrix protocol interaction and exposes commands to the frontend via Tauri's IPC.
 
 **Crates:**
+
 - `matrix-sdk` — client, sync, room operations, E2EE (Vodozemac), Sliding Sync
 - `matrix-sdk-crypto` — cross-signing, key backup, device verification
 - `tauri` — windowing, IPC, system tray, file dialogs
@@ -198,6 +220,7 @@ The backend handles all Matrix protocol interaction and exposes commands to the 
 - `directories` — XDG-compliant config/data paths
 
 **Responsibilities:**
+
 - Login (OIDC via MAS + legacy password fallback)
 - Sliding Sync room list management & subscriptions
 - Sending/receiving messages, reactions, edits, redactions
@@ -212,6 +235,7 @@ The backend handles all Matrix protocol interaction and exposes commands to the 
 A single-page app styled as a terminal interface. No framework required initially — vanilla TS + a lightweight reactive layer (Preact or Solid) if needed.
 
 **Responsibilities:**
+
 - Rendering the message timeline (text, images, replies, threads, reactions, custom emoji, stickers)
 - Vim-mode input handling and command bar
 - Emoji/sticker picker (keyboard-navigable)
@@ -251,6 +275,7 @@ All panels, borders, and text use monospace rendering. Colors, borders, and glyp
 The room list has a two-column layout inspired by Cinny:
 
 **Left strip — Space selector:**
+
 - Narrow vertical strip showing space icons (avatar images or first-letter fallback)
 - A "Home" icon at the top for rooms not in any space, and a "DMs" icon
 - Spaces display their avatar/icon; this is the only place icons appear in the room list
@@ -258,6 +283,7 @@ The room list has a two-column layout inspired by Cinny:
 - Selecting a space filters the room list to show only that space's children
 
 **Right column — Room list (text only, no icons):**
+
 - Rooms listed by name in a **fixed, deterministic order** (not sorted by activity):
   - Order follows the `m.space.child` state event `order` field if set
   - Fallback: alphabetical by room name
@@ -272,6 +298,7 @@ This mirrors Cinny's approach: spaces have visual identity through icons, but th
 ### Vim-Style Navigation
 
 **Modes:**
+
 - **Normal** — navigate rooms, scroll messages, select items
 - **Insert** — compose messages in the input bar
 - **Command** — `:` prefix for client commands
@@ -351,6 +378,7 @@ set gif_rating=pg             " g | pg | pg-13 | r
 ```
 
 **Map command syntax:**
+
 - `nmap` — normal mode mapping
 - `imap` — insert mode mapping
 - `tmap` — timeline-scoped mapping (normal mode, timeline focused)
@@ -364,6 +392,7 @@ set gif_rating=pg             " g | pg | pg-13 | r
 Scoped maps (`tmap`, `rmap`, `pmap`) take precedence over global `nmap` when that panel is focused. This allows the same key to do different things depending on context.
 
 **quarkrc also supports:**
+
 - `source <path>` — include another rc file
 - `colorscheme <name>` — shorthand for `:theme`
 - `set <option>=<value>` — set config options inline
@@ -398,6 +427,7 @@ Scoped maps (`tmap`, `rmap`, `pmap`) take precedence over global `nmap` when tha
 ## Matrix Feature Support
 
 ### Core Protocol
+
 - [x] Login: OIDC (MAS) + legacy password + SSO
 - [x] Sliding Sync (MSC4186) — native, no proxy
 - [x] E2EE: Megolm via Vodozemac, cross-signing, key backup (SSSS)
@@ -421,31 +451,37 @@ Scoped maps (`tmap`, `rmap`, `pmap`) take precedence over global `nmap` when tha
 Full compatibility with Cinny, FluffyChat, Nheko, and SchildiChat.
 
 **Pack sources:**
+
 - `im.ponies.room_emotes` — room state events (per-room packs)
 - `im.ponies.user_emotes` — account data (personal packs)
 - Packs distinguish emoji (`usage: ["emoticon"]`) from stickers (`usage: ["sticker"]`)
 
 **Sending custom emoji in messages:**
+
 - User types `:shortcode:` → autocomplete resolves from available packs
 - Sent as `formatted_body` HTML: `<img data-mx-emoticon height="32" src="mxc://..." alt=":shortcode:" title=":shortcode:" />`
 - Plain `body` contains `:shortcode:` as fallback
 - Format field: `org.matrix.custom.html`
 
 **Sending stickers:**
+
 - Sticker picker (keyboard-navigable grid) sourced from packs with `usage: ["sticker"]`
 - Sent as `m.sticker` event with `url` (mxc://), `body`, and `info` (mimetype, dimensions, thumbnail)
 - Rendered in timeline at larger size than emoji, standalone (not inline with text)
 
 **Custom emoji in reactions:**
+
 - Reaction key is `:shortcode:`
 - Client resolves the mxc:// URL from loaded packs for display
 - Falls back to text `:shortcode:` if pack not available
 
 **Custom emoji in replies:**
+
 - Reply preview renders custom emoji images inline
 - `<mx-reply>` fallback contains `:shortcode:` text
 
 **Pack management UI:**
+
 - View available packs (room + personal)
 - Create/edit personal packs (set state on account data)
 - Create/edit room packs (if user has state event permissions)
@@ -456,12 +492,14 @@ Full compatibility with Cinny, FluffyChat, Nheko, and SchildiChat.
 Discord-style integrated GIF search, accessible from insert mode or command bar.
 
 **Providers (configurable in quarkrc):**
+
 - Tenor (default) — `set gif_provider=tenor`
 - Giphy — `set gif_provider=giphy`
 - Klipy — `set gif_provider=klipy`
 - Content rating filter: `set gif_rating=pg` (g / pg / pg-13 / r)
 
 **UX flow:**
+
 1. User presses `Ctrl-g` (insert mode) or runs `:gif <query>`
 2. A search overlay appears with a text input and a grid of GIF thumbnails
 3. Thumbnails are animated previews (low-res for performance)
@@ -470,6 +508,7 @@ Discord-style integrated GIF search, accessible from insert mode or command bar.
 6. Selected GIF is uploaded to the homeserver as media and sent as an `m.image` event with `info.mimetype: "image/gif"` — this avoids linking to external URLs that may break or track users
 
 **Backend:**
+
 - Rust backend handles API calls to Tenor/Giphy/Klipy (API keys stored in config)
 - Downloads selected GIF, uploads to homeserver via media API
 - Caches recent search results and thumbnails locally
@@ -496,6 +535,7 @@ When the user types `:` followed by characters in insert mode, an inline autocom
 - Sources: Unicode emoji database + `im.ponies.user_emotes` + `im.ponies.room_emotes` from current room
 
 ### Media Handling
+
 - Authenticated media download via `/_matrix/client/v1/media/download/`
 - Inline image previews in timeline (configurable max dimensions)
 - Sticker rendering (larger than emoji, centered)
@@ -504,6 +544,7 @@ When the user types `:` followed by characters in insert mode, an inline autocom
 - Media cache on disk with configurable size limit
 
 ### Not in Scope (v1)
+
 - VoIP / MatrixRTC (group calls) — fundamentally incompatible with CLI aesthetic
 - Widgets — no iframe support in terminal-styled UI
 - Mobile targets — Tauri v2 supports them, but defer to future
@@ -585,6 +626,7 @@ visual_indicator = "VIS"
 ```
 
 ### Built-in Themes
+
 - **Phosphor** — green-on-black CRT terminal
 - **Amber** — amber phosphor CRT
 - **Dracula** — based on Dracula color scheme
@@ -595,6 +637,7 @@ visual_indicator = "VIS"
 - **High Contrast** — accessibility-focused
 
 ### Theme Hot-Reloading
+
 Themes reload on file save (watched via `notify` crate / filesystem events passed through Tauri). No restart required.
 
 ---
@@ -709,6 +752,7 @@ quark/
 ## Implementation Phases
 
 ### Phase 1 — Foundation
+
 - Tauri v2 project scaffold
 - Rust backend: matrix-sdk login (password), basic sync, room list
 - Frontend: terminal-styled layout, room list panel, basic timeline rendering
@@ -716,6 +760,7 @@ quark/
 - quarkrc parser (vimrc-style keybinding config)
 
 ### Phase 2 — Core Messaging
+
 - Sliding Sync integration
 - Send/receive text messages
 - Rich replies (render + compose)
@@ -724,6 +769,7 @@ quark/
 - Basic image rendering in timeline
 
 ### Phase 3 — E2EE
+
 - Vodozemac-backed encryption via matrix-sdk-crypto
 - Cross-signing setup
 - SAS emoji verification flow
@@ -731,6 +777,7 @@ quark/
 - Encrypted media handling
 
 ### Phase 4 — Custom Emoji, Stickers & GIF Search
+
 - MSC2545 pack loading (room + user account data)
 - `:shortcode:` autocomplete with inline emoji preview popup
 - Inline custom emoji rendering (`<img data-mx-emoticon>`)
@@ -745,6 +792,7 @@ quark/
 - GIF upload-to-homeserver flow (no external URL leaking)
 
 ### Phase 5 — Spaces, Threads, Polish
+
 - Cinny-style space sidebar (icon strip + text-only room list, fixed order)
 - Thread view and thread-aware navigation
 - Reactions bar with aggregation
@@ -753,6 +801,7 @@ quark/
 - Notifications (system-level via Tauri)
 
 ### Phase 6 — Theming & Configuration
+
 - Theme TOML parser + validator
 - All built-in themes
 - Hot-reload on theme file change
@@ -760,6 +809,7 @@ quark/
 - User config file support
 
 ### Phase 7 — Hardening
+
 - Authenticated media (MSC3916)
 - Private read receipts
 - Room summary previews
@@ -772,6 +822,7 @@ quark/
 ## TODO (current as of 2026-03-23)
 
 ### In Progress / Partially Implemented
+
 - [ ] **Sliding Sync (MSC4186)** — backend uses matrix-sdk default sync; Sliding Sync not explicitly configured
 - [x] **Presence display** — DM room list entries show a colored presence dot (online/unavailable/offline) populated from `AppState.getUserPresence()`; dots update live via `roomList.updatePresenceForUser()` called from the presence sync handler
 - [x] **GIF upload-to-homeserver** — `send_gif` command downloads GIF from external URL, uploads to homeserver, sends as `m.image`
@@ -847,32 +898,40 @@ quark/
 ### Not Yet Implemented
 
 #### Authentication -- low priority
+
 - [ ] OIDC login via MAS (only password auth is implemented)
 - [ ] SSO login flow
 
 #### E2EE / Crypto
+
 - [ ] Key backup (SSSS) — no backup/restore commands exist
 - [x] Cross-signing setup UI — `:cross-sign [password]` bootstraps keys; `:verify <user-id>` starts SAS with emoji polling
 - [x] Undecryptable events surface as `🔒 unable to decrypt` placeholders in the timeline instead of being silently dropped, so users on a new (un-verified) device can see *that* encrypted messages exist while keys are pending
 
 #### Media
+
 - [x] Authenticated media (MSC3916) — matrix-sdk 0.9 routes to `/_matrix/client/v1/media/download/` automatically for Matrix 1.11+ servers; E2EE media now decrypted by passing `EncryptedFile` key material through the `download_media` IPC command
 - [x] Support video — `m.video` events rendered as `<video controls>` with native playback; media downloaded via the same mxc:// pipeline as images
 
 #### Messaging
+
 - [ ] Room summary previews (MSC3266) — no preview fetch before joining
 
 #### Room Discovery
+
 - [x] Room directory browser — `:directory` command opens a searchable public room browser with j/k navigation and join button; `search_room_directory` IPC backed by matrix-sdk `public_rooms_filtered`
 
 #### Emoji / Sticker Packs
+
 - [ ] Pack management UI — create, edit, and import emoji/sticker packs (per-room and account data)
 - [ ] Emoji list is still relatively limited. Should support all currently available emojis
 
 #### Configuration
+
 - [ ] Theme hot-reloading — filesystem watcher (`notify` crate) not hooked up; requires app restart to change theme
 
 #### UI / Polish
+
 - [x] Profile edit dialog — display name and presence status are editable via a `[edit profile]` button on the own-profile view; opened from a new avatar button at the bottom of the space strip. Avatar upload is still a TODO (needs file picker + mxc upload).
 - [ ] Home UI: Friends' icons and chat bubbles float around and the user's status
   - [ ] Hides room list and member list
@@ -881,6 +940,7 @@ quark/
   - [ ] Replaces existing list of all unparented rooms
 
 #### Hardening
+
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
 - [ ] Performance profiling — large rooms (1000+ messages), many emoji packs
 

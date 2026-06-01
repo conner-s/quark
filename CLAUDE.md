@@ -3,6 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Instructions
+
 Always make sure that DESIGN.md is up to date. Cross off tasks as they are completed.
 When starting on a feature, always create a new git branch if currently on main unless otherwise instructed.
 Commit changes as you go when on a feature branch.
@@ -16,11 +17,13 @@ maintain as complexity grows. You should propose to add a layer of abstraction t
 ## Versioning
 
 Bump the version in all three files together whenever shipping a feature or fix:
+
 - `package.json` — `version` field
 - `src-tauri/Cargo.toml` — `version` field (first occurrence, the package version)
 - `src-tauri/tauri.conf.json` — `version` field
 
 Rules:
+
 - **Feature** (new user-visible behaviour) → bump **minor** version (e.g. `0.1.0` → `0.2.0`)
 - **Bug fix** (corrects existing behaviour without adding features) → bump **patch** version (e.g. `0.1.0` → `0.1.1`)
 
@@ -43,7 +46,7 @@ Rust backend: `cargo build` / `cargo test` from `src-tauri/`.
 
 Quark is a **Tauri v2 desktop Matrix client** with a terminal aesthetic and vim-style navigation.
 
-```
+```text
 Frontend (TypeScript/Vanilla DOM)
     ↕  Tauri IPC (invoke/event)
 Rust backend (matrix-sdk 0.9)
