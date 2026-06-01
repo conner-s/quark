@@ -122,6 +122,8 @@ pub fn run() {
             commands::set_cache_size_limit,
             commands::get_event_cache_size,
             commands::clear_event_cache,
+            commands::get_event_cache_diagnostics,
+            commands::get_room_cache_diagnostics,
             // Crypto
             commands::get_verification_status,
             commands::get_cross_signing_status,

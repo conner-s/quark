@@ -5,12 +5,14 @@ import { keymapManager } from "../vim/keybindings.js";
 import { AppState } from "../app/state.js";
 import { getRoomStateEvents, getRawEvent } from "../ipc/room_settings.js";
 import type { RawStateEvent } from "../ipc/room_settings.js";
+import { getEventCacheDiagnostics, getRoomCacheDiagnostics } from "../ipc/media.js";
 import { DialogBase } from "./DialogBase.js";
 
 export type DebugSubject =
   | { kind: "room"; roomId: string }
   | { kind: "event"; roomId: string; eventId: string }
-  | { kind: "profile"; userId: string; data: object };
+  | { kind: "profile"; userId: string; data: object }
+  | { kind: "cache" };
 
 export class DebugViewer extends DialogBase {
   private _panelEl: HTMLElement;
@@ -105,6 +107,21 @@ export class DebugViewer extends DialogBase {
         this._bodyEl.textContent = JSON.stringify(subject.data, null, 2);
         break;
       }
+
+      case "cache": {
+        this._titleEl.textContent = `── debug: event cache ──`;
+        try {
+          const roomId = AppState.snapshot.currentRoomId;
+          const [global, room] = await Promise.all([
+            getEventCacheDiagnostics(),
+            roomId ? getRoomCacheDiagnostics(roomId).catch(() => null) : Promise.resolve(null),
+          ]);
+          this._bodyEl.textContent = this._formatCacheDiagnostics(global, roomId, room);
+        } catch (err) {
+          this._bodyEl.textContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
+        }
+        break;
+      }
     }
 
     this._panelEl.focus();
@@ -130,6 +147,49 @@ export class DebugViewer extends DialogBase {
       lines.push("");
     }
     return lines.join("\n").trimEnd();
+  }
+
+  private _formatCacheDiagnostics(
+    d: import("../ipc/media.js").EventCacheDiagnostics,
+    roomId: string | null,
+    room: import("../ipc/media.js").RoomCacheDiagnostics | null,
+  ): string {
+    const fmtBytes = (b: number): string => {
+      if (b >= 1073741824) return `${(b / 1073741824).toFixed(1)} GB`;
+      if (b >= 1048576) return `${(b / 1048576).toFixed(1)} MB`;
+      if (b >= 1024) return `${(b / 1024).toFixed(1)} KB`;
+      return `${b} B`;
+    };
+
+    const lines = [
+      `── all rooms ──`,
+      `rooms cached (cached/joined): ${d.rooms_with_cached_events}/${d.rooms_total}`,
+      `total cached events:          ${d.total_cached_events}`,
+      ``,
+      `store size (main):            ${fmtBytes(d.store_main_bytes)}`,
+      `store size (wal/shm):         ${fmtBytes(d.store_wal_bytes)}`,
+      `store size (total):           ${fmtBytes(d.store_total_bytes)}`,
+      ``,
+      `── current room ──`,
+    ];
+
+    if (!roomId) {
+      lines.push(`(no room selected)`);
+    } else if (!room) {
+      lines.push(roomId, `(diagnostics unavailable)`);
+    } else {
+      const range = room.oldest_ts && room.newest_ts
+        ? `${new Date(room.oldest_ts).toISOString()} → ${new Date(room.newest_ts).toISOString()}`
+        : `(none)`;
+      lines.push(
+        roomId,
+        `cached events:                ${room.cached_events}`,
+        `estimated size:               ${fmtBytes(room.estimated_bytes)}`,
+        `time range:                   ${range}`,
+      );
+    }
+
+    return lines.join("\n");
   }
 
   protected override handleKeydown(e: KeyboardEvent): void {

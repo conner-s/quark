@@ -34,6 +34,34 @@ export async function getEventCacheSize(): Promise<number> {
   return invoke<number>("get_event_cache_size");
 }
 
+/** Global event-cache diagnostics: how much is cached + on-disk store size. */
+export interface EventCacheDiagnostics {
+  store_main_bytes: number;
+  store_wal_bytes: number;
+  store_total_bytes: number;
+  rooms_total: number;
+  rooms_with_cached_events: number;
+  total_cached_events: number;
+}
+
+/** On-demand snapshot of event-cache contents (events/rooms) and store size. */
+export async function getEventCacheDiagnostics(): Promise<EventCacheDiagnostics> {
+  return invoke<EventCacheDiagnostics>("get_event_cache_diagnostics");
+}
+
+/** Per-room event-cache footprint. `estimated_bytes` sums raw JSON sizes. */
+export interface RoomCacheDiagnostics {
+  cached_events: number;
+  estimated_bytes: number;
+  oldest_ts: number | null;
+  newest_ts: number | null;
+}
+
+/** Event-cache footprint for a single room (for the `:debug cache` viewer). */
+export async function getRoomCacheDiagnostics(roomId: string): Promise<RoomCacheDiagnostics> {
+  return invoke<RoomCacheDiagnostics>("get_room_cache_diagnostics", { roomId });
+}
+
 /** Clear the event-cache store (search persistence). Safe & rebuildable. */
 export async function clearEventCache(): Promise<void> {
   return invoke<void>("clear_event_cache");

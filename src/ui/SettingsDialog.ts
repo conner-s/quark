@@ -4,8 +4,8 @@ import { getConfig, setNotificationConfig } from "../app/notifications.js";
 import type { NotificationConfig } from "../app/notifications.js";
 import { testNotification } from "../ipc/notifications.js";
 import { showSuccess, showError } from "./NotificationToast.js";
-import { getCacheStats, clearMediaCache, getEventCacheSize, clearEventCache } from "../ipc/media.js";
-import type { CacheStats } from "../ipc/media.js";
+import { getCacheStats, clearMediaCache, getEventCacheSize, clearEventCache, getEventCacheDiagnostics } from "../ipc/media.js";
+import type { CacheStats, EventCacheDiagnostics } from "../ipc/media.js";
 import { getAppConfig, setAppConfig } from "../ipc/app_config.js";
 import type { AppConfig } from "../ipc/app_config.js";
 import { loadTheme, applyCacheConfig } from "../app/actions.js";
@@ -307,12 +307,14 @@ export class SettingsDialog extends DialogBase {
     let cfg: AppConfig | null = null;
     let stats: CacheStats | null = null;
     let eventCacheBytes = 0;
+    let eventCacheDiag: EventCacheDiagnostics | null = null;
 
     try {
-      [cfg, stats, eventCacheBytes] = await Promise.all([
+      [cfg, stats, eventCacheBytes, eventCacheDiag] = await Promise.all([
         getAppConfig(),
         getCacheStats(),
         getEventCacheSize().catch(() => 0),
+        getEventCacheDiagnostics().catch(() => null),
       ]);
     } catch {
       loading.textContent = "Failed to load media config.";
@@ -388,6 +390,16 @@ export class SettingsDialog extends DialogBase {
     // persists scanned events into. Usually the largest store; growable by
     // deep searches and safe to clear (search just re-fetches afterward).
     section.appendChild(makeReadRow("Search cache (disk)", fmtBytes(eventCacheBytes)));
+
+    // Event-cache contents — how much is actually cached (events / rooms). Lets
+    // you see whether the cache is populating; mirrors the `:debug cache` view.
+    // Skipped silently if the diagnostics call failed.
+    if (eventCacheDiag) {
+      section.appendChild(makeReadRow(
+        "Event cache contents",
+        `${eventCacheDiag.total_cached_events} events · ${eventCacheDiag.rooms_with_cached_events}/${eventCacheDiag.rooms_total} rooms`,
+      ));
+    }
 
     // In-memory caches — bound RAM used by the instant-open speedups.
     section.appendChild(this._makeNumberRow(

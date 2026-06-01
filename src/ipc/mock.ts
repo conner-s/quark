@@ -482,6 +482,22 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       };
     case "get_event_cache_size":
       return 487654321;
+    case "get_event_cache_diagnostics":
+      return {
+        store_main_bytes: 471859200,
+        store_wal_bytes: 15795121,
+        store_total_bytes: 487654321,
+        rooms_total: 3,
+        rooms_with_cached_events: 1,
+        total_cached_events: 42,
+      };
+    case "get_room_cache_diagnostics":
+      return {
+        cached_events: 42,
+        estimated_bytes: 137216,
+        oldest_ts: Date.now() - 86400000,
+        newest_ts: Date.now() - 60000,
+      };
     case "set_app_config":
     case "set_notification_config":
     case "clear_media_cache":

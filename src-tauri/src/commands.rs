@@ -1715,24 +1715,102 @@ pub async fn set_cache_size_limit(
     cache_state.0.set_max_size_mb(size_mb)
 }
 
+/// On-disk size of the matrix-sdk event-cache store, split into the main SQLite
+/// DB and its `-wal`/`-shm` sidecars. Returns `(main_bytes, sidecar_bytes)`.
+fn event_cache_store_bytes(app_handle: &AppHandle) -> Result<(u64, u64), String> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not resolve data dir: {e}"))?;
+    let size_of = |suffix: &str| -> u64 {
+        let path = data_dir.join(format!("matrix-sdk-event-cache.sqlite3{suffix}"));
+        std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0)
+    };
+    let main = size_of("");
+    let sidecars = size_of("-wal") + size_of("-shm");
+    Ok((main, sidecars))
+}
+
 /// On-disk size of the matrix-sdk event-cache store (the SQLite DB that
 /// server-side search persists scanned events into). Sums the main DB plus its
 /// `-wal`/`-shm` sidecars. This is typically the largest local store, and grows
 /// with deep history searches — surfaced so the user can clear it.
 #[tauri::command]
 pub async fn get_event_cache_size(app_handle: AppHandle) -> Result<u64, String> {
-    let data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not resolve data dir: {e}"))?;
-    let mut total = 0u64;
-    for suffix in ["", "-wal", "-shm"] {
-        let path = data_dir.join(format!("matrix-sdk-event-cache.sqlite3{suffix}"));
-        if let Ok(meta) = std::fs::metadata(&path) {
-            total += meta.len();
+    let (main, sidecars) = event_cache_store_bytes(&app_handle)?;
+    Ok(main + sidecars)
+}
+
+/// Global, on-demand diagnostics snapshot of the event cache: how much is
+/// actually cached (events / rooms) alongside the on-disk store size. Used by
+/// the `:debug cache` viewer and the Settings cache summary so cache behaviour
+/// (e.g. "did search populate the cache?") is debuggable.
+#[derive(Serialize)]
+pub struct EventCacheDiagnostics {
+    /// `matrix-sdk-event-cache.sqlite3` main DB size in bytes.
+    store_main_bytes: u64,
+    /// `-wal` + `-shm` sidecar size in bytes.
+    store_wal_bytes: u64,
+    /// main + sidecars.
+    store_total_bytes: u64,
+    /// Joined rooms (the population we inspect).
+    rooms_total: usize,
+    /// Joined rooms that currently hold at least one cached event.
+    rooms_with_cached_events: usize,
+    /// Total cached events summed across all joined rooms.
+    total_cached_events: usize,
+}
+
+/// Build an [`EventCacheDiagnostics`] snapshot. Iterates joined rooms and reads
+/// each room's cached event count via the same `event_cache().subscribe()`
+/// pattern message search uses; per-room errors are skipped (best-effort) so one
+/// bad room can't fail the whole snapshot. Note this subscribes each room's
+/// cache into memory, which is acceptable for an on-demand debug command.
+#[tauri::command]
+pub async fn get_event_cache_diagnostics(
+    state: State<'_, MatrixState>,
+    app_handle: AppHandle,
+) -> Result<EventCacheDiagnostics, String> {
+    let client = get_client(&state)?;
+    let (store_main_bytes, store_wal_bytes) = event_cache_store_bytes(&app_handle)?;
+
+    let rooms = client.joined_rooms();
+    let rooms_total = rooms.len();
+    let mut rooms_with_cached_events = 0usize;
+    let mut total_cached_events = 0usize;
+
+    for room in rooms {
+        let Ok((room_cache, _drop_handles)) = room.event_cache().await else {
+            continue;
+        };
+        let Ok((events, _updates)) = room_cache.subscribe().await else {
+            continue;
+        };
+        if !events.is_empty() {
+            rooms_with_cached_events += 1;
+            total_cached_events += events.len();
         }
     }
-    Ok(total)
+
+    Ok(EventCacheDiagnostics {
+        store_main_bytes,
+        store_wal_bytes,
+        store_total_bytes: store_main_bytes + store_wal_bytes,
+        rooms_total,
+        rooms_with_cached_events,
+        total_cached_events,
+    })
+}
+
+/// Per-room event-cache footprint (cached event count + estimated bytes +
+/// timestamp range) for the current room shown in the `:debug cache` viewer.
+#[tauri::command]
+pub async fn get_room_cache_diagnostics(
+    state: State<'_, MatrixState>,
+    room_id: String,
+) -> Result<crate::matrix::timeline::RoomCacheDiagnostics, String> {
+    let client = get_client(&state)?;
+    crate::matrix::timeline::room_cache_diagnostics(&client, &room_id).await
 }
 
 /// Clear the matrix-sdk event-cache store. The event cache only backs

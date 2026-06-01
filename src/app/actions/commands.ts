@@ -152,7 +152,10 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
 
     case "debug": {
       const subjectArg = parsed.args[0];
-      if (subjectArg && subjectArg.startsWith("$")) {
+      if (subjectArg === "cache") {
+        // :debug cache — show event-cache diagnostics
+        void openDebugViewer({ kind: "cache" });
+      } else if (subjectArg && subjectArg.startsWith("$")) {
         // :debug $eventId — show raw event
         void openDebugViewerForEvent(subjectArg);
       } else {

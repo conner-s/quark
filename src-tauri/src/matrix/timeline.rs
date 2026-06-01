@@ -206,6 +206,64 @@ pub async fn search_room_cache(
     Ok(out)
 }
 
+/// Per-room event-cache footprint for the `:debug cache` viewer. `bytes` is an
+/// estimate: the summed length of each cached event's raw JSON (the wire form
+/// the SDK persists), not the exact on-disk SQLite cost, since the store is a
+/// shared DB with no per-room byte accounting.
+#[derive(serde::Serialize)]
+pub struct RoomCacheDiagnostics {
+    /// Number of events currently cached for this room.
+    cached_events: usize,
+    /// Estimated bytes: sum of each cached event's raw JSON length.
+    estimated_bytes: u64,
+    /// Oldest cached event timestamp (ms since epoch), if any.
+    oldest_ts: Option<u64>,
+    /// Newest cached event timestamp (ms since epoch), if any.
+    newest_ts: Option<u64>,
+}
+
+/// Build a [`RoomCacheDiagnostics`] snapshot for a single room. Reads the same
+/// cached events `search_room_cache` does and measures their footprint.
+pub async fn room_cache_diagnostics(
+    client: &Client,
+    room_id: &str,
+) -> Result<RoomCacheDiagnostics, String> {
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {} not found", room_id))?;
+
+    let (room_cache, _drop_handles) = room
+        .event_cache()
+        .await
+        .map_err(|e| format!("Event cache unavailable: {e}"))?;
+    let (events, _updates) = room_cache
+        .subscribe()
+        .await
+        .map_err(|e| format!("Event cache read failed: {e}"))?;
+
+    let cached_events = events.len();
+    let mut estimated_bytes = 0u64;
+    let mut oldest_ts: Option<u64> = None;
+    let mut newest_ts: Option<u64> = None;
+    for cached in events {
+        estimated_bytes += cached.raw().json().get().len() as u64;
+        if let Ok(any) = cached.raw().deserialize() {
+            if let Some(te) = convert_sync_timeline_event(any) {
+                oldest_ts = Some(oldest_ts.map_or(te.timestamp, |o| o.min(te.timestamp)));
+                newest_ts = Some(newest_ts.map_or(te.timestamp, |n| n.max(te.timestamp)));
+            }
+        }
+    }
+
+    Ok(RoomCacheDiagnostics {
+        cached_events,
+        estimated_bytes,
+        oldest_ts,
+        newest_ts,
+    })
+}
+
 /// Pure in-range decision for a date-bounded ("Back to date…") search, extracted
 /// so it can be unit-tested. A hit is in range when no cutoff is set, or its
 /// timestamp is at/after the cutoff. `>=` keeps the boundary inclusive, matching
