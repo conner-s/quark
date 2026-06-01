@@ -27,7 +27,7 @@ use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
 use tauri::{Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 /// Wall-clock time (ms since UNIX epoch) when the app finished initializing.
 ///
@@ -215,6 +215,15 @@ pub fn setup_sync_event_handlers(client: &Client, app_handle: &tauri::AppHandle)
             if let SyncRoomMessageEvent::Original(original_ev) = ev {
                 let room_id = room.room_id().to_string();
                 if let Some(timeline_event) = convert_room_message_event(original_ev) {
+                    let now_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0);
+                    debug!(
+                        "sync message received in {} ({}ms delivery latency)",
+                        room_id,
+                        now_ms.saturating_sub(timeline_event.timestamp)
+                    );
                     // ── OS notification (if window not focused and config permits) ──
                     let should_send_os_notification = {
                         // Check notification config from managed state.
@@ -298,6 +307,8 @@ pub fn setup_sync_event_handlers(client: &Client, app_handle: &tauri::AppHandle)
                     };
                     if let Err(e) = app.emit(EVENT_NEW_MESSAGE, &payload) {
                         error!("Failed to emit {}: {}", EVENT_NEW_MESSAGE, e);
+                    } else {
+                        debug!("emitted {} for {}", EVENT_NEW_MESSAGE, room_id);
                     }
 
                     // Also emit updated unread counts for the room.

@@ -70,6 +70,11 @@ pub async fn login(
         let mut guard = state.0.lock().map_err(|_| "State lock poisoned")?;
         *guard = Some(client.clone());
     }
+    // `handlers_registered` tracks the *current* client. We just built a fresh one
+    // (which has no event handlers), so reset the flag — otherwise start_sync skips
+    // registration and the new client's sync loop emits nothing, leaving the
+    // frontend with no live updates after a re-login or page reload.
+    *sync_state.handlers_registered.lock().map_err(|_| "Sync state lock poisoned")? = false;
 
     crate::matrix::client::start_sync(client, Some(app_handle), &sync_state).await;
     Ok(session)
@@ -92,6 +97,11 @@ pub async fn restore_session(
         let mut guard = state.0.lock().map_err(|_| "State lock poisoned")?;
         *guard = Some(client.clone());
     }
+    // Fresh client → reset the handler-registration guard so start_sync re-registers
+    // event handlers on it. Without this, a page reload (which rebuilds the client
+    // and calls restore_session again) leaves the new sync loop with no handlers,
+    // so no messages/typing/badges reach the frontend until a full app restart.
+    *sync_state.handlers_registered.lock().map_err(|_| "Sync state lock poisoned")? = false;
 
     crate::matrix::client::start_sync(client, Some(app_handle), &sync_state).await;
     Ok(())
