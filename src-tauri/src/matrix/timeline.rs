@@ -206,6 +206,14 @@ pub async fn search_room_cache(
     Ok(out)
 }
 
+/// Pure in-range decision for a date-bounded ("Back to date…") search, extracted
+/// so it can be unit-tested. A hit is in range when no cutoff is set, or its
+/// timestamp is at/after the cutoff. `>=` keeps the boundary inclusive, matching
+/// the `oldest <= until` stop semantics in `search_should_break`.
+fn hit_in_range(ts: u64, until_ts: Option<u64>) -> bool {
+    until_ts.map_or(true, |until| ts >= until)
+}
+
 /// Pure stop decision for a search scan, extracted so it can be unit-tested
 /// without a live client. Returns true when the scan should halt.
 fn search_should_break(
@@ -264,6 +272,7 @@ pub async fn search_messages(
     fn scan_batch(
         raws: impl IntoIterator<Item = Raw<AnySyncTimelineEvent>>,
         q: &str,
+        until_ts: Option<u64>,
         room_id: &str,
         app_handle: &tauri::AppHandle,
         scanned: &mut u64,
@@ -274,8 +283,10 @@ pub async fn search_messages(
             *scanned += 1;
             if let Ok(any) = raw.deserialize() {
                 if let Some(te) = convert_sync_timeline_event(any) {
+                    // Track the oldest *scanned* timestamp over every event so the
+                    // date stop condition can fire; only the emit below is filtered.
                     oldest_ts = Some(oldest_ts.map_or(te.timestamp, |o| o.min(te.timestamp)));
-                    if event_matches(&te, q) {
+                    if event_matches(&te, q) && hit_in_range(te.timestamp, until_ts) {
                         *matched += 1;
                         let _ = app_handle.emit(
                             crate::events::EVENT_SEARCH_HIT,
@@ -318,6 +329,7 @@ pub async fn search_messages(
     let mut oldest = scan_batch(
         cached.into_iter().map(|e| e.raw().clone()),
         &q,
+        until_ts,
         room_id,
         app_handle,
         &mut scanned,
@@ -343,6 +355,7 @@ pub async fn search_messages(
                     oldest = scan_batch(
                         outcome.events.into_iter().map(|e| e.raw().clone()),
                         &q,
+                        until_ts,
                         room_id,
                         app_handle,
                         &mut scanned,
@@ -1390,5 +1403,19 @@ mod tests {
         assert!(!search_should_break(100, u64::MAX, Some(0), None, false, false));
         // Cutoff set but no events seen yet → can't decide on date, keep going.
         assert!(!search_should_break(0, u64::MAX, None, Some(cutoff), false, false));
+    }
+
+    #[test]
+    fn test_search_hit_within_back_to_date_cutoff() {
+        let cutoff = 1_700_000_000_000u64;
+        // Newer than the cutoff → in range.
+        assert!(hit_in_range(cutoff + 5_000, Some(cutoff)));
+        // Exactly at the cutoff → inclusive, in range.
+        assert!(hit_in_range(cutoff, Some(cutoff)));
+        // Older than the cutoff → filtered out (this is the leak being fixed).
+        assert!(!hit_in_range(cutoff - 5_000, Some(cutoff)));
+        // No cutoff (e.g. "Entire history") → every hit is in range.
+        assert!(hit_in_range(0, None));
+        assert!(hit_in_range(cutoff, None));
     }
 }
