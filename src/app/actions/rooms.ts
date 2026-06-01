@@ -67,6 +67,11 @@ import { openProfileForUser } from "./profile.js";
 interface CachedRoomTimeline {
   events: TimelineEvent[];
   reachedStart: boolean;
+  // Per-room member snapshot, kept so a cached revisit can repopulate the global
+  // _memberDisplayName / _memberAvatarMxc maps *before* the instant paint —
+  // otherwise senders flash their raw user ID until the member list re-fetches.
+  memberNames?: Map<string, string>;   // userId → display name
+  memberAvatars?: Map<string, string>; // userId → mxc:// URL
 }
 // Insertion order doubles as LRU recency: every open re-`set`s the room, moving
 // it to newest; eviction drops the oldest (least-recently-opened) entries.
@@ -94,9 +99,31 @@ export function applyCacheConfig(config: AppConfig): void {
 
 /** Store/refresh a room's cached tail (marks it most-recently-used) + evict. */
 function _putRoomTimeline(roomId: string, events: TimelineEvent[], reachedStart: boolean): void {
+  const prev = _roomTimelineCache.get(roomId); // carry the member snapshot forward
   _roomTimelineCache.delete(roomId); // re-insert so it lands as newest
-  _roomTimelineCache.set(roomId, { events: events.slice(-ROOM_TIMELINE_CACHE_CAP), reachedStart });
+  _roomTimelineCache.set(roomId, {
+    events: events.slice(-ROOM_TIMELINE_CACHE_CAP),
+    reachedStart,
+    memberNames: prev?.memberNames,
+    memberAvatars: prev?.memberAvatars,
+  });
   _evictRoomCache();
+}
+
+/** Store/refresh a room's member display-name + avatar snapshot on its cache
+ *  entry (no-op if the room isn't cached). Keeps the snapshot used by the
+ *  instant paint current with the latest member fetch. */
+function _putRoomMembers(roomId: string, members: RoomMember[]): void {
+  const entry = _roomTimelineCache.get(roomId);
+  if (!entry) return;
+  const names = new Map<string, string>();
+  const avatars = new Map<string, string>();
+  for (const m of members) {
+    if (m.display_name) names.set(m.user_id, m.display_name);
+    if (m.avatar_url) avatars.set(m.user_id, m.avatar_url);
+  }
+  entry.memberNames = names;
+  entry.memberAvatars = avatars;
 }
 
 function _evictRoomCache(): void {
@@ -232,6 +259,14 @@ export async function selectRoom(roomId: string): Promise<void> {
   // Instant paint from the per-room cache (revisit) — no waiting on the network.
   const cachedTimeline = _roomTimelineCache.get(roomId);
   if (cachedTimeline) {
+    // Restore this room's member snapshot into the (just-cleared) global maps so
+    // the instant paint resolves real display names/avatars instead of raw IDs.
+    if (cachedTimeline.memberNames) {
+      for (const [id, name] of cachedTimeline.memberNames) _memberDisplayName.set(id, name);
+    }
+    if (cachedTimeline.memberAvatars) {
+      for (const [id, mxc] of cachedTimeline.memberAvatars) _memberAvatarMxc.set(id, mxc);
+    }
     paginationState.reachedStart = cachedTimeline.reachedStart;
     AppState.set("currentTimeline", cachedTimeline.events);
     renderEvents(cachedTimeline.events);
@@ -287,6 +322,8 @@ export async function selectRoom(roomId: string): Promise<void> {
       if (m.display_name) _memberDisplayName.set(m.user_id, m.display_name);
       if (m.avatar_url) _memberAvatarMxc.set(m.user_id, m.avatar_url);
     }
+    // Refresh this room's snapshot so the next cached revisit paints correct names.
+    _putRoomMembers(roomId, members);
 
     // Update display names in place now that member data is available.
     // Avoids a full DOM rebuild — use targeted text swaps instead of setMessages.
@@ -872,6 +909,7 @@ export async function loadRoomMembers(roomId: string): Promise<void> {
       if (m.display_name) _memberDisplayName.set(m.user_id, m.display_name);
       if (m.avatar_url) _memberAvatarMxc.set(m.user_id, m.avatar_url);
     }
+    _putRoomMembers(roomId, members);
     memberList.setMembers(members.map(roomMemberToEntry));
     _downloadMemberAvatars(members, timeline);
   } catch {
