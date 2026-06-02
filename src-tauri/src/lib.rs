@@ -72,6 +72,7 @@ pub fn run() {
             commands::leave_room,
             commands::create_room,
             commands::mark_room_read,
+            commands::get_room_receipts,
             commands::get_pinned_events,
             commands::search_room_directory,
             // Room settings

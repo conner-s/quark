@@ -39,6 +39,14 @@ let _components: AppComponents | null = null;
 
 export function setComponents(components: AppComponents): void {
   _components = components;
+  // Give the timeline the resolvers it needs to render real avatars/display
+  // names on read-receipt chips without importing the app layer (keeps the
+  // UI → app dependency one-directional). Optional-chained so partial test
+  // mocks of `timeline` don't need to stub it.
+  components.timeline?.setReceiptResolvers?.({
+    avatarUrl: resolveSenderAvatarUrl,
+    displayName: resolveDisplayName,
+  });
 }
 
 export function getComponents(): AppComponents {
@@ -537,12 +545,14 @@ export function ensureSenderAvatarDownloaded(senderId: string, timeline: import(
   if (!mxcUrl) return;
   if (_avatarDataUrl.has(mxcUrl)) {
     timeline.updateSenderAvatar(senderId, _avatarDataUrl.get(mxcUrl)!);
+    timeline.updateReceiptAvatar(senderId, _avatarDataUrl.get(mxcUrl)!);
     return;
   }
   downloadMedia(mxcUrl).then((dl) => {
     const url = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
     _avatarDataUrl.set(mxcUrl, url);
     timeline.updateSenderAvatar(senderId, url);
+    timeline.updateReceiptAvatar(senderId, url);
   }).catch(() => { /* non-critical */ });
 }
 
@@ -580,6 +590,7 @@ export function _downloadMemberAvatars(members: RoomMember[], timeline: import("
     const mxc = m.avatar_url;
     if (_avatarDataUrl.has(mxc)) {
       timeline.updateSenderAvatar(m.user_id, _avatarDataUrl.get(mxc)!);
+      timeline.updateReceiptAvatar(m.user_id, _avatarDataUrl.get(mxc)!);
       memberList.updateMemberAvatar(m.user_id, _avatarDataUrl.get(mxc)!);
       continue;
     }
@@ -587,6 +598,7 @@ export function _downloadMemberAvatars(members: RoomMember[], timeline: import("
       const url = _mediaToBlobUrl(dl.mime_type, dl.data_base64);
       _avatarDataUrl.set(mxc, url);
       timeline.updateSenderAvatar(m.user_id, url);
+      timeline.updateReceiptAvatar(m.user_id, url);
       memberList.updateMemberAvatar(m.user_id, url);
     }).catch(() => { /* non-critical */ });
   }

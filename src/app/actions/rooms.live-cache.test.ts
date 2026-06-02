@@ -14,6 +14,7 @@ vi.mock("../../ipc/index.js", () => ({
   markRoomRead: vi.fn().mockResolvedValue(undefined),
   openRoomTimeline: vi.fn(),
   getRoomMembers: vi.fn().mockResolvedValue([]),
+  getRoomReceipts: vi.fn().mockResolvedValue([]),
   downloadMedia: vi.fn().mockResolvedValue({ mime_type: "image/png", data_base64: "" }),
   getTimeline: vi.fn().mockResolvedValue({ events: [], prev_batch: null }),
   loadOlderTimeline: vi.fn().mockResolvedValue({ events: [], reached_start: true }),

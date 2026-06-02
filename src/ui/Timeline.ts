@@ -990,6 +990,24 @@ export class Timeline {
   /** Fired when the user right-clicks a message — passes (eventId, x, y). */
   private _onContextMenuCallback: ((eventId: string, x: number, y: number) => void) | null = null;
 
+  // ── Read receipts ──────────────────────────────────────────────────────────
+  /** Each user's latest-read position: the receipted event ID and its timestamp
+   *  (ms, if known). Held outside the DOM so receipt state survives
+   *  windowing/culling and full re-renders. The avatar is placed on the nearest
+   *  rendered message at or before `ts` (receipts often point at non-message
+   *  events — reactions, edits — that aren't in the timeline). */
+  private _receiptByUser = new Map<string, { eventId: string; ts: number | null }>();
+  /** Resolvers injected from the app layer so the decoration step can render
+   *  real avatars/names without Timeline importing app/actions (layering). */
+  private _receiptAvatarResolver: ((userId: string) => string | undefined) | null = null;
+  private _receiptNameResolver: ((userId: string) => string) | null = null;
+  /** Receipt avatars shown on one message before collapsing the rest into a
+   *  single "…" chip (hover the group for the full reader list). */
+  private static readonly MAX_RECEIPTS_SHOWN = 2;
+  /** Themed hover card listing all readers of a message; lazily created on
+   *  `<body>` (position:fixed) so the timeline's overflow can't clip it. */
+  private _receiptTooltipEl: HTMLElement | null = null;
+
   constructor() {
     // Non-scrolling wrapper. The overlays (loading indicator, jump-to-latest
     // button) MUST live here as siblings of the scroller, not inside it: under
@@ -2279,6 +2297,269 @@ export class Timeline {
     return this._listEl.querySelector<HTMLElement>(`[data-message-id="${eventId}"]`);
   }
 
+  // ── Read receipts ──────────────────────────────────────────────────────────
+
+  /** Inject resolvers for receipt avatar URLs and display names so decoration
+   *  can render real avatars/names without importing the app layer. */
+  setReceiptResolvers(resolvers: {
+    avatarUrl: (userId: string) => string | undefined;
+    displayName: (userId: string) => string;
+  }): void {
+    this._receiptAvatarResolver = resolvers.avatarUrl;
+    this._receiptNameResolver = resolvers.displayName;
+  }
+
+  /** Replace the whole receipt state (initial seed on room open) and redecorate.
+   *  Pass an empty list to clear (e.g. when the display setting is off). */
+  setReadReceipts(list: { userId: string; eventId: string; ts: number | null }[]): void {
+    this._receiptByUser.clear();
+    for (const { userId, eventId, ts } of list) this._receiptByUser.set(userId, { eventId, ts });
+    this._renderReceipts();
+  }
+
+  /** Apply one live receipt delta, moving the user's avatar if it advanced. */
+  setReadReceipt(userId: string, eventId: string, ts: number | null): void {
+    const prev = this._receiptByUser.get(userId);
+    if (prev && prev.eventId === eventId) return;
+    this._receiptByUser.set(userId, { eventId, ts });
+    this._renderReceipts();
+  }
+
+  /** Swap in a freshly-downloaded avatar for a user's receipt chips. Mirrors
+   *  `updateSenderAvatar`; called when a member's avatar finishes downloading. */
+  updateReceiptAvatar(userId: string, dataUrl: string): void {
+    const spans = this._listEl.querySelectorAll<HTMLElement>(
+      `.read-receipt[data-receipt-user="${CSS.escape(userId)}"]`,
+    );
+    for (const span of spans) {
+      const img = document.createElement("img");
+      img.className = "read-receipt__avatar";
+      img.src = dataUrl;
+      img.alt = "";
+      img.setAttribute("aria-hidden", "true");
+      if (isAnimatedUrl(dataUrl)) img.dataset.gif = "1";
+      img.onerror = () => img.replaceWith(this._buildReceiptFallback(userId));
+      const first = span.firstElementChild;
+      if (first) first.replaceWith(img);
+      else span.appendChild(img);
+    }
+  }
+
+  /** Rebuild every read-receipt container from scratch. Cheap (bounded by member
+   *  count) and the only place receipts touch the DOM, so it's safe to call after
+   *  any render path. Each user is placed on the nearest rendered message at or
+   *  before their receipt timestamp — receipts frequently point at non-message
+   *  events (reactions, edits, redactions) that aren't in the timeline. */
+  private _renderReceipts(): void {
+    // Tear down all existing containers first (and any open hover card, whose
+    // anchor may be about to be removed).
+    this._hideReceiptTooltip();
+    for (const c of Array.from(this._listEl.querySelectorAll(".read-receipts"))) c.remove();
+    if (this._receiptByUser.size === 0) return;
+
+    // Each user's latest own message + its time. Sending a message implies the
+    // sender has read up to it, so their receipt is advanced to it when it's
+    // newer than their explicit receipt — this matches Element, where a user who
+    // posted after their last read receipt shows at their own message.
+    const lastOwn = new Map<string, { id: string; ts: number }>();
+    for (const m of this._messages) {
+      if (!m.senderId) continue;
+      lastOwn.set(m.senderId, { id: m.id, ts: Date.parse(m.timestamp) }); // ascending → last wins
+    }
+
+    // Group users onto their resolved display message.
+    const byMessage = new Map<string, { userId: string; ts: number | null }[]>();
+    for (const [userId, pos] of this._receiptByUser) {
+      const msgId = this._resolveReceiptMessageId(userId, pos, lastOwn);
+      if (!msgId || !this.getMessageElementById(msgId)) continue;
+      const list = byMessage.get(msgId);
+      if (list) list.push({ userId, ts: pos.ts });
+      else byMessage.set(msgId, [{ userId, ts: pos.ts }]);
+    }
+
+    for (const [msgId, entries] of byMessage) {
+      const el = this.getMessageElementById(msgId);
+      if (!el) continue;
+      // Most-recently-read first, so the visible two are the latest readers.
+      entries.sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0));
+      el.appendChild(this._buildReceiptContainer(msgId, entries));
+    }
+  }
+
+  /** Resolve a receipt position to the message its avatar should sit on:
+   *  the later of (a) the nearest rendered message at or before the explicit
+   *  receipt's timestamp and (b) the user's own most recent message (sending
+   *  implies reading). Falls back to the receipted event itself. */
+  private _resolveReceiptMessageId(
+    userId: string,
+    pos: { eventId: string; ts: number | null },
+    lastOwn: Map<string, { id: string; ts: number }>,
+  ): string | null {
+    let bestId: string | null = null;
+    let bestTs = -Infinity;
+    if (pos.ts != null) {
+      const id = this._messageIdAtOrBeforeTs(pos.ts);
+      if (id) {
+        bestId = id;
+        bestTs = pos.ts;
+      }
+    }
+    if (bestId == null) bestId = pos.eventId; // exact event (renders only if displayed)
+
+    // Advance to the user's own latest message when it's newer.
+    const own = lastOwn.get(userId);
+    if (own && own.ts > bestTs) bestId = own.id;
+
+    return bestId;
+  }
+
+  /** Binary-search the (chronological) buffer for the newest message whose
+   *  timestamp is ≤ `ts`. Returns its event ID, or null if all are newer. */
+  private _messageIdAtOrBeforeTs(ts: number): string | null {
+    let lo = 0;
+    let hi = this._messages.length - 1;
+    let ans = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (Date.parse(this._messages[mid].timestamp) <= ts) {
+        ans = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return ans >= 0 ? this._messages[ans].id : null;
+  }
+
+  /** Build the bottom-right stack: up to MAX_RECEIPTS_SHOWN avatars, then a "…"
+   *  chip when more readers exist. Hovering the group lists every reader + time. */
+  private _buildReceiptContainer(
+    eventId: string,
+    entries: { userId: string; ts: number | null }[],
+  ): HTMLElement {
+    const container = document.createElement("div");
+    container.className = "read-receipts";
+    container.dataset.receiptEvent = eventId;
+    // Themed hover card (not the native `title` tooltip) listing every reader.
+    container.addEventListener("mouseenter", () => this._showReceiptTooltip(container, entries));
+    container.addEventListener("mouseleave", () => this._hideReceiptTooltip());
+
+    const shown = entries.slice(0, Timeline.MAX_RECEIPTS_SHOWN);
+    for (const { userId } of shown) {
+      const span = document.createElement("span");
+      span.className = "read-receipt";
+      span.dataset.receiptUser = userId;
+      span.appendChild(this._buildReceiptAvatar(userId, this._receiptAvatarResolver?.(userId)));
+      container.appendChild(span);
+    }
+
+    if (entries.length > shown.length) {
+      const chip = document.createElement("span");
+      chip.className = "read-receipts__overflow";
+      chip.textContent = "…";
+      container.appendChild(chip);
+    }
+
+    return container;
+  }
+
+  /** Lazily create the shared receipt hover card on `<body>`. */
+  private _ensureReceiptTooltip(): HTMLElement {
+    if (this._receiptTooltipEl) return this._receiptTooltipEl;
+    const el = document.createElement("div");
+    el.className = "read-receipts-tooltip";
+    el.style.display = "none";
+    document.body.appendChild(el);
+    this._receiptTooltipEl = el;
+    return el;
+  }
+
+  /** Populate and position the themed reader list above (or below) the cluster. */
+  private _showReceiptTooltip(
+    anchor: HTMLElement,
+    entries: { userId: string; ts: number | null }[],
+  ): void {
+    const tip = this._ensureReceiptTooltip();
+    tip.replaceChildren();
+
+    const title = document.createElement("div");
+    title.className = "read-receipts-tooltip__title";
+    title.textContent = entries.length === 1 ? "Read by" : `Read by ${entries.length}`;
+    tip.appendChild(title);
+
+    for (const entry of entries) {
+      const row = document.createElement("div");
+      row.className = "read-receipts-tooltip__row";
+
+      const avatar = document.createElement("span");
+      avatar.className = "read-receipt";
+      avatar.appendChild(this._buildReceiptAvatar(entry.userId, this._receiptAvatarResolver?.(entry.userId)));
+      row.appendChild(avatar);
+
+      const name = document.createElement("span");
+      name.className = "read-receipts-tooltip__name";
+      name.textContent = this._receiptNameResolver?.(entry.userId) ?? entry.userId;
+      row.appendChild(name);
+
+      if (entry.ts != null) {
+        const time = document.createElement("span");
+        time.className = "read-receipts-tooltip__time";
+        time.textContent = new Date(entry.ts).toLocaleString(undefined, {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        row.appendChild(time);
+      }
+
+      tip.appendChild(row);
+    }
+
+    // Measure, then position above the cluster (flip below if it would clip),
+    // right-aligned to the anchor and clamped to the viewport.
+    tip.style.display = "block";
+    const a = anchor.getBoundingClientRect();
+    const t = tip.getBoundingClientRect();
+    let top = a.top - t.height - 6;
+    if (top < 8) top = a.bottom + 6;
+    const left = Math.max(8, Math.min(a.right - t.width, window.innerWidth - t.width - 8));
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+  }
+
+  private _hideReceiptTooltip(): void {
+    if (this._receiptTooltipEl) this._receiptTooltipEl.style.display = "none";
+  }
+
+  /** A receipt avatar: an <img> when a blob URL is known, else a colored initial. */
+  private _buildReceiptAvatar(userId: string, avatarUrl?: string): HTMLElement {
+    if (avatarUrl) {
+      const img = document.createElement("img");
+      img.className = "read-receipt__avatar";
+      img.src = avatarUrl;
+      img.alt = "";
+      img.setAttribute("aria-hidden", "true");
+      if (isAnimatedUrl(avatarUrl)) img.dataset.gif = "1";
+      img.onerror = () => img.replaceWith(this._buildReceiptFallback(userId));
+      return img;
+    }
+    return this._buildReceiptFallback(userId);
+  }
+
+  private _buildReceiptFallback(userId: string): HTMLElement {
+    const color = hashColor(userId);
+    const initial = (userId.startsWith("@") ? userId[1] : userId[0] ?? "?").toUpperCase();
+    const el = document.createElement("span");
+    el.className = "read-receipt__fallback";
+    el.textContent = initial;
+    // A solid colored disc with a bg-colored initial reads clearly at 14px,
+    // where a nested colored border (as the group avatars use) would not.
+    el.style.background = color;
+    el.setAttribute("aria-hidden", "true");
+    return el;
+  }
+
   /** Returns the `.message__body` element for the currently selected message, or null. */
   getSelectedMessageBodyElement(): HTMLElement | null {
     if (this._selectedIndex < 0 || this._selectedIndex >= this._messages.length) return null;
@@ -2735,6 +3016,11 @@ export class Timeline {
         if (group) group.classList.add("message-group--selected");
       }
     }
+
+    // Re-decorate read-receipt avatars — the rebuild above wiped any from the
+    // previous render. State lives outside the DOM so this is the only re-attach
+    // point for the full-render paths (setMessages, cull, ensureInWindow).
+    this._renderReceipts();
   }
 
   private _scrollToBottom(): void {
@@ -2834,6 +3120,8 @@ export class Timeline {
     const added = this._messages.slice(newStart, this._renderStart);
     this._renderStart = newStart;
     this._listEl.insertBefore(this._buildGroupedFragment(added), this._listEl.firstChild);
+    // Newly-rendered older messages may be a receipt target — re-decorate.
+    this._renderReceipts();
     this._scheduleCull();
   }
 
@@ -2852,6 +3140,9 @@ export class Timeline {
     this._listEl.appendChild(this._buildGroupedFragment(added));
     this._el.scrollTop -= this._el.scrollHeight - oldH;
     this._prevScrollTop = this._el.scrollTop;
+    // Receipt containers are position:absolute (out of flow), so decorating here
+    // can't perturb the scrollTop compensation above.
+    this._renderReceipts();
     this._scheduleCull();
   }
 

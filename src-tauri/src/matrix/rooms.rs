@@ -230,7 +230,11 @@ pub async fn get_room_members(client: &Client, room_id: &str) -> Result<Vec<Room
 }
 
 /// Mark a room as fully read by sending a read receipt for the latest event.
-pub async fn mark_room_read(client: &Client, room_id: &str) -> Result<(), String> {
+///
+/// `send_public` controls whether the visible-to-others `m.read` receipt is sent
+/// (the "send my read receipts" privacy setting). The private `m.read.private`
+/// receipt is always sent so unread counts clear regardless of the setting.
+pub async fn mark_room_read(client: &Client, room_id: &str, send_public: bool) -> Result<(), String> {
     use matrix_sdk::ruma::api::client::receipt::create_receipt::v3::ReceiptType;
 
     let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
@@ -247,17 +251,116 @@ pub async fn mark_room_read(client: &Client, room_id: &str) -> Result<(), String
 
     if let Some(event) = messages.chunk.first() {
         let event_id = event.kind.event_id().ok_or("Latest event has no ID")?;
-        // Send public read receipt (visible to other users)
-        room.send_single_receipt(ReceiptType::Read, ReceiptThread::Unthreaded, event_id.to_owned())
-            .await
-            .map_err(|e| format!("Failed to send read receipt: {e}"))?;
-        // Also send private read receipt (not shared with other users, for privacy)
+        // Send public read receipt (visible to other users) unless the privacy
+        // setting opts out.
+        if send_public {
+            room.send_single_receipt(ReceiptType::Read, ReceiptThread::Unthreaded, event_id.to_owned())
+                .await
+                .map_err(|e| format!("Failed to send read receipt: {e}"))?;
+        }
+        // Always send the private read receipt (not shared with other users) so
+        // the room's unread count clears even when public receipts are disabled.
         room.send_single_receipt(ReceiptType::ReadPrivate, ReceiptThread::Unthreaded, event_id.to_owned())
             .await
             .map_err(|e| format!("Failed to send private read receipt: {e}"))?;
     }
 
     Ok(())
+}
+
+/// A single user's latest public read position in a room.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadReceiptInfo {
+    pub user_id: String,
+    pub event_id: String,
+    /// When the receipt was sent (ms since epoch), if known. Lets the frontend
+    /// place the avatar on the nearest rendered message and show "read at" times.
+    pub ts: Option<u64>,
+}
+
+/// Load every other joined member's latest public main-timeline read receipt.
+///
+/// Reads from the local store only — no network round-trip — so it's safe to
+/// call on every room open. The per-member receipt lookups run concurrently and
+/// the member set is capped so the cost stays bounded in very large rooms.
+///
+/// Both `Unthreaded` (thread-unaware clients) and `Main` (thread-aware clients
+/// like Element, which tag main-timeline reads with `thread_id: "main"`) are
+/// queried and the later of the two is returned — querying only `Unthreaded`
+/// silently dropped every Element user's receipt.
+pub async fn get_room_receipts(client: &Client, room_id: &str) -> Result<Vec<ReadReceiptInfo>, String> {
+    use matrix_sdk::ruma::events::receipt::{Receipt, ReceiptType as EventReceiptType};
+    use matrix_sdk::ruma::OwnedEventId;
+
+    /// Upper bound on members whose receipt we look up per room. Element renders
+    /// far fewer avatars than this; the cap only protects huge rooms from a
+    /// pathological number of local store reads.
+    const MAX_MEMBERS: usize = 500;
+
+    let room_id = RoomId::parse(room_id).map_err(|e| format!("Invalid room ID: {e}"))?;
+    let room = client
+        .get_room(&room_id)
+        .ok_or_else(|| format!("Room {room_id} not found"))?;
+
+    let own_id = room.own_user_id().to_owned();
+
+    // Cheap local-store member enumeration (no network round-trip).
+    let mut user_ids = client
+        .store()
+        .get_user_ids(room.room_id(), RoomMemberships::JOIN)
+        .await
+        .map_err(|e| format!("Failed to load room members: {e}"))?;
+    user_ids.retain(|u| u != &own_id);
+    user_ids.truncate(MAX_MEMBERS);
+
+    let receipt_ms = |r: &Receipt| -> Option<u64> { r.ts.map(|t| u64::from(t.get())) };
+
+    let semaphore = Arc::new(Semaphore::new(16));
+    let mut tasks = tokio::task::JoinSet::new();
+
+    for uid in user_ids {
+        let room = room.clone();
+        let permit = semaphore.clone().acquire_owned().await.unwrap();
+        tasks.spawn(async move {
+            let _permit = permit;
+            let unthreaded = room
+                .load_user_receipt(EventReceiptType::Read, ReceiptThread::Unthreaded, &uid)
+                .await
+                .ok()
+                .flatten();
+            let main = room
+                .load_user_receipt(EventReceiptType::Read, ReceiptThread::Main, &uid)
+                .await
+                .ok()
+                .flatten();
+
+            // Pick the later of the two by timestamp; if only one exists use it.
+            let best: Option<(OwnedEventId, Option<u64>)> = match (unthreaded, main) {
+                (Some((ue, ur)), Some((me, mr))) => {
+                    let (ut, mt) = (receipt_ms(&ur), receipt_ms(&mr));
+                    if mt > ut { Some((me, mt)) } else { Some((ue, ut)) }
+                }
+                (Some((ue, ur)), None) => Some((ue, receipt_ms(&ur))),
+                (None, Some((me, mr))) => Some((me, receipt_ms(&mr))),
+                (None, None) => None,
+            };
+
+            best.map(|(event_id, ts)| ReadReceiptInfo {
+                user_id: uid.to_string(),
+                event_id: event_id.to_string(),
+                ts,
+            })
+        });
+    }
+
+    let mut result = Vec::new();
+    while let Some(res) = tasks.join_next().await {
+        if let Ok(Some(info)) = res {
+            result.push(info);
+        }
+    }
+
+    Ok(result)
 }
 
 /// Options for creating a new room.
@@ -942,6 +1045,22 @@ mod tests {
         assert!(back.enable_encryption);
         assert_eq!(back.invite.len(), 1);
         assert_eq!(back.invite[0], "@alice:example.com");
+    }
+
+    // --- ReadReceiptInfo serialization ---
+
+    #[test]
+    fn test_read_receipt_info_roundtrip() {
+        let info = ReadReceiptInfo {
+            user_id: "@alice:example.com".to_string(),
+            event_id: "$event:example.com".to_string(),
+            ts: Some(1_700_000_000_000),
+        };
+        let json = serde_json::to_string(&info).expect("serialize");
+        let back: ReadReceiptInfo = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.user_id, "@alice:example.com");
+        assert_eq!(back.event_id, "$event:example.com");
+        assert_eq!(back.ts, Some(1_700_000_000_000));
     }
 
     #[test]

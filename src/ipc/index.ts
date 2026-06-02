@@ -42,7 +42,7 @@ export { login, restoreSession, logout, getOwnProfile, setPresenceStatus, getPre
 export type { PresenceInfo } from "./client.js";
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────
-export { getRooms, joinRoom, leaveRoom, createRoom, getRoomMembers, markRoomRead, getPinnedEvents, searchRoomDirectory, inviteUser, kickUser, banUser, unbanUser, searchRoomCache, searchRoomMessages, cancelRoomSearch, listenSearchEvents, EVENT_SEARCH_HIT, EVENT_SEARCH_PROGRESS } from "./rooms.js";
+export { getRooms, joinRoom, leaveRoom, createRoom, getRoomMembers, markRoomRead, getRoomReceipts, getPinnedEvents, searchRoomDirectory, inviteUser, kickUser, banUser, unbanUser, searchRoomCache, searchRoomMessages, cancelRoomSearch, listenSearchEvents, EVENT_SEARCH_HIT, EVENT_SEARCH_PROGRESS } from "./rooms.js";
 export type { SearchHitPayload, SearchProgressPayload } from "./rooms.js";
 
 // ─── Timeline ─────────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import { isMobile, closeDrawer } from "../mobile.js";
 
 import {
   getRoomMembers,
+  getRoomReceipts,
   getTimeline,
   getSpaceChildren,
   getUserSpaces,
@@ -180,6 +181,9 @@ export async function selectRoom(roomId: string): Promise<void> {
   paginationState.contextFocusEventId = null;
   paginationState.paginationLoading = false;
   paginationState.paginationLoadingForward = false;
+  // Drop the previous room's read receipts so they can't bleed onto the new
+  // room (incl. the instant cache paint below). Re-seeded after the fetch.
+  timeline.setReadReceipts([]);
   roomList.setActiveRoom(roomId);
 
   // Show skeleton immediately before the async IPC fetch so the timeline doesn't
@@ -294,6 +298,11 @@ export async function selectRoom(roomId: string): Promise<void> {
     // don't block the render on them (cached display names are used).
     const timelinePromise = openRoomTimeline(roomId, ROOM_OPEN_LIMIT);
     const membersPromise = getRoomMembers(roomId).catch(() => [] as RoomMember[]);
+    // Seed read receipts (other members' last-read positions) in parallel.
+    // Skipped entirely when the display setting is off.
+    const receiptsPromise = AppState.get("showReadReceipts")
+      ? getRoomReceipts(roomId).catch(() => [])
+      : Promise.resolve([]);
 
     const page = await timelinePromise;
     const { events, reached_start } = page;
@@ -377,6 +386,16 @@ export async function selectRoom(roomId: string): Promise<void> {
       // member data, so it stays here; the media/emoji downloads were already
       // started above in parallel with the member fetch.
       _downloadMemberAvatars(members, timeline);
+
+      // Seed read-receipt avatars now that member avatars/names are populated, so
+      // the chips resolve to real images/names on first paint. Decoration only
+      // touches messages currently in the rendered window; off-window receipts
+      // reappear when the user scrolls back over them.
+      const receipts = await receiptsPromise;
+      if (AppState.get("currentRoomId") === roomId && AppState.get("showReadReceipts")) {
+        timeline.setReadReceipts(receipts.map((r) => ({ userId: r.user_id, eventId: r.event_id, ts: r.ts })));
+        for (const r of receipts) ensureSenderAvatarDownloaded(r.user_id, timeline);
+      }
     }
   } catch (err) {
     showError(`Failed to load timeline: ${err instanceof Error ? err.message : String(err)}`);
@@ -386,6 +405,29 @@ export async function selectRoom(roomId: string): Promise<void> {
   if (prevRoom !== roomId) {
     cancelReply();
   }
+}
+
+/**
+ * Apply the current `showReadReceipts` setting to the open room. Called when the
+ * Settings toggle changes at runtime: clears the avatars when turned off, or
+ * fetches and seeds them when turned on (the next room open would otherwise be
+ * the first chance for the change to take effect).
+ */
+export async function applyReadReceiptVisibility(): Promise<void> {
+  const { timeline } = getComponents();
+  if (!AppState.get("showReadReceipts")) {
+    timeline.setReadReceipts([]);
+    return;
+  }
+  const roomId = AppState.get("currentRoomId");
+  if (!roomId) return;
+  try {
+    const receipts = await getRoomReceipts(roomId);
+    // Guard against a room switch or a re-toggle while the fetch was in flight.
+    if (AppState.get("currentRoomId") !== roomId || !AppState.get("showReadReceipts")) return;
+    timeline.setReadReceipts(receipts.map((r) => ({ userId: r.user_id, eventId: r.event_id, ts: r.ts })));
+    for (const r of receipts) ensureSenderAvatarDownloaded(r.user_id, timeline);
+  } catch { /* non-fatal */ }
 }
 
 /**

@@ -10,7 +10,7 @@ use matrix_sdk::{
         key::verification::request::ToDeviceKeyVerificationRequestEventContent,
         presence::PresenceEvent,
         reaction::ReactionEventContent,
-        receipt::ReceiptEventContent,
+        receipt::{ReceiptEventContent, ReceiptThread, ReceiptType},
         room::{
             message::{OriginalSyncRoomMessageEvent, SyncRoomMessageEvent},
             redaction::OriginalSyncRoomRedactionEvent,
@@ -135,6 +135,10 @@ pub struct SyncReadReceipt {
     pub room_id: String,
     pub event_id: String,
     pub user_id: String,
+    /// When the receipt was sent (ms since epoch), if the server provided it.
+    /// Used by the frontend to place the avatar on the nearest rendered message
+    /// and to show "read at" times in the hover list.
+    pub ts: Option<u64>,
 }
 
 /// Emitted when a user's presence changes.
@@ -365,15 +369,34 @@ pub fn setup_sync_event_handlers(client: &Client, app_handle: &tauri::AppHandle)
          room: Room,
          Ctx(app): Ctx<tauri::AppHandle>| async move {
             let room_id = room.room_id().to_string();
+            let own_id = room.own_user_id().to_owned();
 
             // Walk the receipt map: event_id -> receipt_type -> user_id -> Receipt
             for (event_id, receipts_by_type) in ev.content.iter() {
-                for (_receipt_type, user_receipts) in receipts_by_type.iter() {
-                    for (user_id, _receipt) in user_receipts.iter() {
+                for (receipt_type, user_receipts) in receipts_by_type.iter() {
+                    // Only surface public read receipts. `m.read.private` is the
+                    // own user's private marker (and is never sent for others), and
+                    // the fully-read marker isn't a read position — skip both so we
+                    // don't render the own user's own avatar.
+                    if *receipt_type != ReceiptType::Read {
+                        continue;
+                    }
+                    for (user_id, receipt) in user_receipts.iter() {
+                        // Never render the own user's receipt (Element-style).
+                        if *user_id == own_id {
+                            continue;
+                        }
+                        // Skip receipts confined to a sub-thread — they point at
+                        // thread replies that aren't in the main timeline. Main and
+                        // Unthreaded both belong on the main timeline.
+                        if matches!(receipt.thread, ReceiptThread::Thread(_)) {
+                            continue;
+                        }
                         let payload = SyncReadReceipt {
                             room_id: room_id.clone(),
                             event_id: event_id.to_string(),
                             user_id: user_id.to_string(),
+                            ts: receipt.ts.map(|t| u64::from(t.get())),
                         };
                         if let Err(e) = app.emit(EVENT_READ_RECEIPT, &payload) {
                             error!("Failed to emit {}: {}", EVENT_READ_RECEIPT, e);
@@ -743,12 +766,14 @@ mod tests {
             room_id: "!room:example.com".to_string(),
             event_id: "$event:example.com".to_string(),
             user_id: "@alice:example.com".to_string(),
+            ts: Some(1_700_000_000_000),
         };
         let json = serde_json::to_string(&payload).expect("serialize");
         let back: SyncReadReceipt = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back.room_id, "!room:example.com");
         assert_eq!(back.event_id, "$event:example.com");
         assert_eq!(back.user_id, "@alice:example.com");
+        assert_eq!(back.ts, Some(1_700_000_000_000));
     }
 
     // ── SyncPresenceUpdate ────────────────────────────────────────────────────

@@ -59,6 +59,14 @@ export interface RoomMember {
   presence: "online" | "unavailable" | "offline" | null;
 }
 
+/** A single user's latest public read position — matches Rust `ReadReceiptInfo`. */
+export interface ReadReceiptInfo {
+  user_id: string;
+  event_id: string;
+  /** When the receipt was sent (ms since epoch), if known. */
+  ts: number | null;
+}
+
 // ─── Timeline ─────────────────────────────────────────────────────────────────
 
 /** A page of timeline events with a cursor for loading older messages. */

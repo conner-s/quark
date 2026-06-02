@@ -2,9 +2,9 @@
 
 import { invoke } from "./invoke.js";
 import { isTauri, mockListen } from "./mock.js";
-import type { RoomInfo, CreateRoomOptions, RoomMember, PinnedEventInfo, PublicRoomInfo, TimelineEvent, SearchSummary } from "./types.js";
+import type { RoomInfo, CreateRoomOptions, RoomMember, PinnedEventInfo, PublicRoomInfo, ReadReceiptInfo, TimelineEvent, SearchSummary } from "./types.js";
 
-export type { RoomInfo, CreateRoomOptions, RoomMember, PinnedEventInfo, PublicRoomInfo };
+export type { RoomInfo, CreateRoomOptions, RoomMember, PinnedEventInfo, PublicRoomInfo, ReadReceiptInfo };
 
 /**
  * Get all joined rooms.
@@ -52,6 +52,14 @@ export async function getRoomMembers(roomId: string): Promise<RoomMember[]> {
  */
 export async function markRoomRead(roomId: string): Promise<void> {
   return invoke<void>("mark_room_read", { roomId });
+}
+
+/**
+ * Get other members' latest public read positions for a room (initial seed for
+ * the read-receipt avatars). Matches the Rust `get_room_receipts` command.
+ */
+export async function getRoomReceipts(roomId: string): Promise<ReadReceiptInfo[]> {
+  return invoke<ReadReceiptInfo[]>("get_room_receipts", { roomId });
 }
 
 /**

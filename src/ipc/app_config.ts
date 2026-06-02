@@ -10,6 +10,11 @@ export interface GeneralConfig {
   icon_radius: string;
   /** Enable vim-style modal editing. When false, the app stays in Insert mode permanently. */
   vim_mode: boolean;
+  /** Send public read receipts (m.read) so others see your read position. When
+   *  false, only a private receipt is sent (unread counts still clear). */
+  send_read_receipts: boolean;
+  /** Show other users' read-receipt avatars in the timeline. */
+  show_read_receipts: boolean;
 }
 
 export interface SyncConfig {
@@ -58,7 +63,7 @@ export interface AppConfig {
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
-  general: { theme: "phosphor", notifications: true, confirm_redact: true, icon_radius: "50%", vim_mode: true },
+  general: { theme: "phosphor", notifications: true, confirm_redact: true, icon_radius: "50%", vim_mode: true, send_read_receipts: true, show_read_receipts: true },
   sync: { sliding_sync: true, timeline_limit: 50 },
   media: { auto_load_images: true, max_image_width: 600, max_image_height: 400, sticker_max_size: 256, cache_size_mb: 500 },
   gif: { provider: "tenor", api_key: "", rating: "pg", cache_results: true },

@@ -10,7 +10,7 @@ use crate::{
         emoji::EmojiPack,
         media::MediaDownload,
         reactions::ReactionGroup,
-        rooms::{CreateRoomOptions, PinnedEventInfo, PublicRoomInfo, RoomInfo, RoomMemberInfo},
+        rooms::{CreateRoomOptions, PinnedEventInfo, PublicRoomInfo, ReadReceiptInfo, RoomInfo, RoomMemberInfo},
         spaces::SpaceChild,
         threads::ThreadRoot,
         timeline::{TimelineEvent, TimelinePage},
@@ -212,10 +212,27 @@ pub async fn create_room(
 #[tauri::command]
 pub async fn mark_room_read(
     state: State<'_, MatrixState>,
+    config_state: State<'_, Mutex<AppConfig>>,
     room_id: String,
 ) -> Result<(), String> {
     let client = get_client(&state)?;
-    crate::matrix::rooms::mark_room_read(&client, &room_id).await
+    // Respect the "send my read receipts" privacy setting; default to sending
+    // the public receipt if the config lock is somehow unavailable.
+    let send_public = config_state
+        .lock()
+        .map(|c| c.general.send_read_receipts)
+        .unwrap_or(true);
+    crate::matrix::rooms::mark_room_read(&client, &room_id, send_public).await
+}
+
+/// Load other members' latest public read positions for a room (initial seed).
+#[tauri::command]
+pub async fn get_room_receipts(
+    state: State<'_, MatrixState>,
+    room_id: String,
+) -> Result<Vec<ReadReceiptInfo>, String> {
+    let client = get_client(&state)?;
+    crate::matrix::rooms::get_room_receipts(&client, &room_id).await
 }
 
 /// Get pinned events for a room.

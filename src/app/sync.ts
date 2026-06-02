@@ -48,6 +48,13 @@ interface SyncRedactionPayload {
   redacted_event_id: string;
 }
 
+interface SyncReadReceiptPayload {
+  room_id: string;
+  event_id: string;
+  user_id: string;
+  ts: number | null;
+}
+
 interface RoomKeysReceivedPayload {
   room_ids: string[];
 }
@@ -341,6 +348,22 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     }
   );
 
+  // ── quark://sync/read_receipt ─────────────────────────────────────────────
+  // Another user's read position changed. Move their receipt avatar to the new
+  // message (the backend already filters out our own user and private receipts).
+  const unlistenReadReceipt = await tauriListen<SyncReadReceiptPayload>(
+    "quark://sync/read_receipt",
+    (payload) => {
+      if (payload.room_id !== AppState.get("currentRoomId")) return;
+      if (!AppState.get("showReadReceipts")) return;
+      if (payload.user_id === AppState.get("ownUserId")) return;
+      timeline.setReadReceipt(payload.user_id, payload.event_id, payload.ts);
+      // Download the user's avatar if we don't already have it cached, so the
+      // chip resolves from its initial to a real avatar.
+      ensureSenderAvatarDownloaded(payload.user_id, timeline);
+    }
+  );
+
   // ── quark://sync/room_keys ────────────────────────────────────────────────
   // New room keys arrived (e.g. after verification). If we're showing one of the
   // affected rooms, reload it so stale "unable to decrypt" events re-decrypt.
@@ -366,6 +389,7 @@ export async function startSync(components: AppComponents): Promise<() => void> 
     unlistenReaction,
     unlistenVerification,
     unlistenRedaction,
+    unlistenReadReceipt,
     unlistenRoomKeys,
   ];
 

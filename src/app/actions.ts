@@ -41,6 +41,7 @@ export {
   applyLocalRoomMeta,
   openOrCreateDm,
   loadRoomMembers,
+  applyReadReceiptVisibility,
 } from "./actions/rooms.js";
 
 // Message composition & lifecycle.

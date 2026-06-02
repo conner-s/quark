@@ -35,6 +35,8 @@ export interface AppStateSnapshot {
   memberListVisible: boolean;
   /** When false, vim modal editing is disabled — the app stays in Insert mode. */
   vimMode: boolean;
+  /** When false, other users' read-receipt avatars are not rendered in the timeline. */
+  showReadReceipts: boolean;
   /** Active text-selection target, or null if not in text-select mode. */
   textSelectMode: TextSelectMode;
 }
@@ -84,6 +86,7 @@ class AppStateManager {
     threadRootEventId: null,
     memberListVisible: false,
     vimMode: true,
+    showReadReceipts: true,
     textSelectMode: null,
   };
 

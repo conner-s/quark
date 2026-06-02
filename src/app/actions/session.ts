@@ -19,9 +19,13 @@ import { getComponents } from "./context.js";
 import { refreshRooms, applyCacheConfig } from "./rooms.js";
 import { loadThemeFromConfig } from "./theme.js";
 
-/** Apply the in-memory cache budgets from config at session start (non-critical). */
-function _applyCacheConfig(): void {
-  void getAppConfig().then(applyCacheConfig).catch(() => { /* defaults stand */ });
+/** Apply persisted runtime preferences from config at session start: the
+ *  in-memory cache budgets and the read-receipt display setting (non-critical). */
+function _applyStartupConfig(): void {
+  void getAppConfig().then((cfg) => {
+    applyCacheConfig(cfg);
+    AppState.set("showReadReceipts", cfg.general.show_read_receipts);
+  }).catch(() => { /* defaults stand */ });
 }
 
 /** Fetch own profile and store userId + displayName in AppState. Non-critical. */
@@ -100,7 +104,7 @@ export async function login(homeserver: string, username: string, password: stri
 
     void _loadOwnProfile();
     await loadThemeFromConfig();
-    _applyCacheConfig();
+    _applyStartupConfig();
     await refreshRooms();
     // First-login race: the Rust sync loop is up but hasn't returned rooms yet.
     // Keep retrying in the background so the user doesn't have to relaunch.
@@ -130,7 +134,7 @@ export async function attemptSessionRestore(components: import("../../ui/App.js"
     showMainLayout(components);
     void _loadOwnProfile();
     await loadThemeFromConfig();
-    _applyCacheConfig();
+    _applyStartupConfig();
     await refreshRooms();
     // Persisted sync state usually makes getRooms() instant on restore, but if
     // the store hasn't hydrated yet (cold start) the first call can be empty —

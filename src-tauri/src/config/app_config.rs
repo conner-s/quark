@@ -25,6 +25,14 @@ pub struct GeneralConfig {
     /// When false, the app behaves like a standard text input — always in Insert mode.
     #[serde(default = "bool_true")]
     pub vim_mode: bool,
+    /// Send public read receipts (`m.read`) so other users see your read
+    /// position. When false, only a private receipt is sent (unread counts still
+    /// clear, but your position is not broadcast).
+    #[serde(default = "bool_true")]
+    pub send_read_receipts: bool,
+    /// Show other users' read receipts as shifting avatars in the timeline.
+    #[serde(default = "bool_true")]
+    pub show_read_receipts: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -148,7 +156,7 @@ fn default_timeline_rooms() -> u32 { 30 }
 
 impl Default for GeneralConfig {
     fn default() -> Self {
-        Self { theme: default_theme_name(), notifications: true, confirm_redact: true, icon_radius: default_icon_radius(), vim_mode: true }
+        Self { theme: default_theme_name(), notifications: true, confirm_redact: true, icon_radius: default_icon_radius(), vim_mode: true, send_read_receipts: true, show_read_receipts: true }
     }
 }
 

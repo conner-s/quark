@@ -2052,6 +2052,129 @@ img[data-mx-emoticon] {
   padding-right: 6rem;
 }
 
+/* ── Read receipts (Element-style shifting avatars) ──────────────────────────
+   A row of small overlapping avatars anchored to the bottom-right of the last
+   message each other user has read. State lives outside the DOM (see Timeline);
+   the container is position:absolute so it never perturbs message layout, and
+   pointer-events:none so it can't steal hover/clicks from the message. */
+.read-receipts {
+  position: absolute;
+  right: 8px;
+  bottom: 3px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  z-index: 3;            /* above body text, below the hover toolbar (z-index:10) */
+  pointer-events: auto;  /* receive hover so the group's reader-list card shows */
+  cursor: default;
+}
+
+/* Themed hover card listing every reader + time. Matches the popover vocabulary
+   used by the context menu (bg/border/shadow/fonts) for a consistent terminal
+   look, rather than the unstyled native `title` tooltip. */
+.read-receipts-tooltip {
+  position: fixed;
+  z-index: 10000;
+  background: var(--bg);
+  /* Same accent-tinted border a hovered message gets (.message--ungrouped:hover). */
+  border: var(--border-width) solid color-mix(in srgb, var(--border-color) 70%, var(--accent-primary));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  padding: 6px 8px;
+  max-width: 280px;
+  color: var(--fg);
+  font-size: calc(var(--font-size) - 1px);
+  pointer-events: none;  /* display only — never steal hover from the cluster */
+}
+
+.read-receipts-tooltip__title {
+  color: var(--msg-own);   /* matches .message-group__sender--own */
+  font-size: calc(var(--font-size) - 2px);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.read-receipts-tooltip__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0;
+}
+
+.read-receipts-tooltip__name {
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.read-receipts-tooltip__time {
+  margin-left: auto;
+  padding-left: 12px;
+  flex-shrink: 0;
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  white-space: nowrap;
+}
+
+/* Lift clear of the reaction chips when a message has both — the chips hang on
+   the bottom edge (translateY(50%)), so receipts sit just above them. */
+.message:has(.reaction-bar) .read-receipts {
+  bottom: 22px;
+}
+
+.read-receipt {
+  width: 14px;
+  height: 14px;
+  margin-left: -5px;     /* overlap, like Element */
+  border-radius: var(--icon-radius);
+  border: 1px solid var(--bg);   /* ring separates overlapping avatars */
+  overflow: hidden;
+  background: var(--bg);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.read-receipt:first-child {
+  margin-left: 0;
+}
+
+.read-receipt__avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.read-receipt__fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  line-height: 1;
+  color: var(--bg);      /* initial in the page background colour over the disc */
+  /* background colour set inline from JS (hashColor of the user ID) */
+}
+
+.read-receipts__overflow {
+  width: 14px;
+  height: 14px;
+  margin-left: -5px;     /* overlap the avatars, same as the chips */
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  padding-bottom: 3px;   /* nudge the ellipsis glyph to vertical centre */
+  border-radius: var(--icon-radius);
+  border: 1px solid var(--bg);
+  background: var(--surface-bright, var(--surface-dim));
+  color: var(--fg);
+}
+
 .reaction {
   display: inline-flex;
   align-items: center;

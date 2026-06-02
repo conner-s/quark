@@ -8,7 +8,7 @@ import { getCacheStats, clearMediaCache, getEventCacheSize, clearEventCache, get
 import type { CacheStats, EventCacheDiagnostics } from "../ipc/media.js";
 import { getAppConfig, setAppConfig } from "../ipc/app_config.js";
 import type { AppConfig } from "../ipc/app_config.js";
-import { loadTheme, applyCacheConfig } from "../app/actions.js";
+import { loadTheme, applyCacheConfig, applyReadReceiptVisibility } from "../app/actions.js";
 import { listCustomThemes } from "../ipc/config.js";
 import type { CustomThemeEntry } from "../ipc/config.js";
 import { AppState } from "../app/state.js";
@@ -249,6 +249,20 @@ export class SettingsDialog extends DialogBase {
       (v) => { draft = { ...draft, sync: { ...draft.sync, timeline_limit: v } }; },
     ));
 
+    section.appendChild(this._makeSectionTitle("Read receipts"));
+
+    section.appendChild(this._makeCheckbox(
+      "Send my read receipts (others see how far you've read)",
+      draft.general.send_read_receipts,
+      (v) => { draft = { ...draft, general: { ...draft.general, send_read_receipts: v } }; },
+    ));
+
+    section.appendChild(this._makeCheckbox(
+      "Show others' read receipts in the timeline",
+      draft.general.show_read_receipts,
+      (v) => { draft = { ...draft, general: { ...draft.general, show_read_receipts: v } }; },
+    ));
+
     // Help — the keybindings/help screen is otherwise only reachable via `?`
     // or `:help`, which mouse/touch users can't discover. Surface it here.
     section.appendChild(this._makeSectionTitle("Help"));
@@ -293,8 +307,12 @@ export class SettingsDialog extends DialogBase {
     actions.className = "settings-dialog__section settings-dialog__actions";
     actions.appendChild(this._makeSaveButton(async () => {
       await setAppConfig(draft);
-      // Apply vim mode change at runtime
+      // Apply runtime-visible changes immediately (the vim-mode state listener
+      // drives editor behaviour; read-receipt visibility re-seeds/clears here).
       AppState.set("vimMode", draft.general.vim_mode);
+      const receiptsChanged = draft.general.show_read_receipts !== cfg.general.show_read_receipts;
+      AppState.set("showReadReceipts", draft.general.show_read_receipts);
+      if (receiptsChanged) void applyReadReceiptVisibility();
     }));
     section.appendChild(actions);
   }

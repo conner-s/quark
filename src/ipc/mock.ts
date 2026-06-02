@@ -205,6 +205,21 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     }
     case "get_room_members":
       return MOCK_MEMBERS;
+    case "get_room_receipts": {
+      // Mock: spread a few members' read positions across the last two messages —
+      // three on the newest (to exercise the "2 avatars + …" overflow) and one
+      // on the previous message — so the feature is visible in browser/dev mode.
+      if (MOCK_TIMELINE.length === 0) return [];
+      const last = MOCK_TIMELINE[MOCK_TIMELINE.length - 1].event_id;
+      const prev = MOCK_TIMELINE[Math.max(0, MOCK_TIMELINE.length - 2)].event_id;
+      const now = Date.now();
+      return [
+        { user_id: "@alice:matrix.org", event_id: last, ts: now - 1000 },
+        { user_id: "@bob:matrix.org", event_id: last, ts: now - 2000 },
+        { user_id: "@carol:matrix.org", event_id: last, ts: now - 3000 },
+        { user_id: "@dave:matrix.org", event_id: prev, ts: now - 60000 },
+      ];
+    }
     case "send_message": {
       const body = args?.body as string ?? "";
       const ev = mockEvent("@you:matrix.org", body, 0);
