@@ -3,7 +3,7 @@
 import { AppState } from "./state.js";
 import type { AppComponents } from "../ui/App.js";
 import type { TimelineEvent, RoomInfo } from "../ipc/types.js";
-import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage, resolveSenderAvatarUrl, ensureSenderAvatarDownloaded, applyIncomingRedaction, stripReplyFallback, isInContextView, reloadCurrentRoomTimeline, appendRoomTimelineCache } from "./actions.js";
+import { refreshRooms, selectRoom, resolveDisplayName, consumeOwnSentEvent, applyIncomingReaction, resolveInlineEmojiForTimeline, handleIncomingVerificationRequest, downloadSyncMessageImage, resolveSenderAvatarUrl, ensureSenderAvatarDownloaded, applyIncomingRedaction, stripReplyFallback, isInContextView, reloadCurrentRoomTimeline, refreshPinnedMessagesIfOpen, appendRoomTimelineCache } from "./actions.js";
 import { showToast } from "../ui/NotificationToast.js";
 import { handleIncomingMessage } from "./notifications.js";
 
@@ -350,6 +350,9 @@ export async function startSync(components: AppComponents): Promise<() => void> 
       const currentRoom = AppState.get("currentRoomId");
       if (currentRoom && payload.room_ids.includes(currentRoom)) {
         void reloadCurrentRoomTimeline();
+        // The pinned dialog, if open, holds its own (possibly UTD) snapshot —
+        // refresh it too so newly-decryptable pins update in place.
+        void refreshPinnedMessagesIfOpen();
       }
     }
   );

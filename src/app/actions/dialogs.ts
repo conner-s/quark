@@ -32,6 +32,16 @@ export async function openPinnedMessages(): Promise<void> {
 }
 
 /**
+ * Re-fetch and re-render the pinned messages dialog if it's currently open.
+ * Called when new room keys arrive so previously-undecryptable pins refresh
+ * to plaintext without the user having to close and reopen the dialog.
+ */
+export async function refreshPinnedMessagesIfOpen(): Promise<void> {
+  const { pinnedMessagesDialog } = getComponents();
+  if (pinnedMessagesDialog.isVisible()) await pinnedMessagesDialog.show();
+}
+
+/**
  * Open the message search dialog for the current room, optionally seeded with
  * an initial query.
  */

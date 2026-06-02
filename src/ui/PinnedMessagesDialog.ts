@@ -88,6 +88,7 @@ export class PinnedMessagesDialog extends DialogBase {
 
       const bodyEl = document.createElement("div");
       bodyEl.className = "pinned-dialog__body";
+      if (ev.encrypted) bodyEl.classList.add("pinned-dialog__body--utd");
       bodyEl.textContent = ev.body;
       item.appendChild(bodyEl);
 

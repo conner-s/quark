@@ -79,6 +79,7 @@ export {
   openSettings,
   openRoomInfo,
   openPinnedMessages,
+  refreshPinnedMessagesIfOpen,
   openSearch,
   openRoomDirectory,
   openRoomSettings,

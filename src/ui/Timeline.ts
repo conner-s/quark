@@ -1336,6 +1336,22 @@ export class Timeline {
   }
 
   /**
+   * True when the rendered content is taller than the viewport by more than
+   * `minExtraPx`, i.e. there is room to scroll. Used after a jump to detect the
+   * deadlock where a short context window doesn't overflow the viewport — with
+   * no overflow no scroll event ever fires, so edge-triggered pagination can
+   * never load the surrounding history. The caller paginates until this is true.
+   */
+  hasScrollableOverflow(minExtraPx = 0): boolean {
+    return this._el.scrollHeight - this._el.clientHeight > minExtraPx;
+  }
+
+  /** Height of the scroll viewport in px. */
+  viewportHeight(): number {
+    return this._el.clientHeight;
+  }
+
+  /**
    * Set the number of unread messages at the tail of the next `setMessages()` call.
    * A `── NEW ──` separator will be inserted before those messages, and the
    * timeline will scroll to the separator instead of the bottom.

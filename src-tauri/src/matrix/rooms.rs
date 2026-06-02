@@ -345,6 +345,10 @@ pub struct PinnedEventInfo {
     pub body: String,
     pub formatted_body: Option<String>,
     pub timestamp: u64,
+    /// True when the pinned event couldn't be decrypted (keys not yet
+    /// available). `body` carries the "🔒 unable to decrypt" placeholder so the
+    /// row isn't blank; the frontend dims it and re-fetches when keys arrive.
+    pub encrypted: bool,
 }
 
 /// Fetch the pinned events for a room.
@@ -405,15 +409,24 @@ pub async fn get_pinned_events(client: &Client, room_id: &str) -> Result<Vec<Pin
             };
             let sender = json_val.get("sender").and_then(|s| s.as_str()).unwrap_or("").to_string();
             let ts = json_val.get("origin_server_ts").and_then(|t| t.as_u64()).unwrap_or(0);
+            // An undecryptable event stays as m.room.encrypted (no decrypted
+            // content/body); flag it and substitute the UTD placeholder so the
+            // dialog shows something rather than a blank row.
+            let encrypted = json_val.get("type").and_then(|t| t.as_str()) == Some("m.room.encrypted");
             let content = json_val.get("content").unwrap_or(&Value::Null);
-            let body = content.get("body").and_then(|b| b.as_str()).unwrap_or("").to_string();
             let formatted_body = content.get("formatted_body").and_then(|b| b.as_str()).map(str::to_string);
+            let body = if encrypted {
+                "\u{1f512} unable to decrypt".to_string()
+            } else {
+                content.get("body").and_then(|b| b.as_str()).unwrap_or("").to_string()
+            };
             Some(PinnedEventInfo {
                 event_id: event_id_str,
                 sender,
                 body,
                 formatted_body,
                 timestamp: ts,
+                encrypted,
             })
         });
     }

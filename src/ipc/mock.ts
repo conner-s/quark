@@ -454,9 +454,9 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
 
     case "get_pinned_events":
       return [
-        { event_id: "$pin1:matrix.org", sender: "@alice:matrix.org", body: "Check out the new release notes!", formatted_body: null, timestamp: Date.now() - 24 * 60 * 60_000 },
-        { event_id: "$pin2:matrix.org", sender: "@bob:matrix.org", body: "Server maintenance scheduled for Sunday 02:00 UTC.", formatted_body: null, timestamp: Date.now() - 3 * 24 * 60 * 60_000 },
-        { event_id: "$pin3:matrix.org", sender: "@alice:matrix.org", body: "Welcome to #general! Please read the rules in #announcements.", formatted_body: null, timestamp: Date.now() - 7 * 24 * 60 * 60_000 },
+        { event_id: "$pin1:matrix.org", sender: "@alice:matrix.org", body: "Check out the new release notes!", formatted_body: null, timestamp: Date.now() - 24 * 60 * 60_000, encrypted: false },
+        { event_id: "$pin2:matrix.org", sender: "@bob:matrix.org", body: "Server maintenance scheduled for Sunday 02:00 UTC.", formatted_body: null, timestamp: Date.now() - 3 * 24 * 60 * 60_000, encrypted: false },
+        { event_id: "$pin3:matrix.org", sender: "@alice:matrix.org", body: "Welcome to #general! Please read the rules in #announcements.", formatted_body: null, timestamp: Date.now() - 7 * 24 * 60 * 60_000, encrypted: false },
       ];
     case "search_room_directory": {
       const filterStr = ((args?.filter as string | null) ?? "").toLowerCase();

@@ -4746,6 +4746,11 @@ body.quark-mobile .profile-edit-dialog__panel {
   -webkit-box-orient: vertical;
 }
 
+.pinned-dialog__body--utd {
+  font-style: italic;
+  opacity: 0.5;
+}
+
 .pinned-dialog__footer {
   padding: 4px 10px;
   border-top: var(--border-width) solid var(--border-color);

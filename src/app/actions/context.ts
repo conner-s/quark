@@ -83,6 +83,10 @@ export const paginationState = {
   reachedStart: false,
   /** True when the timeline is showing a context window around a jumped-to message, not the live end. */
   inContextView: false,
+  /** Event ID the context window is centered on (the jumped-to message). Set
+   *  when entering context view; used to re-fetch the same window when room
+   *  keys arrive so undecryptable events in it can re-decrypt. Null when live. */
+  contextFocusEventId: null as string | null,
   /** Prevents concurrent backward "load more" fetches. */
   paginationLoading: false,
   /** Prevents concurrent forward "load more" fetches. */

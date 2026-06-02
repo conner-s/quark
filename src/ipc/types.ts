@@ -281,6 +281,9 @@ export interface PinnedEventInfo {
   body: string;
   formatted_body: string | null;
   timestamp: number;
+  /** True when the pinned event couldn't be decrypted; `body` holds the
+   *  "🔒 unable to decrypt" placeholder and the row is dimmed. */
+  encrypted: boolean;
 }
 
 // ─── Room Directory ───────────────────────────────────────────────────────────

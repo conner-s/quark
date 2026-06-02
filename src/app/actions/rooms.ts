@@ -22,7 +22,7 @@ import {
 
 import { getPseudoSpace, sortByRecency } from "../pseudo_spaces.js";
 
-import type { RoomMember, TimelineEvent } from "../../ipc/types.js";
+import type { RoomMember, TimelineEvent, EventContextPage } from "../../ipc/types.js";
 import type { AppConfig } from "../../ipc/app_config.js";
 import type { RoomSection } from "../../ui/RoomList.js";
 import type { SpaceItem } from "../../ui/SpaceStrip.js";
@@ -177,6 +177,7 @@ export async function selectRoom(roomId: string): Promise<void> {
   paginationState.nextBatch = null;
   paginationState.reachedStart = false;
   paginationState.inContextView = false;
+  paginationState.contextFocusEventId = null;
   paginationState.paginationLoading = false;
   paginationState.paginationLoadingForward = false;
   roomList.setActiveRoom(roomId);
@@ -559,35 +560,93 @@ export async function jumpToMessage(eventId: string): Promise<void> {
   // Fetch context around the target event and rebuild the timeline
   try {
     const ctx = await getEventContext(roomId, eventId, 25);
-
-    paginationState.prevBatch = ctx.prev_batch;
-    paginationState.nextBatch = ctx.next_batch;
-    paginationState.inContextView = ctx.next_batch !== null;
-
-    AppState.set("currentTimeline", ctx.events);
-    const threadRootCounts = _buildThreadRootCounts(ctx.events);
-    const mainEvents = _applyEdits(ctx.events).filter((e) => !e.thread_root);
-    const messages = mainEvents.map((e) => timelineEventToMessage(e, ctx.events, threadRootCounts));
-    // skipAutoScroll prevents setMessages from scheduling _scrollToBottom calls
-    // that would override the jumpToMessage scroll that follows.
-    timeline.setMessages(messages, { skipAutoScroll: true });
-    timeline.setContextView(paginationState.inContextView);
-    requestAnimationFrame(() => {
-      timeline.scrollToMessage(eventId);
-    });
-
-    _downloadMessageImages(ctx.events, timeline);
-    _downloadInlineEmoji(timeline);
-    void _downloadReactionEmoji(ctx.events, timeline);
-    const seenSenders = new Set<string>();
-    for (const e of ctx.events) {
-      if (!seenSenders.has(e.sender)) {
-        seenSenders.add(e.sender);
-        ensureSenderAvatarDownloaded(e.sender, timeline);
-      }
-    }
+    paginationState.contextFocusEventId = eventId;
+    _renderContextPage(ctx, eventId, { scrollToFocus: true });
   } catch (err) {
     showError(`Failed to load message: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Render an event-context page into the timeline and set the matching
+ * pagination state. Shared by `jumpToMessage` (initial jump) and
+ * `reloadCurrentRoomTimeline` (re-fetch when keys arrive).
+ *
+ * - `scrollToFocus`: scroll to the focused event after render (initial jump).
+ *   When false, scroll position is preserved (silent refresh in place).
+ */
+function _renderContextPage(
+  ctx: EventContextPage,
+  focusEventId: string,
+  opts: { scrollToFocus: boolean },
+): void {
+  const { timeline } = getComponents();
+
+  paginationState.prevBatch = ctx.prev_batch;
+  paginationState.nextBatch = ctx.next_batch;
+  paginationState.inContextView = ctx.next_batch !== null;
+
+  AppState.set("currentTimeline", ctx.events);
+  const threadRootCounts = _buildThreadRootCounts(ctx.events);
+  const mainEvents = _applyEdits(ctx.events).filter((e) => !e.thread_root);
+  const messages = mainEvents.map((e) => timelineEventToMessage(e, ctx.events, threadRootCounts));
+  if (opts.scrollToFocus) {
+    // skipAutoScroll prevents setMessages from scheduling _scrollToBottom calls
+    // that would override the scrollToMessage that follows.
+    timeline.setMessages(messages, { skipAutoScroll: true });
+    requestAnimationFrame(() => {
+      timeline.scrollToMessage(focusEventId);
+    });
+  } else {
+    timeline.setMessages(messages, { preserveScroll: true });
+  }
+  timeline.setContextView(paginationState.inContextView);
+
+  _downloadMessageImages(ctx.events, timeline);
+  _downloadInlineEmoji(timeline);
+  void _downloadReactionEmoji(ctx.events, timeline);
+  const seenSenders = new Set<string>();
+  for (const e of ctx.events) {
+    if (!seenSenders.has(e.sender)) {
+      seenSenders.add(e.sender);
+      ensureSenderAvatarDownloaded(e.sender, timeline);
+    }
+  }
+
+  // A context window is only ~25 events; if it doesn't fill the viewport there
+  // is nothing to scroll, so the edge-triggered pagination can never fire and
+  // the user is stuck. Proactively page outward until the viewport overflows.
+  void _fillContextViewport();
+}
+
+/**
+ * Paginate the context window outward (newer, then older) until the rendered
+ * content overflows the viewport with a comfortable buffer, or history is
+ * exhausted in both directions. Breaks the "can't scroll, so nothing loads,
+ * so can't scroll" deadlock after a jump. Idempotent and self-guarding: the
+ * underlying load functions no-op when already loading or at a boundary.
+ */
+async function _fillContextViewport(): Promise<void> {
+  const { timeline } = getComponents();
+  const roomId = AppState.get("currentRoomId");
+  // One viewport of extra scroll room above + below the focus is plenty, and
+  // the eager prefetch margins take over from there as the user scrolls.
+  const targetExtra = () => timeline.viewportHeight();
+  const MAX_FILL_PASSES = 8;
+
+  for (let pass = 0; pass < MAX_FILL_PASSES; pass++) {
+    if (roomId !== AppState.get("currentRoomId")) return;
+    if (timeline.hasScrollableOverflow(targetExtra())) return;
+
+    const before = AppState.get("currentTimeline").length;
+    // Forward first so a jump near the live tail becomes scrollable downward,
+    // then backward for older history. Each call loads roughly one page.
+    await loadMoreMessagesForward();
+    if (timeline.hasScrollableOverflow(targetExtra())) return;
+    await loadMoreMessages();
+
+    // Neither direction grew the buffer → history exhausted both ways.
+    if (AppState.get("currentTimeline").length === before) return;
   }
 }
 
@@ -613,6 +672,7 @@ export async function jumpToLatest(): Promise<void> {
     paginationState.nextBatch = null;
     paginationState.reachedStart = page.reached_start;
     paginationState.inContextView = false;
+    paginationState.contextFocusEventId = null;
 
     AppState.set("currentTimeline", page.events);
     _putRoomTimeline(roomId, page.events, page.reached_start);
@@ -632,18 +692,44 @@ export async function jumpToLatest(): Promise<void> {
 }
 
 /**
- * Re-load the current room's timeline from the event cache and re-render in
- * place (preserving scroll). Called when new room keys arrive (post-verification
- * / key-backup restore) so stale "🔒 unable to decrypt" placeholders refresh to
- * plaintext — the backend re-decrypts with the now-available keys on load.
+ * Re-load the current room's timeline and re-render in place (preserving
+ * scroll). Called when new room keys arrive (post-verification / key-backup
+ * restore) so stale "🔒 unable to decrypt" placeholders refresh to plaintext —
+ * the backend re-decrypts with the now-available keys on (re-)fetch.
  *
- * No-op while in context view: that path uses raw `room.messages()`, which
- * already decrypts fresh, and reloading would yank the user out of the window.
+ * In context view the window was fetched via `room.event_with_context()` using
+ * only the keys available at jump time; if that was before keys arrived, every
+ * event is stuck on the UTD placeholder. So re-fetch the same context window
+ * (centered on `contextFocusEventId`) and re-render preserving scroll, rather
+ * than reloading the live tail (which would yank the user out of the window).
+ *
+ * Guarded on the currently-rendered timeline actually containing an
+ * undecryptable event: room keys arrive frequently in a busy E2EE room, and an
+ * unconditional rebuild on every receipt would repeatedly reset the user's
+ * scroll position (and discard in-context pagination) — felt as the scroll
+ * "locking up". A reload only changes anything when something is still UTD.
  */
 export async function reloadCurrentRoomTimeline(): Promise<void> {
-  if (isInContextView()) return;
   const roomId = AppState.get("currentRoomId");
   if (!roomId) return;
+
+  // Nothing undecryptable on screen → a rebuild would be pure churn. Skip it.
+  const currentEvents = AppState.get("currentTimeline");
+  if (!currentEvents.some((e) => e.msg_type === "m.room.encrypted")) return;
+
+  if (isInContextView()) {
+    const focusEventId = paginationState.contextFocusEventId;
+    if (!focusEventId) return;
+    let ctx;
+    try {
+      ctx = await getEventContext(roomId, focusEventId, 25);
+    } catch {
+      return; // non-fatal: leave the current render in place
+    }
+    if (roomId !== AppState.get("currentRoomId")) return;
+    _renderContextPage(ctx, focusEventId, { scrollToFocus: false });
+    return;
+  }
 
   const { timeline } = getComponents();
   let page;
