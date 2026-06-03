@@ -50,6 +50,10 @@ pub struct MediaConfig {
     /// Automatically display inline images in the timeline.
     #[serde(default = "bool_true")]
     pub auto_load_images: bool,
+    /// Play videos inline in the timeline; when false, clicking a video opens
+    /// it in the system's external player instead.
+    #[serde(default = "bool_true")]
+    pub inline_video: bool,
     /// Maximum rendered width (px) for inline images.
     #[serde(default = "default_max_image_width")]
     pub max_image_width: u32,
@@ -170,6 +174,7 @@ impl Default for MediaConfig {
     fn default() -> Self {
         Self {
             auto_load_images: true,
+            inline_video: true,
             max_image_width: default_max_image_width(),
             max_image_height: default_max_image_height(),
             sticker_max_size: default_sticker_max_size(),

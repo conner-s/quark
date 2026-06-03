@@ -39,6 +39,7 @@ export function applySetOptions(cfg: AppConfig, sets: SetOption[]): AppConfig {
       case "timeline_limit":  if (typeof value === "number")  updated.sync.timeline_limit = value; break;
       // media
       case "auto_load_images":  if (typeof value === "boolean") updated.media.auto_load_images = value; break;
+      case "inline_video":      if (typeof value === "boolean") updated.media.inline_video = value; break;
       case "max_image_width":   if (typeof value === "number")  updated.media.max_image_width = value; break;
       case "max_image_height":  if (typeof value === "number")  updated.media.max_image_height = value; break;
       case "sticker_max_size":  if (typeof value === "number")  updated.media.sticker_max_size = value; break;

@@ -7,6 +7,7 @@ import {
   serveMedia,
   saveMediaToTemp,
   getPlatform,
+  getAppConfig,
   saveMediaToPath,
   getDefaultSaveDir,
   openMediaExternally,
@@ -196,22 +197,29 @@ export function setupMessageActionHandlers(): void {
 
     const { timeline } = getComponents();
 
-    // Resolve the inline-video URL per platform, then play it. Linux streams via
-    // the loopback HTTP server (seekable; WebKitGTK can't feed the asset protocol
-    // to <video>); macOS/Windows/iOS use the asset protocol natively. Either way,
-    // on error — including a codec WebKit can't decode — fall back to external.
-    void platformOnce()
-      .then((platform) =>
-        platform === "linux"
-          ? serveMedia(mxcUrl, encryptionInfo, mimeType, filename)
-          : saveMediaToTemp(mxcUrl, encryptionInfo, filename, mimeType).then(convertFileSrc),
-      )
-      .then((url) => {
-        stopLoading();
-        timeline.showInlineVideo(eventId, url, (err) => {
-          if (err) console.warn("[video] inline playback failed, opening externally:", err);
-          void openExternally();
-        });
+    // Respect the "Play videos inline" setting; when off, go straight to the
+    // external player. Read fresh (cheap, in-memory) so toggling takes effect
+    // immediately. Otherwise resolve the inline-video URL per platform: Linux
+    // streams via the loopback HTTP server (seekable; WebKitGTK can't feed the
+    // asset protocol to <video>); macOS/Windows/iOS use the asset protocol
+    // natively. On any error — including a codec WebKit can't decode — fall back
+    // to the external player.
+    void getAppConfig()
+      .then((cfg) => {
+        if (!cfg.media.inline_video) return openExternally().finally(stopLoading);
+        return platformOnce()
+          .then((platform) =>
+            platform === "linux"
+              ? serveMedia(mxcUrl, encryptionInfo, mimeType, filename)
+              : saveMediaToTemp(mxcUrl, encryptionInfo, filename, mimeType).then(convertFileSrc),
+          )
+          .then((url) => {
+            stopLoading();
+            timeline.showInlineVideo(eventId, url, (err) => {
+              if (err) console.warn("[video] inline playback failed, opening externally:", err);
+              void openExternally();
+            });
+          });
       })
       .catch((err) => {
         stopLoading();

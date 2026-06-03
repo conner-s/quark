@@ -371,6 +371,14 @@ export class SettingsDialog extends DialogBase {
       (v) => { draft = { ...draft, media: { ...draft.media, sticker_max_size: v } }; },
     ));
 
+    section.appendChild(this._makeSectionTitle("Video"));
+
+    section.appendChild(this._makeCheckbox(
+      "Play videos inline",
+      draft.media.inline_video,
+      (v) => { draft = { ...draft, media: { ...draft.media, inline_video: v } }; },
+    ));
+
     section.appendChild(this._makeSectionTitle("Cache"));
 
     // Cache stats (read-only)

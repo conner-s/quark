@@ -490,7 +490,7 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return {
         general: { theme: "phosphor", notifications: true, confirm_redact: true, icon_radius: "50%", vim_mode: true },
         sync: { sliding_sync: true, timeline_limit: 50 },
-        media: { auto_load_images: true, max_image_width: 600, max_image_height: 400, sticker_max_size: 256, cache_size_mb: 500 },
+        media: { auto_load_images: true, inline_video: true, max_image_width: 600, max_image_height: 400, sticker_max_size: 256, cache_size_mb: 500 },
         gif: { provider: "tenor", api_key: "", rating: "pg", cache_results: true },
         emoji: { shortcode_autocomplete: true, autocomplete_min_chars: 2 },
         cache: { image_memory_mb: 150, timeline_rooms: 30 },
