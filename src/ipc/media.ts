@@ -153,15 +153,42 @@ export async function sendVideo(
 
 /**
  * Download media to a temp file on disk and return the absolute path.
+ *
+ * `mimeType` should be the event's declared mimetype (`info.mimetype`); the
+ * backend uses it to pick a correct file extension (the sniffed download mime
+ * can't recognise webm/mkv), which Tauri's asset protocol relies on to serve
+ * the right Content-Type for inline `<video>` streaming.
  */
 export async function saveMediaToTemp(
   mxcUrl: string,
   encryptionInfo?: string | null,
   filename?: string | null,
+  mimeType?: string | null,
 ): Promise<string> {
   return invoke<string>("save_media_to_temp", {
     mxcUrl,
     encryptionInfo: encryptionInfo ?? null,
+    filename: filename ?? null,
+    mimeType: mimeType ?? null,
+  });
+}
+
+/**
+ * Download a video to a temp file and return a loopback HTTP URL
+ * (`http://127.0.0.1:<port>/<token>/<name>`) that streams it with Range
+ * support — the seekable transport for inline `<video>` playback. `mimeType`
+ * is the event's declared mimetype, used to pick the correct file extension.
+ */
+export async function serveMedia(
+  mxcUrl: string,
+  encryptionInfo?: string | null,
+  mimeType?: string | null,
+  filename?: string | null,
+): Promise<string> {
+  return invoke<string>("serve_media", {
+    mxcUrl,
+    encryptionInfo: encryptionInfo ?? null,
+    mimeType: mimeType ?? null,
     filename: filename ?? null,
   });
 }
@@ -190,6 +217,15 @@ export async function saveMediaToPath(
  */
 export async function getDefaultSaveDir(): Promise<string> {
   return invoke<string>("get_default_save_dir");
+}
+
+/**
+ * The backend's compile-time OS ("linux", "macos", "windows", "ios", "android").
+ * Used to choose the inline-video transport (loopback server on Linux, asset
+ * protocol elsewhere).
+ */
+export async function getPlatform(): Promise<string> {
+  return invoke<string>("get_platform");
 }
 
 /**

@@ -4,6 +4,7 @@ pub mod events;
 pub mod gif;
 pub mod matrix;
 pub mod media_cache;
+pub mod media_server;
 pub mod notifications;
 
 use matrix::client::{MatrixState, PaginationLock, SearchState, SyncState, TimelineTokens};
@@ -14,6 +15,11 @@ use tauri::Manager;
 /// Tauri managed state for the media cache.
 pub struct CacheState(pub Arc<MediaCache>);
 
+/// Tauri managed state for the loopback media-streaming server used by inline
+/// video. `None` if the server failed to bind; callers then fall back to the
+/// external player.
+pub struct MediaServerState(pub Option<Arc<media_server::MediaServer>>);
+
 /// Resolved on-disk locations. Populated in `.setup()` so the values come from
 /// Tauri's per-platform path resolver — important on Android where the
 /// `directories` crate doesn't return a writable path.
@@ -23,6 +29,24 @@ pub struct Paths {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // WebKitGTK video-playback workarounds for Linux/Mesa. Must be set before
+    // WebKit/GTK initialises, while the process is still single-threaded — so
+    // this is the first thing we do. Harmless on non-Linux targets (cfg guard).
+    #[cfg(target_os = "linux")]
+    {
+        // The DMA-BUF renderer presents <video> frames incorrectly on many
+        // setups (frames lag behind audio, then render solid green); disabling
+        // it makes WebKit fall back to a renderer that displays video correctly.
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        // Hardware video decoders (VA-API / NVDEC) in WebKit's GStreamer pipeline
+        // corrupt frames on seek/replay; derank them to NONE so the reliable
+        // software decoders (avdec_*, from gst-libav) handle playback instead.
+        std::env::set_var(
+            "GST_PLUGIN_FEATURE_RANK",
+            "vah264dec:NONE,vah265dec:NONE,vavp8dec:NONE,vavp9dec:NONE,vaav1dec:NONE,vaapih264dec:NONE,vaapih265dec:NONE,vaapivp8dec:NONE,vaapivp9dec:NONE,nvh264dec:NONE,nvh265dec:NONE,nvvp8dec:NONE,nvvp9dec:NONE,nvav1dec:NONE",
+        );
+    }
+
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
@@ -45,6 +69,19 @@ pub fn run() {
     )
     .expect("Could not create initial media cache");
 
+    // Loopback HTTP server that streams decrypted media to inline <video> with
+    // Range support (seekable, low memory), serving the temp dir that
+    // `write_media_to_temp` writes to. Only Linux/WebKitGTK needs it — other
+    // platforms stream video via the asset protocol — so we don't bind an unused
+    // socket elsewhere. If it can't bind, video falls back to the external player.
+    let media_server = if cfg!(target_os = "linux") {
+        media_server::MediaServer::start(std::env::temp_dir())
+            .map_err(|e| tracing::warn!("media server failed to start: {e}"))
+            .ok()
+    } else {
+        None
+    };
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
@@ -57,6 +94,7 @@ pub fn run() {
         .manage(PaginationLock::default())
         .manage(TimelineTokens::default())
         .manage(CacheState(Arc::new(initial_cache)))
+        .manage(MediaServerState(media_server))
         .manage(Mutex::new(config::app_config::AppConfig::default()))
         .manage(Mutex::new(notifications::NotificationConfig::default()))
         .invoke_handler(tauri::generate_handler![
@@ -111,8 +149,10 @@ pub fn run() {
             // Media
             commands::download_media,
             commands::save_media_to_temp,
+            commands::serve_media,
             commands::save_media_to_path,
             commands::get_default_save_dir,
+            commands::get_platform,
             commands::open_media_externally,
             commands::upload_media,
             commands::send_pasted_image,
@@ -240,6 +280,19 @@ pub fn run() {
             }
 
             app.manage(Paths { config_dir });
+
+            // Allow the asset protocol to read the temp dir, where decrypted
+            // media is written for inline <video> streaming (the frontend turns
+            // these paths into asset URLs via `convertFileSrc`). The static
+            // `assetProtocol.scope` in tauri.conf.json covers `$TEMP`; this also
+            // registers the resolved $TMPDIR in case it differs from Tauri's
+            // `$TEMP` expansion. recursive=false → the dir's direct files only.
+            if let Err(e) = app
+                .asset_protocol_scope()
+                .allow_directory(std::env::temp_dir(), false)
+            {
+                tracing::warn!("Failed to allow temp dir in asset scope: {e}");
+            }
 
             let window = app.get_webview_window("main")
                 .expect("no main window found");

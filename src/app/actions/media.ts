@@ -4,7 +4,9 @@
 import { AppState } from "../state.js";
 
 import {
-  downloadMedia,
+  serveMedia,
+  saveMediaToTemp,
+  getPlatform,
   saveMediaToPath,
   getDefaultSaveDir,
   openMediaExternally,
@@ -12,6 +14,8 @@ import {
   sendFile,
   sendVideo,
 } from "../../ipc/index.js";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { isTauri } from "../../ipc/mock.js";
 
 import { showProgressToast, showError, showSuccess } from "../../ui/NotificationToast.js";
 import { promptSaveFilePath } from "../../ui/SaveFileDialog.js";
@@ -21,6 +25,25 @@ import { openQuickReactPicker } from "./reactions.js";
 import { startReply } from "./messages.js";
 import { openThread } from "./threads.js";
 import { openProfileForUser } from "./profile.js";
+
+// Inline-video transport is platform-dependent (see the `get_platform` command):
+// on Linux/WebKitGTK the asset protocol can't feed a `<video>`, so we stream from
+// the loopback HTTP server; elsewhere the asset protocol works natively and
+// avoids loading `http://127.0.0.1` (and its ATS/loopback restrictions). Cached
+// after the first lookup.
+let _platform: Promise<string> | null = null;
+function platformOnce(): Promise<string> {
+  if (!_platform) {
+    _platform = getPlatform();
+    // Don't cache a failed lookup — evict so the next video retries. (Otherwise
+    // a one-off IPC failure would wrongly pin the transport for the whole
+    // session: on Linux that means always falling back to the external player.)
+    _platform.catch(() => {
+      _platform = null;
+    });
+  }
+  return _platform;
+}
 
 /**
  * Handle a pasted image from the clipboard.
@@ -152,39 +175,49 @@ export function setupMessageActionHandlers(): void {
       (e as CustomEvent<{ mxcUrl?: string; filename?: string; mimeType?: string; encryptionInfo?: string }>).detail;
     if (!mxcUrl) return;
 
-    // Determine the message element so we can call showInlineVideo later.
+    // Determine the message element so we can swap in the inline player.
     const target = e.target as HTMLElement | null;
     const msgEl = target?.closest<HTMLElement>("[data-message-id]");
     const eventId = msgEl?.dataset.messageId;
 
-    // canPlayType on a detached video element is safe — it only queries codec
-    // support, never initialises the GStreamer pipeline.
-    const testVideo = document.createElement("video");
-    const canPlay = mimeType
-      ? testVideo.canPlayType(mimeType) !== ""
-      : testVideo.canPlayType("video/mp4") !== "" || testVideo.canPlayType("video/webm") !== "";
-
     // Mark the affordance as loading so CSS can show a progress animation.
-    const affordanceEl = (e.target as HTMLElement | null)?.closest<HTMLElement>(".message__video-affordance");
+    const affordanceEl = target?.closest<HTMLElement>(".message__video-affordance");
     affordanceEl?.classList.add("message__video-affordance--loading");
     const stopLoading = () => affordanceEl?.classList.remove("message__video-affordance--loading");
 
-    if (canPlay && eventId) {
-      // Download and play inline
-      const { timeline } = getComponents();
-      void downloadMedia(mxcUrl, encryptionInfo).then((dl) => {
-        stopLoading();
-        const dataUrl = `data:${dl.mime_type};base64,${dl.data_base64}`;
-        timeline.showInlineVideo(eventId, dataUrl, dl.mime_type);
-      }).catch((err) => {
-        stopLoading();
-        console.error("[video] inline playback download failed:", err);
-        // Fall through to external player
-        void _openVideoExternally(mxcUrl, encryptionInfo, filename);
-      });
-    } else {
-      void _openVideoExternally(mxcUrl, encryptionInfo, filename).finally(stopLoading);
+    const openExternally = () => _openVideoExternally(mxcUrl, encryptionInfo, filename);
+
+    // Browser/mock mode can't stream local files via the asset protocol, and we
+    // need the message element to swap in the player — fall back to external.
+    if (!eventId || !isTauri()) {
+      void openExternally().finally(stopLoading);
+      return;
     }
+
+    const { timeline } = getComponents();
+
+    // Resolve the inline-video URL per platform, then play it. Linux streams via
+    // the loopback HTTP server (seekable; WebKitGTK can't feed the asset protocol
+    // to <video>); macOS/Windows/iOS use the asset protocol natively. Either way,
+    // on error — including a codec WebKit can't decode — fall back to external.
+    void platformOnce()
+      .then((platform) =>
+        platform === "linux"
+          ? serveMedia(mxcUrl, encryptionInfo, mimeType, filename)
+          : saveMediaToTemp(mxcUrl, encryptionInfo, filename, mimeType).then(convertFileSrc),
+      )
+      .then((url) => {
+        stopLoading();
+        timeline.showInlineVideo(eventId, url, (err) => {
+          if (err) console.warn("[video] inline playback failed, opening externally:", err);
+          void openExternally();
+        });
+      })
+      .catch((err) => {
+        stopLoading();
+        console.error("[video] inline playback failed:", err);
+        void openExternally();
+      });
   });
 }
 

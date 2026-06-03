@@ -17,7 +17,7 @@ use crate::{
     },
     media_cache::CacheStats,
     notifications::NotificationConfig,
-    CacheState,
+    CacheState, MediaServerState,
 };
 use matrix_sdk::Client;
 use serde::{Deserialize, Serialize};
@@ -602,12 +602,96 @@ pub async fn upload_media(
     crate::matrix::media::upload_file(&client, &file_path).await
 }
 
-/// Download a video/audio file from the homeserver and write it to a temporary
-/// file on disk, returning the absolute path. The caller (frontend) can then
-/// pass the path to `plugin:shell|open` to open it in the system player.
+/// Map a media MIME type to a file extension. Returns "bin" for unknown types.
+fn ext_for_media_mime(mime: &str) -> &'static str {
+    match mime {
+        "video/mp4" | "video/x-m4v" => "mp4",
+        "video/webm" => "webm",
+        "video/ogg" => "ogv",
+        "video/quicktime" => "mov",
+        "video/x-matroska" => "mkv",
+        "video/x-msvideo" => "avi",
+        "audio/mpeg" => "mp3",
+        "audio/ogg" => "ogg",
+        "audio/wav" => "wav",
+        "audio/flac" => "flac",
+        _ => "bin",
+    }
+}
+
+/// If `filename` already carries a recognised media extension, return it
+/// (lowercased) so it can be preserved verbatim.
+fn known_media_ext(filename: &str) -> Option<String> {
+    let ext = std::path::Path::new(filename)
+        .extension()
+        .and_then(|e| e.to_str())?
+        .to_ascii_lowercase();
+    const KNOWN: &[&str] = &[
+        "mp4", "m4v", "webm", "ogv", "mov", "mkv", "avi", "mp3", "ogg", "wav", "flac",
+    ];
+    KNOWN.contains(&ext.as_str()).then_some(ext)
+}
+
+/// Decode the downloaded media bytes and write them to a stable temp file whose
+/// extension reflects the real media type, returning the absolute path.
 ///
-/// A stable name derived from the mxc URL hash is used so repeated clicks
-/// on the same message don't create duplicate temp files.
+/// The extension is critical: Tauri's asset protocol (used for inline video
+/// streaming) derives the HTTP `Content-Type` from it, and WebKit refuses to
+/// play `application/octet-stream`. `sniff_mime_type` can't recognise webm/mkv,
+/// so the extension is chosen by preference: (1) a known extension already on
+/// `filename`, then (2) the event's declared mimetype (`mime_hint`), then
+/// (3) the sniffed download mime.
+///
+/// The file is named `quark-media-<mxc-hash>.<ext>` so repeated views of the
+/// same message reuse one file (no duplicates, no collisions between videos).
+fn write_media_to_temp(
+    mxc_url: &str,
+    dl: &crate::matrix::media::MediaDownload,
+    filename: Option<&str>,
+    mime_hint: Option<&str>,
+) -> Result<std::path::PathBuf, String> {
+    // Extension precedence: the event's declared mimetype is the most reliable
+    // signal of the actual content type — a user-supplied filename can be
+    // mislabelled — so it wins over a known extension on the filename; the
+    // sniffed download mime is the last resort.
+    let ext: String = mime_hint
+        .map(ext_for_media_mime)
+        .filter(|e| *e != "bin")
+        .map(str::to_string)
+        .or_else(|| filename.and_then(known_media_ext))
+        .unwrap_or_else(|| ext_for_media_mime(&dl.mime_type).to_string());
+
+    let basename = {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(mxc_url.as_bytes());
+        format!("quark-media-{:x}.{}", h.finalize(), ext)
+    };
+
+    let dest = std::env::temp_dir().join(basename);
+    let bytes = crate::matrix::media::decode_base64(&dl.data_base64)?;
+    // The name is content-addressed (mxc hash), so an existing file of the same
+    // size already holds the right bytes. Skip the rewrite — truncating to
+    // rewrite could corrupt a read the media server is doing for a still-playing
+    // copy of the same video.
+    let already_complete = std::fs::metadata(&dest)
+        .map(|m| m.len() == bytes.len() as u64)
+        .unwrap_or(false);
+    if !already_complete {
+        std::fs::write(&dest, &bytes).map_err(|e| format!("Failed to write temp file: {e}"))?;
+    }
+    Ok(dest)
+}
+
+/// Download a video/audio file from the homeserver and write it to a temporary
+/// file on disk, returning the absolute path. The frontend converts the path to
+/// an asset-protocol URL (`convertFileSrc`) for inline `<video>` streaming, or
+/// passes it to the system player.
+///
+/// `mime_type` carries the event's declared mimetype (`info.mimetype`), which is
+/// more reliable than the sniffed download mime for choosing the file extension
+/// — see `write_media_to_temp`. A stable name derived from the mxc URL hash is
+/// used so repeated clicks on the same message don't create duplicate files.
 #[tauri::command]
 pub async fn save_media_to_temp(
     state: State<'_, MatrixState>,
@@ -615,6 +699,7 @@ pub async fn save_media_to_temp(
     mxc_url: String,
     encryption_info: Option<String>,
     filename: Option<String>,
+    mime_type: Option<String>,
 ) -> Result<String, String> {
     let client = get_client(&state)?;
 
@@ -629,55 +714,50 @@ pub async fn save_media_to_temp(
     )
     .await?;
 
-    // Determine a suitable file extension from the MIME type.
-    let ext = match dl.mime_type.as_str() {
-        "video/mp4" | "video/x-m4v" => "mp4",
-        "video/webm" => "webm",
-        "video/ogg" => "ogv",
-        "video/quicktime" => "mov",
-        "video/x-matroska" => "mkv",
-        "video/x-msvideo" => "avi",
-        "audio/mpeg" => "mp3",
-        "audio/ogg" => "ogg",
-        "audio/wav" => "wav",
-        "audio/flac" => "flac",
-        _ => "bin",
-    };
-
-    // Build a stable temp path: $TMPDIR/quark-<hash>.<ext>
-    // (or use the original filename if provided, sanitised)
-    let tmp_dir = std::env::temp_dir();
-    let basename = filename
-        .as_deref()
-        .filter(|f| !f.is_empty())
-        .map(|f| {
-            // Strip directory components and non-safe chars.
-            let safe: String = std::path::Path::new(f)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("video")
-                .chars()
-                .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
-                .collect();
-            safe
-        })
-        .unwrap_or_else(|| {
-            use sha2::{Digest, Sha256};
-            let mut h = Sha256::new();
-            h.update(mxc_url.as_bytes());
-            format!("quark-media-{:x}.{}", h.finalize(), ext)
-        });
-
-    let dest = tmp_dir.join(&basename);
-
-    // Decode base64 and write to the temp file (overwrite if already present).
-    let bytes = crate::matrix::media::decode_base64(&dl.data_base64)?;
-    std::fs::write(&dest, &bytes)
-        .map_err(|e| format!("Failed to write temp file: {e}"))?;
+    let dest = write_media_to_temp(&mxc_url, &dl, filename.as_deref(), mime_type.as_deref())?;
 
     dest.to_str()
         .map(|s| s.to_string())
         .ok_or_else(|| "Temp path is not valid UTF-8".to_string())
+}
+
+/// Download a video/audio file to a temp file and return a loopback HTTP URL
+/// (`http://127.0.0.1:<port>/<token>/<name>`) that streams it with Range
+/// support. This is the transport for inline `<video>`: unlike the asset
+/// protocol or a `blob:` URL, a real localhost HTTP source is seekable in
+/// WebKitGTK and streams from disk. Errors if the media server isn't running,
+/// in which case the frontend falls back to the external player.
+#[tauri::command]
+pub async fn serve_media(
+    state: State<'_, MatrixState>,
+    cache_state: State<'_, CacheState>,
+    server: State<'_, MediaServerState>,
+    mxc_url: String,
+    encryption_info: Option<String>,
+    mime_type: Option<String>,
+    filename: Option<String>,
+) -> Result<String, String> {
+    let server = server
+        .0
+        .clone()
+        .ok_or_else(|| "Media server is not running".to_string())?;
+    let client = get_client(&state)?;
+    let dl = crate::matrix::media::download_media_with_cache(
+        &client,
+        &mxc_url,
+        false,
+        None,
+        None,
+        Some(&cache_state.0),
+        encryption_info.as_deref(),
+    )
+    .await?;
+    let path = write_media_to_temp(&mxc_url, &dl, filename.as_deref(), mime_type.as_deref())?;
+    let basename = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "Temp filename is not valid UTF-8".to_string())?;
+    Ok(server.url_for(basename))
 }
 
 /// Download a media file from the homeserver and write it to a caller-supplied
@@ -745,6 +825,17 @@ pub fn get_default_save_dir() -> Result<String, String> {
         .ok_or_else(|| "Download dir path is not valid UTF-8".to_string())
 }
 
+/// Return the compile-time target OS ("linux", "macos", "windows", "ios",
+/// "android"). The frontend uses this to pick the inline-video transport:
+/// Linux/WebKitGTK needs the loopback HTTP server (its media pipeline can't read
+/// the asset protocol for `<video>`); other webviews use the asset protocol,
+/// which avoids loading `http://127.0.0.1` (and the App Transport Security /
+/// loopback restrictions that come with it on Apple/Windows).
+#[tauri::command]
+pub fn get_platform() -> String {
+    std::env::consts::OS.to_string()
+}
+
 /// Expand a leading `~` to the user's home directory.
 fn expand_tilde(path: &str) -> std::path::PathBuf {
     let trimmed = path.trim();
@@ -788,46 +879,7 @@ pub async fn open_media_externally(
         )
         .await?;
 
-        let ext = match dl.mime_type.as_str() {
-            "video/mp4" | "video/x-m4v" => "mp4",
-            "video/webm" => "webm",
-            "video/ogg" => "ogv",
-            "video/quicktime" => "mov",
-            "video/x-matroska" => "mkv",
-            "video/x-msvideo" => "avi",
-            "audio/mpeg" => "mp3",
-            "audio/ogg" => "ogg",
-            "audio/wav" => "wav",
-            "audio/flac" => "flac",
-            _ => "bin",
-        };
-
-        let tmp_dir = std::env::temp_dir();
-        let basename = filename
-            .as_deref()
-            .filter(|f| !f.is_empty())
-            .map(|f| {
-                let safe: String = std::path::Path::new(f)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("video")
-                    .chars()
-                    .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
-                    .collect();
-                safe
-            })
-            .unwrap_or_else(|| {
-                use sha2::{Digest, Sha256};
-                let mut h = Sha256::new();
-                h.update(mxc_url.as_bytes());
-                format!("quark-media-{:x}.{}", h.finalize(), ext)
-            });
-
-        let dest = tmp_dir.join(&basename);
-        let bytes = crate::matrix::media::decode_base64(&dl.data_base64)?;
-        std::fs::write(&dest, &bytes)
-            .map_err(|e| format!("Failed to write temp file: {e}"))?;
-        dest
+        write_media_to_temp(&mxc_url, &dl, filename.as_deref(), None)?
     };
 
     // Open with the platform default handler.

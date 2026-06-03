@@ -528,6 +528,7 @@ When the user types `:` followed by characters in insert mode, an inline autocom
 ### Media Handling
 - Authenticated media download via `/_matrix/client/v1/media/download/`
 - Inline image previews in timeline (configurable max dimensions)
+- Inline video playback — `m.video` plays inline and seekable: a loopback HTTP server (Range requests) on Linux/WebKitGTK, the asset protocol on macOS/Windows/iOS; graceful fallback to the external player on decode failure
 - Sticker rendering (larger than emoji, centered)
 - Image uploads with thumbnail generation
 - Blurhash placeholders during loading
@@ -887,7 +888,7 @@ quark/
 
 #### Media
 - [x] Authenticated media (MSC3916) — matrix-sdk 0.9 routes to `/_matrix/client/v1/media/download/` automatically for Matrix 1.11+ servers; E2EE media now decrypted by passing `EncryptedFile` key material through the `download_media` IPC command
-- [x] Support video — `m.video` events rendered as `<video controls>` with native playback; media downloaded via the same mxc:// pipeline as images
+- [x] Support video — `m.video` events play **inline and seekable** (click the affordance → it swaps to a `<video>` player). Transport is chosen by platform (`get_platform`): **Linux/WebKitGTK** streams from a loopback HTTP server (`media_server.rs`, `tiny_http`) bound to `127.0.0.1` with Range support — the only seekable transport there, since WebKitGTK can't feed the asset protocol to `<video>` and a `blob:` URL isn't reliably seekable; **macOS/Windows/iOS** use the asset protocol (`convertFileSrc`) natively, which avoids loading `http://127.0.0.1` and the App Transport Security / loopback restrictions that come with it. Both stream a decrypted temp file from `write_media_to_temp` (correct extension picked from the event mimetype, since `sniff_mime_type` can't recognise webm/mkv) and fall back to the external player on error. Two Linux-only `run()` workarounds: `WEBKIT_DISABLE_DMABUF_RENDERER=1` (frames render instead of going solid green) and a `GST_PLUGIN_FEATURE_RANK` derank that forces software decode (`avdec_*` from `gst-libav`), since the VA-API/NVDEC hardware decoders corrupt frames on seek.
 
 #### Messaging
 - [ ] Room summary previews (MSC3266) — no preview fetch before joining

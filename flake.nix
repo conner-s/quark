@@ -45,6 +45,7 @@
           gst_all_1.gstreamer
           gst_all_1.gst-plugins-base   # appsink, audioconvert, videoscale
           gst_all_1.gst-plugins-good   # autoaudiosink, VP8/VP9
+          gst_all_1.gst-plugins-bad    # extra demuxers/parsers (Matroska/.mkv, etc.)
           gst_all_1.gst-libav          # H.264/H.265/AAC via FFmpeg
 
           # xdg-utils — lets the app open files in the system default player
@@ -103,7 +104,7 @@
             export WEBKIT_DISABLE_COMPOSITING_MODE=1
             # GStreamer plugin paths — WebKitGTK won't find them on NixOS without this
             export GST_PLUGIN_SYSTEM_PATH="${pkgs.lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" (with pkgs.gst_all_1; [
-              gstreamer gst-plugins-base gst-plugins-good gst-libav
+              gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-libav
             ])}"
             # Override the bundled appimagetool (NixOS-incompatible ELF interpreter)
             # with our mksquashfs-based wrapper. Also tell linuxdeploy itself to

@@ -569,6 +569,10 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     }
     case "save_media_to_temp":
       return `/tmp/quark-mock-video.mp4`;
+    case "serve_media":
+      return `http://127.0.0.1:0/mock/quark-media-mock.mp4`;
+    case "get_platform":
+      return "linux";
     case "save_media_to_path":
       console.log("[mock] save_media_to_path", args);
       return (args?.destPath as string) ?? "/tmp/quark-mock-save.bin";

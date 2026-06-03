@@ -5,7 +5,7 @@ edition = "2021"
 description = "A CLI-styled Matrix client"
 
 [dependencies]
-tauri = { version = "2", features = ["devtools"] }
+tauri = { version = "2", features = ["devtools", "protocol-asset"] }
 tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
 chrono = { version = "0.4", features = ["clock"] }
@@ -22,6 +22,7 @@ url = "2"
 mime = "0.3"
 sha2 = "0.10"
 rand = "0.8"
+tiny_http = "0.12"
 
 # matrix-sdk and reqwest pick their TLS stack from features.
 # Desktop + iOS use native-tls (Security framework on Apple, OpenSSL on Linux);

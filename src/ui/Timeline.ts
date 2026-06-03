@@ -2624,26 +2624,45 @@ export class Timeline {
   }
 
   /**
-   * Replace the video affordance for `eventId` with an inline `<video>` player.
-   * Called by actions.ts after confirming GStreamer support and downloading the media.
+   * Replace the video affordance for `eventId` with an inline `<video>` player
+   * that streams from `src` — a loopback media-server URL backed by a decrypted
+   * temp file. WebKit streams it with HTTP Range support, so playback is
+   * seekable and never loads the whole file into memory.
+   *
+   * If the media can't be loaded/decoded, the affordance is restored and
+   * `onError` is invoked so the caller can fall back to the external player.
    */
-  showInlineVideo(eventId: string, dataUrl: string, mimeType: string): void {
+  showInlineVideo(eventId: string, src: string, onError?: (detail?: string) => void): void {
     const msgEl = this.getMessageElementById(eventId);
-    if (!msgEl) return;
+    // Not in this timeline's DOM (e.g. a thread reply, which renders in its own
+    // panel) — fall back to the external player rather than dead-ending.
+    if (!msgEl) { onError?.(); return; }
     const aff = msgEl.querySelector<HTMLElement>(".message__video-affordance");
-    if (!aff) return;
+    if (!aff) { onError?.(); return; }
 
     const video = document.createElement("video");
     video.className = "message__video";
     video.controls = true;
     video.autoplay = true;
-    video.src = dataUrl;
-    if (mimeType) {
-      const src = document.createElement("source");
-      src.type = mimeType;
-      video.appendChild(src);
-    }
+    video.preload = "metadata";
+    // Reuse the affordance's already-loaded thumbnail as the poster so there's
+    // no black flash while metadata loads.
+    const thumb = aff.querySelector<HTMLImageElement>(".message__video-affordance-thumb-img");
+    if (thumb?.src) video.poster = thumb.src;
+    video.src = src;
+
+    // A decode/codec failure restores the affordance and lets the caller open
+    // the file externally. (A rejected autoplay promise is NOT an error — the
+    // controls stay and the user can press play — so we don't fall back on it.)
+    video.addEventListener("error", () => {
+      const e = video.error;
+      const detail = `code=${e?.code ?? "?"} msg="${e?.message ?? ""}" net=${video.networkState} ready=${video.readyState}`;
+      video.replaceWith(aff);
+      onError?.(detail);
+    }, { once: true });
+
     aff.replaceWith(video);
+    video.play?.().catch(() => { /* autoplay blocked by platform policy; user can press play */ });
   }
 
   /**
