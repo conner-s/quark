@@ -285,7 +285,7 @@ build:flatpak:
     DEBIAN_FRONTEND: noninteractive
   cache:
     key:
-      prefix: flatpak-runtimes-gnome47
+      prefix: flatpak-runtimes-gnome50
       files:
         - flatpak/zone.derg.quark.yml
     paths:
@@ -305,10 +305,10 @@ build:flatpak:
       fi
     - flatpak remote-add --system --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
     - flatpak install --system -y flathub
-        org.gnome.Platform//47
-        org.gnome.Sdk//47
-        org.freedesktop.Sdk.Extension.rust-stable//24.08
-        org.freedesktop.Sdk.Extension.node22//24.08
+        org.gnome.Platform//50
+        org.gnome.Sdk//50
+        org.freedesktop.Sdk.Extension.rust-stable//25.08
+        org.freedesktop.Sdk.Extension.node22//25.08
     - cp -a /var/lib/flatpak/. .flatpak-runtime-cache/
     - pnpm install --frozen-lockfile
   script:
