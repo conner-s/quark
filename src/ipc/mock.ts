@@ -577,11 +577,11 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return `http://127.0.0.1:0/mock/quark-media-mock.mp4`;
     case "get_platform":
       return "linux";
-    case "save_media_to_path":
-      console.log("[mock] save_media_to_path", args);
-      return (args?.destPath as string) ?? "/tmp/quark-mock-save.bin";
-    case "get_default_save_dir":
-      return "/tmp/quark-mock-downloads";
+    case "save_media_with_dialog":
+      console.log("[mock] save_media_with_dialog", args);
+      return (args?.suggestedFilename as string)
+        ? `/tmp/quark-mock-downloads/${args?.suggestedFilename as string}`
+        : "/tmp/quark-mock-save.bin";
     case "open_media_externally":
       console.log("[mock] open_media_externally", args);
       return null;

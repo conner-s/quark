@@ -8,8 +8,7 @@ import {
   saveMediaToTemp,
   getPlatform,
   getAppConfig,
-  saveMediaToPath,
-  getDefaultSaveDir,
+  saveMediaWithDialog,
   openMediaExternally,
   sendPastedImage,
   sendFile,
@@ -19,7 +18,6 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { isTauri } from "../../ipc/mock.js";
 
 import { showProgressToast, showError, showSuccess } from "../../ui/NotificationToast.js";
-import { promptSaveFilePath } from "../../ui/SaveFileDialog.js";
 
 import { getComponents } from "./context.js";
 import { openQuickReactPicker } from "./reactions.js";
@@ -268,31 +266,17 @@ async function _openVideoExternally(mxcUrl: string, encryptionInfo?: string, fil
 }
 
 /**
- * Prompt the user for a save destination via the in-app save modal, then
- * download the file from the homeserver and write it to the chosen path.
- *
- * Uses an HTML modal rather than a native picker because rfd/xdg-portal
- * crashes on some Linux setups with "No GSettings schemas are installed".
+ * Download the file from the homeserver and save it via the OS native save
+ * dialog. The backend opens the dialog (XDG portal on Linux, native picker
+ * elsewhere) and writes to the path the user picks — the frontend never handles
+ * a filesystem path, so this can't become an arbitrary-write vector.
  */
 async function saveFileWithDialog(
   mxcUrl: string,
   filename?: string,
   encryptionInfo?: string,
 ): Promise<void> {
-  // Resolve the default downloads dir up front (failures fall back to "~/").
-  let defaultDir = "~/Downloads";
-  try {
-    defaultDir = await getDefaultSaveDir();
-  } catch {
-    /* keep fallback */
-  }
-
-  const dest = await promptSaveFilePath({
-    suggestedFilename: filename,
-    defaultDir,
-  });
-  if (!dest) return; // user cancelled
-
-  const writtenPath = await saveMediaToPath(mxcUrl, dest, encryptionInfo);
+  const writtenPath = await saveMediaWithDialog(mxcUrl, filename, encryptionInfo);
+  if (writtenPath === null) return; // user cancelled
   showSuccess(`Saved to ${writtenPath}`);
 }

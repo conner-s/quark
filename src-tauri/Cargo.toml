@@ -40,6 +40,14 @@ reqwest = { version = "0.12", features = ["json"] }
 # falls back to app-private file storage there (see that module).
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 
+# Native save dialogs. On Linux the `xdg-portal` backend talks to the XDG
+# desktop portal over D-Bus (no GTK/GSettings — avoids the "No GSettings schemas
+# installed" crash that sank the previous native picker, and is the only way a
+# Flatpak can write outside its sandbox); macOS/Windows use the OS picker.
+# Desktop-only — mobile has no equivalent and the save command stubs out there.
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+
 [target.'cfg(target_os = "android")'.dependencies]
 matrix-sdk = { version = "0.9", default-features = false, features = ["e2e-encryption", "automatic-room-key-forwarding", "sqlite", "bundled-sqlite", "rustls-tls"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
