@@ -5,6 +5,7 @@ pub mod gif;
 pub mod matrix;
 pub mod media_cache;
 pub mod media_server;
+pub mod net_guard;
 pub mod notifications;
 pub mod secrets;
 

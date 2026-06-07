@@ -1142,6 +1142,14 @@ pub async fn get_url_preview(
 ) -> Result<Option<UrlPreview>, String> {
     let client = get_client(&state)?;
 
+    // Only http(s) URLs have a page to preview; anything else (matrix:, mailto:,
+    // javascript:, …) is dropped before it can reach the homeserver preview API
+    // or the direct fetch below.
+    match url::Url::parse(&url).ok().as_ref().map(|u| u.scheme()) {
+        Some("http") | Some("https") => {}
+        _ => return Ok(None),
+    }
+
     // ── 1. Try the Matrix homeserver URL-preview API ──────────────────────
     #[allow(deprecated)]
     let hs_result = {
@@ -1168,23 +1176,32 @@ pub async fn get_url_preview(
     }
 
     // ── 2. Direct HTTP fallback: fetch the page and extract OG tags ───────
-    let http = reqwest::Client::builder()
-        // Use a realistic browser UA; some sites (YouTube, Twitter proxies) gate content on it
-        .user_agent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        .timeout(std::time::Duration::from_secs(8))
-        .build()
-        .map_err(|e| format!("HTTP client error: {e}"))?;
-
-    let resp = http.get(&url)
-        // Mimic a real browser request so CDN/bot-detection layers serve full HTML
-        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-        .header("Accept-Language", "en-US,en;q=0.5")
-        // Request uncompressed content; reqwest doesn't have gzip enabled by default
-        .header("Accept-Encoding", "identity")
-        .header("Cache-Control", "no-cache")
-        .header("Upgrade-Insecure-Requests", "1")
-        .send().await
-        .map_err(|e| format!("URL fetch failed: {e}"))?;
+    //
+    // `url` is attacker-controlled (it comes straight from message content and
+    // auto-previews fire on it), so the fetch goes through the SSRF guard:
+    // http(s) only, no private/loopback/link-local targets, redirects
+    // re-validated per hop, the connect IP pinned to the validated address, and
+    // a capped body read. A blocked or failed target just means "no preview".
+    const PREVIEW_UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    let resp = match crate::net_guard::guarded_get(
+        &url,
+        PREVIEW_UA,
+        std::time::Duration::from_secs(8),
+        &[
+            // Mimic a real browser request so CDN/bot-detection layers serve full HTML
+            ("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
+            ("Accept-Language", "en-US,en;q=0.5"),
+            // Request uncompressed content; reqwest doesn't have gzip enabled by default
+            ("Accept-Encoding", "identity"),
+            ("Cache-Control", "no-cache"),
+            ("Upgrade-Insecure-Requests", "1"),
+        ],
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(_) => return Ok(None),
+    };
 
     // Only parse HTML responses
     let content_type = resp.headers()
@@ -1198,10 +1215,10 @@ pub async fn get_url_preview(
     }
 
     // Read up to 128 KB — OG tags live in <head> which is usually within 32 KB,
-    // but some JS-heavy sites push it further down.
-    let bytes = resp.bytes().await
-        .map_err(|e| format!("URL read failed: {e}"))?;
-    let html = String::from_utf8_lossy(&bytes[..bytes.len().min(131_072)]).into_owned();
+    // but some JS-heavy sites push it further down. Capped so a hostile target
+    // can't stream an unbounded body into memory.
+    let bytes = crate::net_guard::read_body_capped(resp, 131_072).await?;
+    let html = String::from_utf8_lossy(&bytes).into_owned();
 
     let title = extract_og_tag(&html, "og:title")
         .or_else(|| extract_html_title(&html));
