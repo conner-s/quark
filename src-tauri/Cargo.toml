@@ -5,7 +5,10 @@ edition = "2021"
 description = "A CLI-styled Matrix client"
 
 [dependencies]
-tauri = { version = "2", features = ["devtools", "protocol-asset"] }
+# `devtools` is intentionally NOT enabled: Tauri turns the Web Inspector on
+# automatically in debug builds, and the `devtools` feature is only what would
+# additionally enable it in *release* builds — which we don't want shipping.
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
 chrono = { version = "0.4", features = ["clock"] }
