@@ -38,7 +38,7 @@ export type {
 } from "./types.js";
 
 // ─── Client (auth) ────────────────────────────────────────────────────────────
-export { login, restoreSession, logout, getOwnProfile, setPresenceStatus, getPresenceStatus, setDisplayName } from "./client.js";
+export { login, restoreSession, clearStoredSession, logout, getOwnProfile, setPresenceStatus, getPresenceStatus, setDisplayName } from "./client.js";
 export type { PresenceInfo } from "./client.js";
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────

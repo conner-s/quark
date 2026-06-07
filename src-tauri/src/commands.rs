@@ -5,7 +5,7 @@ use crate::{
     },
     gif::GifResult,
     matrix::{
-        client::{MatrixState, OwnProfile, SessionInfo, SyncState},
+        client::{MatrixState, OwnProfile, SyncState},
         crypto::{CrossSigningInfo, SasInfo, VerificationStatus},
         emoji::EmojiPack,
         media::MediaDownload,
@@ -45,6 +45,16 @@ fn clear_store(data_dir: &Path) {
     }
 }
 
+/// Remove all local session state: the SQLite store files plus the keyring's
+/// session and store-encryption key. Used on logout and before a fresh login so
+/// switching accounts never reuses a prior account's encrypted store or key.
+/// Synchronous (filesystem + blocking keyring I/O) — call inside `spawn_blocking`.
+fn wipe_local_session(data_dir: &Path) {
+    clear_store(data_dir);
+    let _ = crate::secrets::clear_session(data_dir);
+    let _ = crate::secrets::delete_store_key(data_dir);
+}
+
 // ─── Auth Commands ────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -55,16 +65,46 @@ pub async fn login(
     homeserver_url: String,
     username: String,
     password: String,
-) -> Result<SessionInfo, String> {
+) -> Result<(), String> {
     let data_path = app_handle.path().app_data_dir()
         .map_err(|e| format!("Could not resolve app data dir: {e}"))?;
 
-    // Clear any leftover store from a previous session to prevent crypto store
-    // conflicts when logging in as a different account.
-    clear_store(&data_path);
+    // Refuse to start an encrypted session if secure storage is unreachable —
+    // we never silently fall back to writing the session/key in plaintext.
+    {
+        let dp = data_path.clone();
+        let available = tokio::task::spawn_blocking(move || crate::secrets::is_available(&dp))
+            .await
+            .map_err(|e| format!("secrets task failed: {e}"))?;
+        if !available {
+            return Err(crate::secrets::unavailable_message());
+        }
+    }
 
-    let client = crate::matrix::client::build_client(&homeserver_url, data_path).await?;
+    // Fresh login: wipe any leftover local state (old store, key, session) so a
+    // different account never inherits the previous one's encrypted store, then
+    // mint a fresh store-encryption key for the new store.
+    let store_key = {
+        let dp = data_path.clone();
+        tokio::task::spawn_blocking(move || {
+            wipe_local_session(&dp);
+            crate::secrets::get_or_create_store_key(&dp)
+        })
+        .await
+        .map_err(|e| format!("secrets task failed: {e}"))??
+    };
+
+    let client = crate::matrix::client::build_client(&homeserver_url, data_path.clone(), &store_key).await?;
     let session = crate::matrix::client::login_with_password(&client, &username, &password).await?;
+
+    // Persist the session in the OS keyring — it is never returned to the
+    // frontend or written to localStorage.
+    {
+        let dp = data_path.clone();
+        tokio::task::spawn_blocking(move || crate::secrets::save_session(&dp, &session))
+            .await
+            .map_err(|e| format!("secrets task failed: {e}"))??;
+    }
 
     {
         let mut guard = state.0.lock().map_err(|_| "State lock poisoned")?;
@@ -77,20 +117,53 @@ pub async fn login(
     *sync_state.handlers_registered.lock().map_err(|_| "Sync state lock poisoned")? = false;
 
     crate::matrix::client::start_sync(client, Some(app_handle), &sync_state).await;
-    Ok(session)
+    Ok(())
 }
 
+/// Restore a previously saved session from the OS keyring.
+///
+/// Returns `Ok(true)` if a session was found and restored, `Ok(false)` if there
+/// is nothing to restore (fresh install, or an upgrade from a pre-keyring
+/// version — those users are sent to the login screen). `Err` means a stored
+/// session existed but couldn't be used (bad token, missing key, keyring
+/// failure); the frontend clears it via `clear_session` and shows login.
 #[tauri::command]
 pub async fn restore_session(
     state: State<'_, MatrixState>,
     sync_state: State<'_, SyncState>,
     app_handle: AppHandle,
-    homeserver_url: String,
-    session: SessionInfo,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let data_path = app_handle.path().app_data_dir()
         .map_err(|e| format!("Could not resolve app data dir: {e}"))?;
-    let client = crate::matrix::client::build_client(&homeserver_url, data_path).await?;
+
+    // Load the saved session from the keyring.
+    let session = {
+        let dp = data_path.clone();
+        tokio::task::spawn_blocking(move || crate::secrets::load_session(&dp))
+            .await
+            .map_err(|e| format!("secrets task failed: {e}"))??
+    };
+
+    let Some(session) = session else {
+        // Nothing to restore. Proactively wipe any orphaned store left by an
+        // older (pre-encryption) version: without a key/session it is unusable,
+        // and leaving it keeps plaintext crypto/state data on disk.
+        let dp = data_path.clone();
+        let _ = tokio::task::spawn_blocking(move || clear_store(&dp)).await;
+        return Ok(false);
+    };
+
+    // The store-encryption key must accompany the saved session.
+    let store_key = {
+        let dp = data_path.clone();
+        tokio::task::spawn_blocking(move || crate::secrets::get_store_key(&dp))
+            .await
+            .map_err(|e| format!("secrets task failed: {e}"))??
+            .ok_or_else(|| "Saved session is missing its encryption key".to_string())?
+    };
+
+    let client =
+        crate::matrix::client::build_client(&session.homeserver_url, data_path.clone(), &store_key).await?;
     crate::matrix::client::restore_session_from_info(&client, &session).await?;
 
     {
@@ -104,7 +177,7 @@ pub async fn restore_session(
     *sync_state.handlers_registered.lock().map_err(|_| "Sync state lock poisoned")? = false;
 
     crate::matrix::client::start_sync(client, Some(app_handle), &sync_state).await;
-    Ok(())
+    Ok(true)
 }
 
 /// Start the background sync loop and register push-event handlers.
@@ -156,12 +229,25 @@ pub async fn logout(
         let _ = c.matrix_auth().logout().await;
     }
 
-    // Always clear the local SQLite store so the next login starts clean,
-    // regardless of whether the server-side revocation succeeded.
+    // Always clear local session state (SQLite store + keyring session + store
+    // key) so the next login starts clean, regardless of whether the server-side
+    // revocation succeeded.
     if let Ok(data_path) = app_handle.path().app_data_dir() {
-        clear_store(&data_path);
+        let _ = tokio::task::spawn_blocking(move || wipe_local_session(&data_path)).await;
     }
 
+    Ok(())
+}
+
+/// Clear local session state without contacting the server. The frontend calls
+/// this when `restore_session` fails (stale token, missing key, keyring error)
+/// so the next launch starts from a clean login rather than looping on the bad
+/// session.
+#[tauri::command]
+pub async fn clear_session(app_handle: AppHandle) -> Result<(), String> {
+    if let Ok(data_path) = app_handle.path().app_data_dir() {
+        let _ = tokio::task::spawn_blocking(move || wipe_local_session(&data_path)).await;
+    }
     Ok(())
 }
 

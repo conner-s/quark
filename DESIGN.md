@@ -235,7 +235,7 @@ The backend handles all Matrix protocol interaction and exposes commands to the 
 - Media download/upload with authenticated media (MSC3916)
 - Custom emoji/sticker pack resolution (MSC2545)
 - Theme file loading and validation
-- Local encrypted database (sled or SQLite via matrix-sdk store)
+- Local encrypted database — matrix-sdk SQLite store opened with a keyring-held passphrase; store key + session in the OS keyring (`secrets.rs`)
 
 ### Frontend (TypeScript)
 
@@ -914,5 +914,21 @@ quark/
 #### Hardening
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
 - [ ] Performance profiling — large rooms (1000+ messages), many emoji packs
+
+#### Security
+At-rest secrets (done in 0.13.0):
+- [x] **Encrypted SQLite store** — the matrix-sdk store is opened with a passphrase (`sqlite_store(path, Some(key))`), so the sensitive values at rest (E2EE room keys, cross-signing secrets, cached event bodies, account data) are encrypted via `matrix-sdk-store-encryption`. (Full-file SQLCipher isn't exposed by matrix-sdk 0.9's feature flags; value-level encryption is the supported mechanism and is what Element uses.)
+- [x] **Store key + Matrix session in the OS keyring** — a random 256-bit store key and the session (access token) live in the OS keyring via the `keyring` crate (`secrets.rs`): Secret Service on Linux, Keychain on macOS/iOS, Credential Manager on Windows. Android has no Secret Service, so it falls back to app-private files (sandbox-isolated). The access token no longer touches `localStorage` or crosses into the frontend.
+- [x] **Refuse-on-unavailable** — if the keyring is unreachable, login fails with actionable guidance rather than silently storing secrets in plaintext.
+- [x] **Migration** — pre-keyring installs (plaintext token in `localStorage` + unencrypted store) are sent through one clean re-login; the legacy `localStorage` key is scrubbed and the orphaned unencrypted store is wiped on first run.
+
+Open items from the 0.13.0 security assessment (not yet fixed, priority order):
+- [ ] **Sanitize `formatted_body` before `innerHTML`** (Critical) — Matrix `org.matrix.custom.html` is attacker-controlled and is rendered unsanitized (`Timeline.ts`, `ThreadView.ts`). Add a strict allowlist sanitizer (e.g. `ammonia` in Rust so all callers are covered, or DOMPurify) at every sink.
+- [ ] **Set a strict Content-Security-Policy** (Critical) — `tauri.conf.json` has `csp: null`; without it, injected HTML can run inline JS and beacon to remote hosts. Lock down `script-src 'self'`, no `unsafe-inline`/`unsafe-eval`, scope `img-src`/`media-src`/`connect-src` to self + the loopback media port + asset protocol.
+- [ ] **SSRF in URL previews** (High) — `get_url_preview` fetches frontend-supplied URLs with no scheme/IP validation and fires automatically on the first URL in every message (zero-click). Block private/loopback/link-local IPs, require http(s), and gate auto-preview behind a setting.
+- [ ] **`open_external_url` backend scheme validation** (High) — the command passes any string to `shell().open`; the only http(s) check is in the frontend (bypassable via the XSS). Validate the scheme server-side.
+- [ ] **Confine `save_media_to_path`** (Medium) — writes attacker-influenced bytes to a frontend-chosen absolute path (arbitrary file write); confine to the Downloads dir / a native save-dialog result.
+- [ ] **Drop `devtools` from release builds** (Medium) — `tauri` is built with the `devtools` feature unconditionally; gate it on `debug_assertions`.
+- [ ] Consider keychain storage for the GIF API key (Low) and requiring `https://` for the homeserver URL (Low).
 
 #### Bugs

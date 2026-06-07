@@ -1,11 +1,12 @@
 // Session lifecycle actions: login, session restore, logout.
 
 import { AppState } from "../state.js";
-import { saveSession, clearSession } from "../session.js";
+import { clearLegacySession } from "../session.js";
 
 import {
   login as ipcLogin,
   restoreSession as ipcRestoreSession,
+  clearStoredSession as ipcClearStoredSession,
   logout as ipcLogout,
   getOwnProfile,
   downloadMedia,
@@ -95,8 +96,9 @@ export async function login(homeserver: string, username: string, password: stri
   loginScreen.setLoading(true);
 
   try {
-    const session = await ipcLogin(homeserver, username, password);
-    saveSession(session);
+    // The backend persists the session in the OS keyring; nothing comes back to
+    // the frontend and nothing is written to localStorage.
+    await ipcLogin(homeserver, username, password);
     AppState.set("loggedIn", true);
 
     showMainLayout(getComponents());
@@ -124,30 +126,36 @@ export async function login(homeserver: string, username: string, password: stri
  * Call this on startup before showing the login form.
  */
 export async function attemptSessionRestore(components: import("../../ui/App.js").AppComponents): Promise<boolean> {
-  const { loadSession } = await import("../session.js");
-  const session = loadSession();
-  if (!session) return false;
+  // Scrub any plaintext session left by a pre-keyring build before doing
+  // anything else — those users are sent through a fresh (encrypted) login.
+  clearLegacySession();
 
+  let restored: boolean;
   try {
-    await ipcRestoreSession(session.homeserver_url, session);
-    AppState.set("loggedIn", true);
-    showMainLayout(components);
-    void _loadOwnProfile();
-    await loadThemeFromConfig();
-    _applyStartupConfig();
-    await refreshRooms();
-    // Persisted sync state usually makes getRooms() instant on restore, but if
-    // the store hasn't hydrated yet (cold start) the first call can be empty —
-    // keep retrying in the background so the list isn't blank until a relaunch.
-    // Same race the login path guards against. (#33/#43)
-    void _pollUntilRoomsLoaded();
-    return true;
+    // The backend loads the session from the keyring itself; false means there
+    // is nothing to restore (fresh install or pre-keyring upgrade).
+    restored = await ipcRestoreSession();
   } catch (err) {
-    // Stale/invalid session — clear it and fall through to login form
-    clearSession();
+    // A stored session existed but couldn't be used (stale token, missing key,
+    // keyring failure). Drop it so the next launch starts clean, then show login.
+    try { await ipcClearStoredSession(); } catch { /* best effort */ }
     console.warn("Session restore failed, showing login:", err);
     return false;
   }
+  if (!restored) return false;
+
+  AppState.set("loggedIn", true);
+  showMainLayout(components);
+  void _loadOwnProfile();
+  await loadThemeFromConfig();
+  _applyStartupConfig();
+  await refreshRooms();
+  // Persisted sync state usually makes getRooms() instant on restore, but if
+  // the store hasn't hydrated yet (cold start) the first call can be empty —
+  // keep retrying in the background so the list isn't blank until a relaunch.
+  // Same race the login path guards against. (#33/#43)
+  void _pollUntilRoomsLoaded();
+  return true;
 }
 
 /**
@@ -155,11 +163,12 @@ export async function attemptSessionRestore(components: import("../../ui/App.js"
  */
 export async function logout(): Promise<void> {
   try {
+    // Revokes the token server-side and clears the keyring session + store key.
     await ipcLogout();
   } catch (err) {
     console.warn("Logout IPC failed (continuing anyway):", err);
   }
-  clearSession();
+  clearLegacySession();
   AppState.set("loggedIn", false);
   window.location.reload();
 }

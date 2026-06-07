@@ -6,6 +6,7 @@ pub mod matrix;
 pub mod media_cache;
 pub mod media_server;
 pub mod notifications;
+pub mod secrets;
 
 use matrix::client::{MatrixState, PaginationLock, SearchState, SyncState, TimelineTokens};
 use media_cache::MediaCache;
@@ -102,6 +103,7 @@ pub fn run() {
             commands::login,
             commands::logout,
             commands::restore_session,
+            commands::clear_session,
             commands::start_sync,
             // Rooms
             commands::get_rooms,

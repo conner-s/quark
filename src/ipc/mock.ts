@@ -157,8 +157,12 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
 
   switch (cmd) {
     case "login":
-      return { user_id: "@you:matrix.org", device_id: "MOCKDEVICE", access_token: "mock_token", homeserver_url: (args?.homeserverUrl as string) ?? "https://matrix.org" };
+      // Backend now persists the session in the keyring and returns nothing.
+      return null;
     case "restore_session":
+      // No saved session in mock mode → fall through to the login screen.
+      return false;
+    case "clear_session":
     case "logout":
       return null;
     case "get_rooms":
