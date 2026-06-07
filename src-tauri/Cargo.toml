@@ -23,6 +23,9 @@ mime = "0.3"
 sha2 = "0.10"
 rand = "0.8"
 tiny_http = "0.12"
+# Allowlist sanitizer for remote `formatted_body` HTML (org.matrix.custom.html)
+# before it reaches the WebView. See matrix/html.rs.
+ammonia = "4"
 
 # matrix-sdk and reqwest pick their TLS stack from features.
 # Desktop + iOS use native-tls (Security framework on Apple, OpenSSL on Linux);

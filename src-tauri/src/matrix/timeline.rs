@@ -736,7 +736,7 @@ fn extract_message_content(
     match &content.msgtype {
         MessageType::Text(text) => (
             text.body.clone(),
-            text.formatted.as_ref().map(|f| f.body.clone()),
+            text.formatted.as_ref().map(|f| crate::matrix::html::sanitize(&f.body)),
             "m.text".to_string(),
             None, None, None, None, None, None, None,
         ),
@@ -805,13 +805,13 @@ fn extract_message_content(
         }
         MessageType::Emote(emote) => (
             emote.body.clone(),
-            emote.formatted.as_ref().map(|f| f.body.clone()),
+            emote.formatted.as_ref().map(|f| crate::matrix::html::sanitize(&f.body)),
             "m.emote".to_string(),
             None, None, None, None, None, None, None,
         ),
         MessageType::Notice(notice) => (
             notice.body.clone(),
-            notice.formatted.as_ref().map(|f| f.body.clone()),
+            notice.formatted.as_ref().map(|f| crate::matrix::html::sanitize(&f.body)),
             "m.notice".to_string(),
             None, None, None, None, None, None, None,
         ),

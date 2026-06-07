@@ -1,6 +1,7 @@
 pub mod client;
 pub mod crypto;
 pub mod emoji;
+pub mod html;
 pub mod media;
 pub mod reactions;
 pub mod rooms;
