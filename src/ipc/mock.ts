@@ -165,6 +165,10 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     case "clear_session":
     case "logout":
       return null;
+    case "verification_prompt_target":
+      return null; // mock: never prompt
+    case "log_verification_prompt_choice":
+      return null;
     case "get_rooms":
       return MOCK_ROOMS;
     case "get_timeline":

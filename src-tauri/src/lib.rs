@@ -172,6 +172,8 @@ pub fn run() {
             commands::get_cross_signing_status,
             commands::bootstrap_cross_signing,
             commands::get_user_devices,
+            commands::verification_prompt_target,
+            commands::log_verification_prompt_choice,
             commands::start_sas_verification,
             commands::accept_verification_request,
             commands::accept_sas_verification,

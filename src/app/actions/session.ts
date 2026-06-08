@@ -12,8 +12,8 @@ import {
   downloadMedia,
   getAppConfig,
   setAppConfig,
-  getVerificationStatus,
-  getUserDevices,
+  verificationPromptTarget,
+  logVerificationPromptChoice,
 } from "../../ipc/index.js";
 import type { RestoreOutcome } from "../../ipc/index.js";
 import { startVerification } from "./crypto.js";
@@ -198,25 +198,26 @@ export async function attemptSessionRestore(components: import("../../ui/App.js"
  */
 export async function maybePromptSessionVerification(): Promise<void> {
   try {
-    const cfg = await getAppConfig();
-    if (!cfg.general.prompt_session_verification) return;
-
-    const status = await getVerificationStatus();
-    if (status.is_cross_signed) return; // this session is already verified
-
-    const devices = await getUserDevices(status.user_id);
-    const others = devices.filter((d) => d.device_id !== status.device_id);
-    if (others.length === 0) return; // no other device to compare against
+    // The backend decides (and logs at INFO why it skips: disabled, already
+    // cross-signed, or no other device). It returns the own user ID to verify
+    // against, or null to skip.
+    const userId = await verificationPromptTarget();
+    if (!userId) return;
 
     getComponents().verificationPrompt.show((choice) => {
+      void logVerificationPromptChoice(choice); // record the choice in the log
       if (choice === "verify") {
         // Reuses the existing SAS flow: device picker (if >1) → emoji compare.
-        void startVerification(status.user_id);
+        void startVerification(userId);
       } else if (choice === "never") {
-        void setAppConfig({
-          ...cfg,
-          general: { ...cfg.general, prompt_session_verification: false },
-        }).catch(() => { /* best-effort; will just prompt again next time */ });
+        void getAppConfig()
+          .then((cfg) =>
+            setAppConfig({
+              ...cfg,
+              general: { ...cfg.general, prompt_session_verification: false },
+            }),
+          )
+          .catch(() => { /* best-effort; will just prompt again next time */ });
       }
       // "later" → do nothing; the prompt re-appears on the next startup.
     });

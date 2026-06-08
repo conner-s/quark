@@ -97,3 +97,24 @@ export async function getSasInfo(
 ): Promise<SasInfo | null> {
   return invoke<SasInfo | null>("get_sas_info", { userId, flowId });
 }
+
+/**
+ * Decide whether to show the post-login "verify this session" prompt. Returns
+ * the own user ID to verify against when the prompt should appear, or null to
+ * skip (the backend logs the skip reason at INFO). Matches the Rust
+ * `verification_prompt_target` command.
+ */
+export async function verificationPromptTarget(): Promise<string | null> {
+  return invoke<string | null>("verification_prompt_target", {});
+}
+
+/**
+ * Record (in the backend log, INFO) the user's choice on the verify-this-session
+ * prompt: "verify" | "later" | "never". Matches the Rust
+ * `log_verification_prompt_choice` command.
+ */
+export async function logVerificationPromptChoice(
+  choice: "verify" | "later" | "never",
+): Promise<void> {
+  return invoke<void>("log_verification_prompt_choice", { choice });
+}

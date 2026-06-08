@@ -1446,6 +1446,56 @@ pub async fn get_user_devices(
     crate::matrix::crypto::get_user_verification_statuses(&client, &user_id).await
 }
 
+/// Decide whether the post-login "verify this session" prompt should be shown,
+/// logging the reason at INFO so the decision is visible in the app log.
+///
+/// Returns `Some(own_user_id)` when the prompt should appear (the caller starts
+/// the SAS flow for that user), or `None` to skip. Skips when the user turned the
+/// prompt off, this session is already cross-signed, or there is no other device
+/// to emoji-compare against. Centralised here (rather than in the frontend) so
+/// the gating inputs are read where they live and the skip reason lands in the
+/// backend log.
+#[tauri::command]
+pub async fn verification_prompt_target(
+    state: State<'_, MatrixState>,
+    config_state: State<'_, Mutex<AppConfig>>,
+) -> Result<Option<String>, String> {
+    let enabled = {
+        let guard = config_state.lock().map_err(|_| "App config lock poisoned")?;
+        guard.general.prompt_session_verification
+    };
+    if !enabled {
+        tracing::info!("verification prompt: skipped (disabled in settings)");
+        return Ok(None);
+    }
+
+    let client = get_client(&state)?;
+    let status = crate::matrix::crypto::get_own_verification_status(&client).await?;
+    if status.is_cross_signed {
+        tracing::info!("verification prompt: skipped (session already cross-signed)");
+        return Ok(None);
+    }
+
+    let devices =
+        crate::matrix::crypto::get_user_verification_statuses(&client, &status.user_id).await?;
+    let others = devices.iter().filter(|d| d.device_id != status.device_id).count();
+    if others == 0 {
+        tracing::info!("verification prompt: skipped (no other device to compare against)");
+        return Ok(None);
+    }
+
+    tracing::info!(other_devices = others, "verification prompt: showing (session unverified)");
+    Ok(Some(status.user_id))
+}
+
+/// Record (at INFO) which action the user took on the verify-this-session prompt
+/// — "verify", "later", or "never" — so the choice is visible in the app log
+/// alongside the show/skip decision above.
+#[tauri::command]
+pub fn log_verification_prompt_choice(choice: String) {
+    tracing::info!(choice = %choice, "verification prompt: user choice");
+}
+
 // ─── Spaces Commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]

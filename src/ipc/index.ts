@@ -90,6 +90,8 @@ export {
   confirmSasVerification,
   cancelSasVerification,
   getSasInfo,
+  verificationPromptTarget,
+  logVerificationPromptChoice,
 } from "./crypto.js";
 
 // ─── Spaces ───────────────────────────────────────────────────────────────────
