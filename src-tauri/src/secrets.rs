@@ -57,17 +57,50 @@ mod imp {
     const STORE_KEY_ACCOUNT: &str = "store-encryption-key";
     const SESSION_ACCOUNT: &str = "session";
 
+    /// Stable 64-bit FNV-1a hash of the data dir, hex-encoded. The keyring is
+    /// global per OS user, so two Quark installs (e.g. a Flatpak whose data dir
+    /// is redirected to `~/.var/app/...` and a native build under
+    /// `~/.local/share/...`) would otherwise share one session + one store key
+    /// while keeping *separate* on-disk stores — logging into one clobbers the
+    /// other's session and forces a re-sync. Tagging each entry with its data
+    /// dir binds the keyring secret to the store it actually belongs to. (A hash
+    /// rather than the raw path keeps the home directory out of the keyring UI.)
+    fn dir_tag(data_dir: &Path) -> String {
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for b in data_dir.to_string_lossy().as_bytes() {
+            hash ^= u64::from(*b);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        format!("{hash:016x}")
+    }
+
+    fn store_key_account(data_dir: &Path) -> String {
+        format!("{STORE_KEY_ACCOUNT}:{}", dir_tag(data_dir))
+    }
+
+    fn session_account(data_dir: &Path) -> String {
+        format!("{SESSION_ACCOUNT}:{}", dir_tag(data_dir))
+    }
+
     fn entry(account: &str) -> Result<Entry, String> {
         Entry::new(SERVICE, account).map_err(|e| format!("keyring init failed: {e}"))
     }
 
-    /// Map a keyring error to a user-facing string, translating the two
+    /// Map a keyring error to a user-facing string, translating the
     /// "backend isn't reachable" variants into the actionable guidance message.
     fn map_err(e: KeyringError) -> String {
         match e {
             KeyringError::NoStorageAccess(_) | KeyringError::PlatformFailure(_) => {
                 unavailable_message()
             }
+            // Some backends (notably Windows Credential Manager, ~2560-byte
+            // blob cap) reject an over-long value. The store key is tiny; only a
+            // pathologically long access token could trip this — surface it
+            // clearly instead of as an opaque "keyring error".
+            KeyringError::TooLong(what, max) => format!(
+                "Secure storage rejected the {what}: it exceeds this platform's {max}-byte limit. \
+                 This usually means the homeserver issued an unusually large access token."
+            ),
             other => format!("keyring error: {other}"),
         }
     }
@@ -84,8 +117,8 @@ mod imp {
         }
     }
 
-    pub fn get_or_create_store_key(_data_dir: &Path) -> Result<String, String> {
-        let e = entry(STORE_KEY_ACCOUNT)?;
+    pub fn get_or_create_store_key(data_dir: &Path) -> Result<String, String> {
+        let e = entry(&store_key_account(data_dir))?;
         match e.get_password() {
             Ok(k) => Ok(k),
             Err(KeyringError::NoEntry) => {
@@ -97,25 +130,25 @@ mod imp {
         }
     }
 
-    pub fn get_store_key(_data_dir: &Path) -> Result<Option<String>, String> {
-        match entry(STORE_KEY_ACCOUNT)?.get_password() {
+    pub fn get_store_key(data_dir: &Path) -> Result<Option<String>, String> {
+        match entry(&store_key_account(data_dir))?.get_password() {
             Ok(k) => Ok(Some(k)),
             Err(KeyringError::NoEntry) => Ok(None),
             Err(err) => Err(map_err(err)),
         }
     }
 
-    pub fn delete_store_key(_data_dir: &Path) -> Result<(), String> {
-        delete(STORE_KEY_ACCOUNT)
+    pub fn delete_store_key(data_dir: &Path) -> Result<(), String> {
+        delete(&store_key_account(data_dir))
     }
 
-    pub fn save_session(_data_dir: &Path, session: &SessionInfo) -> Result<(), String> {
+    pub fn save_session(data_dir: &Path, session: &SessionInfo) -> Result<(), String> {
         let json = serde_json::to_string(session).map_err(|e| e.to_string())?;
-        entry(SESSION_ACCOUNT)?.set_password(&json).map_err(map_err)
+        entry(&session_account(data_dir))?.set_password(&json).map_err(map_err)
     }
 
-    pub fn load_session(_data_dir: &Path) -> Result<Option<SessionInfo>, String> {
-        match entry(SESSION_ACCOUNT)?.get_password() {
+    pub fn load_session(data_dir: &Path) -> Result<Option<SessionInfo>, String> {
+        match entry(&session_account(data_dir))?.get_password() {
             Ok(json) => serde_json::from_str(&json)
                 .map(Some)
                 .map_err(|e| format!("corrupt stored session: {e}")),
@@ -124,14 +157,35 @@ mod imp {
         }
     }
 
-    pub fn clear_session(_data_dir: &Path) -> Result<(), String> {
-        delete(SESSION_ACCOUNT)
+    pub fn clear_session(data_dir: &Path) -> Result<(), String> {
+        delete(&session_account(data_dir))
     }
 
     fn delete(account: &str) -> Result<(), String> {
         match entry(account)?.delete_credential() {
             Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
             Err(err) => Err(map_err(err)),
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{dir_tag, session_account, store_key_account};
+        use std::path::Path;
+
+        #[test]
+        fn dir_tag_is_stable_and_path_specific() {
+            let a = Path::new("/home/u/.local/share/zone.derg.quark");
+            // Deterministic: the same path must hash identically across runs, or
+            // every launch would mint a new account name and lose the session.
+            assert_eq!(dir_tag(a), dir_tag(a));
+            // Distinct installs (e.g. Flatpak redirect) get distinct tags.
+            assert_ne!(
+                dir_tag(a),
+                dir_tag(Path::new("/home/u/.var/app/zone.derg.quark/data"))
+            );
+            // Account names carry the tag and stay distinct per secret.
+            assert_ne!(store_key_account(a), session_account(a));
         }
     }
 }
