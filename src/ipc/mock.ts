@@ -161,7 +161,7 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return null;
     case "restore_session":
       // No saved session in mock mode → fall through to the login screen.
-      return false;
+      return "NoSession";
     case "clear_session":
     case "logout":
       return null;

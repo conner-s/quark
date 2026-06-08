@@ -39,7 +39,7 @@ export type {
 
 // ─── Client (auth) ────────────────────────────────────────────────────────────
 export { login, restoreSession, clearStoredSession, logout, getOwnProfile, setPresenceStatus, getPresenceStatus, setDisplayName } from "./client.js";
-export type { PresenceInfo } from "./client.js";
+export type { PresenceInfo, RestoreOutcome } from "./client.js";
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────
 export { getRooms, joinRoom, leaveRoom, createRoom, getRoomMembers, markRoomRead, getRoomReceipts, getPinnedEvents, searchRoomDirectory, inviteUser, kickUser, banUser, unbanUser, searchRoomCache, searchRoomMessages, cancelRoomSearch, listenSearchEvents, EVENT_SEARCH_HIT, EVENT_SEARCH_PROGRESS } from "./rooms.js";

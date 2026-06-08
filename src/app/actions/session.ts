@@ -12,6 +12,7 @@ import {
   downloadMedia,
   getAppConfig,
 } from "../../ipc/index.js";
+import type { RestoreOutcome } from "../../ipc/index.js";
 
 import { showMainLayout } from "../../ui/App.js";
 import { showSuccess } from "../../ui/NotificationToast.js";
@@ -130,19 +131,41 @@ export async function attemptSessionRestore(components: import("../../ui/App.js"
   // anything else — those users are sent through a fresh (encrypted) login.
   clearLegacySession();
 
-  let restored: boolean;
+  let outcome: RestoreOutcome;
   try {
-    // The backend loads the session from the keyring itself; false means there
-    // is nothing to restore (fresh install or pre-keyring upgrade).
-    restored = await ipcRestoreSession();
+    // The backend loads the session from the keyring itself and reports how it
+    // went; only `Invalid` means the stored session should be thrown away.
+    outcome = await ipcRestoreSession();
   } catch (err) {
-    // A stored session existed but couldn't be used (stale token, missing key,
-    // keyring failure). Drop it so the next launch starts clean, then show login.
-    try { await ipcClearStoredSession(); } catch { /* best effort */ }
+    // Unexpected internal failure (e.g. the backend task panicked). Be
+    // conservative — never wipe on an error we can't classify — and show login.
     console.warn("Session restore failed, showing login:", err);
     return false;
   }
-  if (!restored) return false;
+
+  switch (outcome) {
+    case "Restored":
+      break; // continue to the success path below
+    case "NoSession":
+      // Fresh install or pre-keyring upgrade — nothing to restore.
+      return false;
+    case "Unavailable":
+      // The keyring is locked/unreachable. Crucially, do NOT clear anything: a
+      // transient lock must not destroy the encrypted local store. Show login
+      // with guidance so unlocking + relaunching resumes the existing session.
+      getComponents().loginScreen.setStatus(
+        "Secure storage is locked. Unlock your system keyring (GNOME Keyring / " +
+          "KWallet on Linux, Keychain on macOS), then restart Quark to resume " +
+          "your session.",
+        "error",
+      );
+      return false;
+    case "Invalid":
+      // A stored session existed but is unusable (missing key, bad token). Drop
+      // it so the next launch starts from a clean login instead of looping.
+      try { await ipcClearStoredSession(); } catch { /* best effort */ }
+      return false;
+  }
 
   AppState.set("loggedIn", true);
   showMainLayout(components);
