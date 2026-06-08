@@ -85,10 +85,12 @@ pub async fn build_client(
 
 /// Human-readable device name reported to the homeserver at login, so this
 /// session is recognizable in device lists / the verification picker, e.g.
-/// "Quark (macOS)", "Quark (Linux-Flatpak)", "Quark (Linux-rpm)". The platform
-/// comes from the build target; on Linux a packaging suffix is detected at
-/// runtime for sandboxed/portable formats (Flatpak/AppImage/Snap) or baked at
-/// build time via `QUARK_DIST` (set by the rpm/deb packaging), else plain "Linux".
+/// "Quark (macOS)", "Quark (Linux-Flatpak)", "Quark (Linux-AppImage)". The
+/// platform comes from the build target; on Linux a packaging suffix is added
+/// for the sandboxed/portable formats that can be identified at runtime
+/// (Flatpak/AppImage/Snap). The native deb and rpm packages are produced from a
+/// single shared binary in CI and install to the same prefix, so they can't be
+/// told apart — both report plain "Quark (Linux)".
 fn device_display_name() -> String {
     let platform = if cfg!(target_os = "macos") {
         "macOS"
@@ -114,9 +116,9 @@ fn device_display_name() -> String {
     format!("Quark ({platform})")
 }
 
-/// Detect how the Linux build was packaged. Sandboxed/portable formats expose a
-/// runtime marker; native packages (rpm/deb) don't, so those are baked in at
-/// build time via the `QUARK_DIST` env var.
+/// Detect sandboxed/portable Linux packaging at runtime. Native deb/rpm share a
+/// single binary (bundled together in CI) and install to the same prefix, so
+/// they can't be identified here and fall through to `None` → plain "Linux".
 #[cfg(target_os = "linux")]
 fn linux_packaging_suffix() -> Option<String> {
     use std::path::Path;
@@ -129,9 +131,7 @@ fn linux_packaging_suffix() -> Option<String> {
     if std::env::var_os("SNAP").is_some() {
         return Some("Snap".to_string());
     }
-    option_env!("QUARK_DIST")
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
+    None
 }
 
 /// Perform a password login and return session info.
