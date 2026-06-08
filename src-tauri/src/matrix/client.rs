@@ -58,15 +58,24 @@ pub struct SessionInfo {
     pub homeserver_url: String,
 }
 
-/// Build a Matrix client with SQLite store at the given data directory.
-pub async fn build_client(homeserver_url: &str, data_dir: PathBuf) -> Result<Client, String> {
+/// Build a Matrix client with an **encrypted** SQLite store at the given data
+/// directory. `store_key` is the passphrase matrix-sdk uses to encrypt the
+/// sensitive values in the state/crypto/event-cache stores at rest (room keys,
+/// cross-signing secrets, cached event bodies, …). It must be a stable,
+/// high-entropy value sourced from the OS keyring (see `crate::secrets`); the
+/// same key has to be supplied on every open or the store won't decrypt.
+pub async fn build_client(
+    homeserver_url: &str,
+    data_dir: PathBuf,
+    store_key: &str,
+) -> Result<Client, String> {
     let homeserver = homeserver_url
         .parse::<url::Url>()
         .map_err(|e| format!("Invalid homeserver URL: {e}"))?;
 
     let client = Client::builder()
         .homeserver_url(homeserver)
-        .sqlite_store(&data_dir, None)
+        .sqlite_store(&data_dir, Some(store_key))
         .build()
         .await
         .map_err(|e| format!("Failed to build Matrix client: {e}"))?;

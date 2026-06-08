@@ -5,7 +5,9 @@ pub mod gif;
 pub mod matrix;
 pub mod media_cache;
 pub mod media_server;
+pub mod net_guard;
 pub mod notifications;
+pub mod secrets;
 
 use matrix::client::{MatrixState, PaginationLock, SearchState, SyncState, TimelineTokens};
 use media_cache::MediaCache;
@@ -102,6 +104,7 @@ pub fn run() {
             commands::login,
             commands::logout,
             commands::restore_session,
+            commands::clear_session,
             commands::start_sync,
             // Rooms
             commands::get_rooms,
@@ -150,8 +153,7 @@ pub fn run() {
             commands::download_media,
             commands::save_media_to_temp,
             commands::serve_media,
-            commands::save_media_to_path,
-            commands::get_default_save_dir,
+            commands::save_media_with_dialog,
             commands::get_platform,
             commands::open_media_externally,
             commands::upload_media,

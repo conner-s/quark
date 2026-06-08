@@ -1,18 +1,19 @@
 // Matrix client IPC calls — auth commands
 
 import { invoke } from "./invoke.js";
-import type { SessionInfo, OwnProfile } from "./types.js";
+import type { OwnProfile } from "./types.js";
 
 /**
- * Login with password credentials.
+ * Login with password credentials. On success the backend persists the session
+ * in the OS keyring; the access token is never returned to the frontend.
  * Matches the Rust `login` command.
  */
 export async function login(
   homeserverUrl: string,
   username: string,
   password: string,
-): Promise<SessionInfo> {
-  return invoke<SessionInfo>("login", {
+): Promise<void> {
+  return invoke<void>("login", {
     homeserverUrl,
     username,
     password,
@@ -20,17 +21,23 @@ export async function login(
 }
 
 /**
- * Restore a previously saved session.
+ * Restore a previously saved session from the OS keyring. Returns `true` if a
+ * session was found and restored, `false` if there is nothing to restore.
+ * Rejects if a stored session existed but couldn't be used (stale token, missing
+ * key, keyring failure) — callers should then `clearStoredSession()`.
  * Matches the Rust `restore_session` command.
  */
-export async function restoreSession(
-  homeserverUrl: string,
-  session: SessionInfo,
-): Promise<void> {
-  return invoke<void>("restore_session", {
-    homeserverUrl,
-    session,
-  });
+export async function restoreSession(): Promise<boolean> {
+  return invoke<boolean>("restore_session", {});
+}
+
+/**
+ * Drop all local session state (keyring session + store-encryption key + SQLite
+ * store) without contacting the server. Used to recover from a failed restore.
+ * Matches the Rust `clear_session` command.
+ */
+export async function clearStoredSession(): Promise<void> {
+  return invoke<void>("clear_session", {});
 }
 
 /**

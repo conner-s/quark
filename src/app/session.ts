@@ -1,25 +1,19 @@
-// Session persistence — save/load/clear the Matrix session from localStorage.
-// Stored as JSON; the SessionInfo struct includes the homeserver_url so it's
-// self-contained for restore_session IPC calls.
+// Legacy session cleanup.
+//
+// Sessions used to be persisted here as plaintext JSON in localStorage (the
+// `quark_session` key), which put the Matrix access token on disk and made it
+// readable by any JS in the WebView. Sessions are now owned entirely by the Rust
+// backend and stored in the OS keyring (see `secrets.rs`); the token never
+// reaches the frontend. The only thing left to do here is scrub the old
+// plaintext key off disk for users upgrading from a pre-keyring build.
 
-import type { SessionInfo } from "../ipc/types.js";
+const LEGACY_SESSION_KEY = "quark_session";
 
-const SESSION_KEY = "quark_session";
-
-export function saveSession(session: SessionInfo): void {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-}
-
-export function loadSession(): SessionInfo | null {
-  const raw = localStorage.getItem(SESSION_KEY);
-  if (!raw) return null;
+/** Remove any plaintext session left in localStorage by a pre-keyring build. */
+export function clearLegacySession(): void {
   try {
-    return JSON.parse(raw) as SessionInfo;
+    localStorage.removeItem(LEGACY_SESSION_KEY);
   } catch {
-    return null;
+    /* localStorage unavailable — nothing to clean up */
   }
-}
-
-export function clearSession(): void {
-  localStorage.removeItem(SESSION_KEY);
 }

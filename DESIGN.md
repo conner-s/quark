@@ -235,7 +235,7 @@ The backend handles all Matrix protocol interaction and exposes commands to the 
 - Media download/upload with authenticated media (MSC3916)
 - Custom emoji/sticker pack resolution (MSC2545)
 - Theme file loading and validation
-- Local encrypted database (sled or SQLite via matrix-sdk store)
+- Local encrypted database — matrix-sdk SQLite store opened with a keyring-held passphrase; store key + session in the OS keyring (`secrets.rs`)
 
 ### Frontend (TypeScript)
 
@@ -914,5 +914,26 @@ quark/
 #### Hardening
 - [ ] Accessibility audit — keyboard-only navigation, screen reader ARIA hints
 - [ ] Performance profiling — large rooms (1000+ messages), many emoji packs
+
+#### Security
+At-rest secrets (done in 0.13.0):
+- [x] **Encrypted SQLite store** — the matrix-sdk store is opened with a passphrase (`sqlite_store(path, Some(key))`), so the sensitive values at rest (E2EE room keys, cross-signing secrets, cached event bodies, account data) are encrypted via `matrix-sdk-store-encryption`. (Full-file SQLCipher isn't exposed by matrix-sdk 0.9's feature flags; value-level encryption is the supported mechanism and is what Element uses.)
+- [x] **Store key + Matrix session in the OS keyring** — a random 256-bit store key and the session (access token) live in the OS keyring via the `keyring` crate (`secrets.rs`): Secret Service on Linux, Keychain on macOS/iOS, Credential Manager on Windows. Android has no Secret Service, so it falls back to app-private files (sandbox-isolated). The access token no longer touches `localStorage` or crosses into the frontend.
+- [x] **Refuse-on-unavailable** — if the keyring is unreachable, login fails with actionable guidance rather than silently storing secrets in plaintext.
+- [x] **Migration** — pre-keyring installs (plaintext token in `localStorage` + unencrypted store) are sent through one clean re-login; the legacy `localStorage` key is scrubbed and the orphaned unencrypted store is wiped on first run.
+
+Remote-content hardening (done in 0.13.0):
+- [x] **Sanitize `formatted_body` before `innerHTML`** (Critical) — remote `org.matrix.custom.html` is attacker-controlled and was rendered unsanitized. A strict allowlist sanitizer (`ammonia`, `matrix/html.rs`) now runs on the **read path**: every backend extraction of a remote `formatted_body` (`timeline.rs`, `events.rs`, `threads.rs`, `rooms.rs`) funnels through `sanitize`, so all frontend sinks (`Timeline.ts`, `ThreadView.ts`) receive cleaned HTML. The allowlist matches the Matrix spec subset and preserves custom-emoji images (`data-mx-emoticon`/`mxc:`), spoilers (`data-mx-spoiler`), and the `<mx-reply>` fallback wrapper.
+- [x] **Strict Content-Security-Policy** (Critical) — `tauri.conf.json` now sets `script-src 'self'`, `style-src 'self'` (no `unsafe-inline`/`unsafe-eval`), `default-src 'self'`, with `img-src` scoped to `self`/`blob:`/`data:`/`https:`, `media-src` to `self`/`blob:`/`asset:`/`http://asset.localhost`/`http://127.0.0.1:*` (the loopback video server's random port), `connect-src 'self' ipc: http://ipc.localhost`, and `object-src 'none'`/`base-uri 'self'`/`frame-ancestors 'none'`/`form-action 'self'`. (CSP only applies to the bundled app, not the Vite dev server, so HMR is unaffected.)
+- [x] **SSRF in URL previews** (High) — the direct-fetch fallback in `get_url_preview` now routes through `net_guard::guarded_get`: http(s) only, the host is resolved and **every** resulting IP must be publicly routable (loopback/RFC1918/link-local/ULA/CGNAT/IPv4-mapped all refused), the connect IP is pinned via reqwest `.resolve(...)` to defeat DNS rebinding, redirects are followed manually and re-validated per hop, and the body read is byte-capped. Non-http(s) URLs are dropped up front so they never reach the homeserver preview API either.
+
+Command-surface hardening (done in 0.13.0):
+- [x] **`open_external_url` scheme allowlist** (High) — the command now parses the URL and refuses any scheme outside `http`/`https`/`mailto`/`ftp`/`magnet` before calling `shell().open`, so a message link can't hand `file:`, `javascript:`, `data:`, or a custom-protocol URI to the OS opener. The gate lives in the backend because the frontend check was bypassable.
+- [x] **Native save dialog (replaces "confine `save_media_to_path`")** (Medium) — the arbitrary-write `save_media_to_path` (frontend-supplied absolute path) and `get_default_save_dir` are gone, along with the in-app save modal. `save_media_with_dialog` downloads the media and writes it to a path chosen in the **OS native save dialog** (`rfd` with the XDG desktop-portal backend on Linux, native pickers on macOS/Windows). The frontend never supplies a path, so the arbitrary-write primitive is eliminated. The portal backend also sidesteps the GTK/GSettings crash that made the modal necessary in the first place, and lets the Flatpak save outside its sandbox (the old modal write couldn't, given the tight `finish-args`). Mobile has no desktop picker, so the command stubs out there for now.
+- [x] **`devtools` off in release** (Medium) — dropped the `devtools` Cargo feature from the `tauri` dependency. Tauri enables the Web Inspector automatically in debug builds, and that feature was the only thing that *also* enabled it in release builds — so shipped (release/Flatpak) builds no longer expose devtools, while `tauri dev` still has it.
+
+Open items from the 0.13.0 security assessment (not yet fixed, priority order):
+- [ ] **Gate URL auto-preview / validate `og:image` host** (Medium, follow-up to SSRF) — the SSRF fetch is now guarded, but auto-preview still fires zero-click on the first link in a message (a public attacker URL learns your IP/online-status on receipt), and the returned `og:image` URL is loaded by the frontend `<img>` without host validation (CSP limits it to `https:`, but an internal `https` host on the LAN is still reachable). Add a "preview links automatically" setting (default off for untrusted rooms) and drop `og:image` whose host resolves to a non-public address.
+- [ ] Consider keychain storage for the GIF API key (Low) and requiring `https://` for the homeserver URL (Low).
 
 #### Bugs

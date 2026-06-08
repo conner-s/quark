@@ -149,7 +149,9 @@ pub async fn get_thread_timeline(
                     };
 
                     let formatted_body = match &ev.content.msgtype {
-                        MessageType::Text(t) => t.formatted.as_ref().map(|f| f.body.clone()),
+                        MessageType::Text(t) => {
+                            t.formatted.as_ref().map(|f| crate::matrix::html::sanitize(&f.body))
+                        }
                         _ => None,
                     };
 

@@ -157,8 +157,12 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
 
   switch (cmd) {
     case "login":
-      return { user_id: "@you:matrix.org", device_id: "MOCKDEVICE", access_token: "mock_token", homeserver_url: (args?.homeserverUrl as string) ?? "https://matrix.org" };
+      // Backend now persists the session in the keyring and returns nothing.
+      return null;
     case "restore_session":
+      // No saved session in mock mode → fall through to the login screen.
+      return false;
+    case "clear_session":
     case "logout":
       return null;
     case "get_rooms":
@@ -573,11 +577,11 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return `http://127.0.0.1:0/mock/quark-media-mock.mp4`;
     case "get_platform":
       return "linux";
-    case "save_media_to_path":
-      console.log("[mock] save_media_to_path", args);
-      return (args?.destPath as string) ?? "/tmp/quark-mock-save.bin";
-    case "get_default_save_dir":
-      return "/tmp/quark-mock-downloads";
+    case "save_media_with_dialog":
+      console.log("[mock] save_media_with_dialog", args);
+      return (args?.suggestedFilename as string)
+        ? `/tmp/quark-mock-downloads/${args?.suggestedFilename as string}`
+        : "/tmp/quark-mock-save.bin";
     case "open_media_externally":
       console.log("[mock] open_media_externally", args);
       return null;

@@ -517,7 +517,10 @@ pub async fn get_pinned_events(client: &Client, room_id: &str) -> Result<Vec<Pin
             // dialog shows something rather than a blank row.
             let encrypted = json_val.get("type").and_then(|t| t.as_str()) == Some("m.room.encrypted");
             let content = json_val.get("content").unwrap_or(&Value::Null);
-            let formatted_body = content.get("formatted_body").and_then(|b| b.as_str()).map(str::to_string);
+            let formatted_body = content
+                .get("formatted_body")
+                .and_then(|b| b.as_str())
+                .map(crate::matrix::html::sanitize);
             let body = if encrypted {
                 "\u{1f512} unable to decrypt".to_string()
             } else {

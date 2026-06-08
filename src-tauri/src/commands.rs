@@ -5,7 +5,7 @@ use crate::{
     },
     gif::GifResult,
     matrix::{
-        client::{MatrixState, OwnProfile, SessionInfo, SyncState},
+        client::{MatrixState, OwnProfile, SyncState},
         crypto::{CrossSigningInfo, SasInfo, VerificationStatus},
         emoji::EmojiPack,
         media::MediaDownload,
@@ -45,6 +45,16 @@ fn clear_store(data_dir: &Path) {
     }
 }
 
+/// Remove all local session state: the SQLite store files plus the keyring's
+/// session and store-encryption key. Used on logout and before a fresh login so
+/// switching accounts never reuses a prior account's encrypted store or key.
+/// Synchronous (filesystem + blocking keyring I/O) — call inside `spawn_blocking`.
+fn wipe_local_session(data_dir: &Path) {
+    clear_store(data_dir);
+    let _ = crate::secrets::clear_session(data_dir);
+    let _ = crate::secrets::delete_store_key(data_dir);
+}
+
 // ─── Auth Commands ────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -55,16 +65,46 @@ pub async fn login(
     homeserver_url: String,
     username: String,
     password: String,
-) -> Result<SessionInfo, String> {
+) -> Result<(), String> {
     let data_path = app_handle.path().app_data_dir()
         .map_err(|e| format!("Could not resolve app data dir: {e}"))?;
 
-    // Clear any leftover store from a previous session to prevent crypto store
-    // conflicts when logging in as a different account.
-    clear_store(&data_path);
+    // Refuse to start an encrypted session if secure storage is unreachable —
+    // we never silently fall back to writing the session/key in plaintext.
+    {
+        let dp = data_path.clone();
+        let available = tokio::task::spawn_blocking(move || crate::secrets::is_available(&dp))
+            .await
+            .map_err(|e| format!("secrets task failed: {e}"))?;
+        if !available {
+            return Err(crate::secrets::unavailable_message());
+        }
+    }
 
-    let client = crate::matrix::client::build_client(&homeserver_url, data_path).await?;
+    // Fresh login: wipe any leftover local state (old store, key, session) so a
+    // different account never inherits the previous one's encrypted store, then
+    // mint a fresh store-encryption key for the new store.
+    let store_key = {
+        let dp = data_path.clone();
+        tokio::task::spawn_blocking(move || {
+            wipe_local_session(&dp);
+            crate::secrets::get_or_create_store_key(&dp)
+        })
+        .await
+        .map_err(|e| format!("secrets task failed: {e}"))??
+    };
+
+    let client = crate::matrix::client::build_client(&homeserver_url, data_path.clone(), &store_key).await?;
     let session = crate::matrix::client::login_with_password(&client, &username, &password).await?;
+
+    // Persist the session in the OS keyring — it is never returned to the
+    // frontend or written to localStorage.
+    {
+        let dp = data_path.clone();
+        tokio::task::spawn_blocking(move || crate::secrets::save_session(&dp, &session))
+            .await
+            .map_err(|e| format!("secrets task failed: {e}"))??;
+    }
 
     {
         let mut guard = state.0.lock().map_err(|_| "State lock poisoned")?;
@@ -77,20 +117,53 @@ pub async fn login(
     *sync_state.handlers_registered.lock().map_err(|_| "Sync state lock poisoned")? = false;
 
     crate::matrix::client::start_sync(client, Some(app_handle), &sync_state).await;
-    Ok(session)
+    Ok(())
 }
 
+/// Restore a previously saved session from the OS keyring.
+///
+/// Returns `Ok(true)` if a session was found and restored, `Ok(false)` if there
+/// is nothing to restore (fresh install, or an upgrade from a pre-keyring
+/// version — those users are sent to the login screen). `Err` means a stored
+/// session existed but couldn't be used (bad token, missing key, keyring
+/// failure); the frontend clears it via `clear_session` and shows login.
 #[tauri::command]
 pub async fn restore_session(
     state: State<'_, MatrixState>,
     sync_state: State<'_, SyncState>,
     app_handle: AppHandle,
-    homeserver_url: String,
-    session: SessionInfo,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let data_path = app_handle.path().app_data_dir()
         .map_err(|e| format!("Could not resolve app data dir: {e}"))?;
-    let client = crate::matrix::client::build_client(&homeserver_url, data_path).await?;
+
+    // Load the saved session from the keyring.
+    let session = {
+        let dp = data_path.clone();
+        tokio::task::spawn_blocking(move || crate::secrets::load_session(&dp))
+            .await
+            .map_err(|e| format!("secrets task failed: {e}"))??
+    };
+
+    let Some(session) = session else {
+        // Nothing to restore. Proactively wipe any orphaned store left by an
+        // older (pre-encryption) version: without a key/session it is unusable,
+        // and leaving it keeps plaintext crypto/state data on disk.
+        let dp = data_path.clone();
+        let _ = tokio::task::spawn_blocking(move || clear_store(&dp)).await;
+        return Ok(false);
+    };
+
+    // The store-encryption key must accompany the saved session.
+    let store_key = {
+        let dp = data_path.clone();
+        tokio::task::spawn_blocking(move || crate::secrets::get_store_key(&dp))
+            .await
+            .map_err(|e| format!("secrets task failed: {e}"))??
+            .ok_or_else(|| "Saved session is missing its encryption key".to_string())?
+    };
+
+    let client =
+        crate::matrix::client::build_client(&session.homeserver_url, data_path.clone(), &store_key).await?;
     crate::matrix::client::restore_session_from_info(&client, &session).await?;
 
     {
@@ -104,7 +177,7 @@ pub async fn restore_session(
     *sync_state.handlers_registered.lock().map_err(|_| "Sync state lock poisoned")? = false;
 
     crate::matrix::client::start_sync(client, Some(app_handle), &sync_state).await;
-    Ok(())
+    Ok(true)
 }
 
 /// Start the background sync loop and register push-event handlers.
@@ -156,12 +229,25 @@ pub async fn logout(
         let _ = c.matrix_auth().logout().await;
     }
 
-    // Always clear the local SQLite store so the next login starts clean,
-    // regardless of whether the server-side revocation succeeded.
+    // Always clear local session state (SQLite store + keyring session + store
+    // key) so the next login starts clean, regardless of whether the server-side
+    // revocation succeeded.
     if let Ok(data_path) = app_handle.path().app_data_dir() {
-        clear_store(&data_path);
+        let _ = tokio::task::spawn_blocking(move || wipe_local_session(&data_path)).await;
     }
 
+    Ok(())
+}
+
+/// Clear local session state without contacting the server. The frontend calls
+/// this when `restore_session` fails (stale token, missing key, keyring error)
+/// so the next launch starts from a clean login rather than looping on the bad
+/// session.
+#[tauri::command]
+pub async fn clear_session(app_handle: AppHandle) -> Result<(), String> {
+    if let Ok(data_path) = app_handle.path().app_data_dir() {
+        let _ = tokio::task::spawn_blocking(move || wipe_local_session(&data_path)).await;
+    }
     Ok(())
 }
 
@@ -760,21 +846,24 @@ pub async fn serve_media(
     Ok(server.url_for(basename))
 }
 
-/// Download a media file from the homeserver and write it to a caller-supplied
-/// path on disk. The frontend collects the destination via the in-app save
-/// modal before invoking this command. Used by the file affordance.
+/// Download a media file from the homeserver and save it to disk via the OS
+/// **native save dialog**. The destination comes from the dialog — the user
+/// picks it — never from the frontend, so this can't be turned into an
+/// arbitrary-file-write primitive the way a frontend-supplied path could.
 ///
-/// Tilde (`~`) at the start of the path is expanded to the user's home
-/// directory, and missing parent directories are created on demand — so the
-/// frontend can pass e.g. `~/Downloads/photo.jpg` without pre-checking.
+/// On Linux the dialog goes through the XDG desktop portal: it works in `tauri
+/// dev` and inside the Flatpak sandbox (where the portal is the only way to
+/// write outside the sandbox), and it avoids the GTK/GSettings stack that
+/// crashed the previous native picker on some Linux setups. macOS/Windows use
+/// the native picker. Returns the written path, or `None` if the user cancelled.
 #[tauri::command]
-pub async fn save_media_to_path(
+pub async fn save_media_with_dialog(
     state: State<'_, MatrixState>,
     cache_state: State<'_, CacheState>,
     mxc_url: String,
     encryption_info: Option<String>,
-    dest_path: String,
-) -> Result<String, String> {
+    suggested_filename: Option<String>,
+) -> Result<Option<String>, String> {
     let client = get_client(&state)?;
 
     let dl = crate::matrix::media::download_media_with_cache(
@@ -789,40 +878,37 @@ pub async fn save_media_to_path(
     .await?;
 
     let bytes = crate::matrix::media::decode_base64(&dl.data_base64)?;
-    let expanded = expand_tilde(&dest_path);
-
-    if let Some(parent) = expanded.parent() {
-        if !parent.as_os_str().is_empty() && !parent.exists() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create directory {}: {e}", parent.display()))?;
-        }
-    }
-
-    std::fs::write(&expanded, &bytes)
-        .map_err(|e| format!("Failed to write file: {e}"))?;
-
-    expanded.to_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| "Saved path is not valid UTF-8".to_string())
+    save_bytes_via_dialog(bytes, suggested_filename.as_deref()).await
 }
 
-/// Resolve the user's default download directory (XDG `XDG_DOWNLOAD_DIR`,
-/// `~/Downloads` on most Linux desktops, `~/Downloads` on macOS, etc.).
-/// Falls back to the home directory if no downloads dir is configured.
-/// Returns an absolute path as a UTF-8 string.
-#[tauri::command]
-pub fn get_default_save_dir() -> Result<String, String> {
-    let user_dirs = directories::UserDirs::new()
-        .ok_or_else(|| "Could not resolve user directories".to_string())?;
+/// Show the OS native save dialog and write `bytes` to the chosen path.
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+async fn save_bytes_via_dialog(
+    bytes: Vec<u8>,
+    suggested_filename: Option<&str>,
+) -> Result<Option<String>, String> {
+    let mut dialog = rfd::AsyncFileDialog::new();
+    if let Some(name) = suggested_filename {
+        dialog = dialog.set_file_name(name);
+    }
 
-    let path = user_dirs
-        .download_dir()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| user_dirs.home_dir().to_path_buf());
+    let Some(handle) = dialog.save_file().await else {
+        return Ok(None); // user cancelled
+    };
 
-    path.to_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| "Download dir path is not valid UTF-8".to_string())
+    let path = handle.path().to_path_buf();
+    std::fs::write(&path, &bytes).map_err(|e| format!("Failed to write file: {e}"))?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// Mobile (iOS/Android) has no desktop file picker, and saving arbitrary files
+/// isn't wired up there yet.
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+async fn save_bytes_via_dialog(
+    _bytes: Vec<u8>,
+    _suggested_filename: Option<&str>,
+) -> Result<Option<String>, String> {
+    Err("Saving files isn't supported on this platform yet".to_string())
 }
 
 /// Return the compile-time target OS ("linux", "macos", "windows", "ios",
@@ -834,22 +920,6 @@ pub fn get_default_save_dir() -> Result<String, String> {
 #[tauri::command]
 pub fn get_platform() -> String {
     std::env::consts::OS.to_string()
-}
-
-/// Expand a leading `~` to the user's home directory.
-fn expand_tilde(path: &str) -> std::path::PathBuf {
-    let trimmed = path.trim();
-    if let Some(rest) = trimmed.strip_prefix("~/") {
-        if let Some(home) = directories::UserDirs::new().map(|d| d.home_dir().to_path_buf()) {
-            return home.join(rest);
-        }
-    }
-    if trimmed == "~" {
-        if let Some(home) = directories::UserDirs::new().map(|d| d.home_dir().to_path_buf()) {
-            return home;
-        }
-    }
-    std::path::PathBuf::from(trimmed)
 }
 
 /// Download a video/audio file to a temp path and open it in the system's
@@ -1056,6 +1126,14 @@ pub async fn get_url_preview(
 ) -> Result<Option<UrlPreview>, String> {
     let client = get_client(&state)?;
 
+    // Only http(s) URLs have a page to preview; anything else (matrix:, mailto:,
+    // javascript:, …) is dropped before it can reach the homeserver preview API
+    // or the direct fetch below.
+    match url::Url::parse(&url).ok().as_ref().map(|u| u.scheme()) {
+        Some("http") | Some("https") => {}
+        _ => return Ok(None),
+    }
+
     // ── 1. Try the Matrix homeserver URL-preview API ──────────────────────
     #[allow(deprecated)]
     let hs_result = {
@@ -1082,23 +1160,32 @@ pub async fn get_url_preview(
     }
 
     // ── 2. Direct HTTP fallback: fetch the page and extract OG tags ───────
-    let http = reqwest::Client::builder()
-        // Use a realistic browser UA; some sites (YouTube, Twitter proxies) gate content on it
-        .user_agent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        .timeout(std::time::Duration::from_secs(8))
-        .build()
-        .map_err(|e| format!("HTTP client error: {e}"))?;
-
-    let resp = http.get(&url)
-        // Mimic a real browser request so CDN/bot-detection layers serve full HTML
-        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-        .header("Accept-Language", "en-US,en;q=0.5")
-        // Request uncompressed content; reqwest doesn't have gzip enabled by default
-        .header("Accept-Encoding", "identity")
-        .header("Cache-Control", "no-cache")
-        .header("Upgrade-Insecure-Requests", "1")
-        .send().await
-        .map_err(|e| format!("URL fetch failed: {e}"))?;
+    //
+    // `url` is attacker-controlled (it comes straight from message content and
+    // auto-previews fire on it), so the fetch goes through the SSRF guard:
+    // http(s) only, no private/loopback/link-local targets, redirects
+    // re-validated per hop, the connect IP pinned to the validated address, and
+    // a capped body read. A blocked or failed target just means "no preview".
+    const PREVIEW_UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    let resp = match crate::net_guard::guarded_get(
+        &url,
+        PREVIEW_UA,
+        std::time::Duration::from_secs(8),
+        &[
+            // Mimic a real browser request so CDN/bot-detection layers serve full HTML
+            ("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
+            ("Accept-Language", "en-US,en;q=0.5"),
+            // Request uncompressed content; reqwest doesn't have gzip enabled by default
+            ("Accept-Encoding", "identity"),
+            ("Cache-Control", "no-cache"),
+            ("Upgrade-Insecure-Requests", "1"),
+        ],
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(_) => return Ok(None),
+    };
 
     // Only parse HTML responses
     let content_type = resp.headers()
@@ -1112,10 +1199,10 @@ pub async fn get_url_preview(
     }
 
     // Read up to 128 KB — OG tags live in <head> which is usually within 32 KB,
-    // but some JS-heavy sites push it further down.
-    let bytes = resp.bytes().await
-        .map_err(|e| format!("URL read failed: {e}"))?;
-    let html = String::from_utf8_lossy(&bytes[..bytes.len().min(131_072)]).into_owned();
+    // but some JS-heavy sites push it further down. Capped so a hostile target
+    // can't stream an unbounded body into memory.
+    let bytes = crate::net_guard::read_body_capped(resp, 131_072).await?;
+    let html = String::from_utf8_lossy(&bytes).into_owned();
 
     let title = extract_og_tag(&html, "og:title")
         .or_else(|| extract_html_title(&html));
@@ -1982,6 +2069,21 @@ pub async fn test_notification(app_handle: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn open_external_url(app_handle: AppHandle, url: String) -> Result<(), String> {
     use tauri_plugin_shell::ShellExt;
+
+    // Only hand safe, web-style schemes to the OS opener. This is reachable from
+    // message links, so the gate must live here, not only in the (bypassable)
+    // frontend: `file:`, `javascript:`, `data:`, and OS-specific custom-protocol
+    // handlers must never make it to `shell().open`. (`matrix:`/`mxc:` survive
+    // HTML sanitization but aren't externally openable resources, so they're
+    // dropped here too.)
+    let scheme = url::Url::parse(&url)
+        .map_err(|_| "Invalid URL".to_string())?
+        .scheme()
+        .to_ascii_lowercase();
+    if !matches!(scheme.as_str(), "http" | "https" | "mailto" | "ftp" | "magnet") {
+        return Err(format!("refusing to open URL with scheme '{scheme}'"));
+    }
+
     #[allow(deprecated)]
     app_handle.shell().open(url, None).map_err(|e| e.to_string())
 }

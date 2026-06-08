@@ -38,7 +38,7 @@ export type {
 } from "./types.js";
 
 // ─── Client (auth) ────────────────────────────────────────────────────────────
-export { login, restoreSession, logout, getOwnProfile, setPresenceStatus, getPresenceStatus, setDisplayName } from "./client.js";
+export { login, restoreSession, clearStoredSession, logout, getOwnProfile, setPresenceStatus, getPresenceStatus, setDisplayName } from "./client.js";
 export type { PresenceInfo } from "./client.js";
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ export {
 } from "./emoji.js";
 
 // ─── Media ────────────────────────────────────────────────────────────────────
-export { downloadMedia, getThumbnail, uploadMedia, sendPastedImage, sendFile, sendVideo, saveMediaToTemp, serveMedia, saveMediaToPath, getDefaultSaveDir, getPlatform, openMediaExternally, getCacheStats, clearMediaCache, setCacheSizeLimit, getEventCacheSize, clearEventCache, getUrlPreview } from "./media.js";
+export { downloadMedia, getThumbnail, uploadMedia, sendPastedImage, sendFile, sendVideo, saveMediaToTemp, serveMedia, saveMediaWithDialog, getPlatform, openMediaExternally, getCacheStats, clearMediaCache, setCacheSizeLimit, getEventCacheSize, clearEventCache, getUrlPreview } from "./media.js";
 export type { CacheStats, UrlPreview } from "./media.js";
 
 // ─── Notifications ────────────────────────────────────────────────────────────

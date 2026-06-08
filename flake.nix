@@ -102,6 +102,11 @@
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH"
             export GIO_MODULE_DIR="${pkgs.glib-networking}/lib/gio/modules"
             export WEBKIT_DISABLE_COMPOSITING_MODE=1
+            # GSettings schemas — WebKitGTK's `<input type=file>` chooser (and any
+            # GTK file dialog) abort with "No GSettings schemas are installed"
+            # without these. A bare nix dev shell doesn't inherit the host's
+            # schema path, so add GTK's plus the desktop schemas explicitly.
+            export XDG_DATA_DIRS="${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}:${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:$XDG_DATA_DIRS"
             # GStreamer plugin paths — WebKitGTK won't find them on NixOS without this
             export GST_PLUGIN_SYSTEM_PATH="${pkgs.lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" (with pkgs.gst_all_1; [
               gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-libav

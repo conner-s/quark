@@ -515,7 +515,7 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
         match effective_msgtype {
             MessageType::Text(text) => (
                 text.body.clone(),
-                text.formatted.as_ref().map(|f| f.body.clone()),
+                text.formatted.as_ref().map(|f| crate::matrix::html::sanitize(&f.body)),
                 "m.text".to_string(),
                 None,
                 None,
@@ -575,7 +575,7 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
             }
             MessageType::Emote(emote) => (
                 emote.body.clone(),
-                emote.formatted.as_ref().map(|f| f.body.clone()),
+                emote.formatted.as_ref().map(|f| crate::matrix::html::sanitize(&f.body)),
                 "m.emote".to_string(),
                 None,
                 None,
@@ -585,7 +585,7 @@ fn convert_room_message_event(ev: OriginalSyncRoomMessageEvent) -> Option<Timeli
             ),
             MessageType::Notice(notice) => (
                 notice.body.clone(),
-                notice.formatted.as_ref().map(|f| f.body.clone()),
+                notice.formatted.as_ref().map(|f| crate::matrix::html::sanitize(&f.body)),
                 "m.notice".to_string(),
                 None,
                 None,

@@ -15,14 +15,12 @@ maintain as complexity grows. You should propose to add a layer of abstraction t
 
 ## Versioning
 
-Bump the version in all three files together whenever shipping a feature or fix:
-- `package.json` — `version` field
-- `src-tauri/Cargo.toml` — `version` field (first occurrence, the package version)
-- `src-tauri/tauri.conf.json` — `version` field
+Bump the version **once per branch, when prepping it for merge** — not eagerly mid-feature (per-commit bumps churn the version files and cause cross-file drift). Use the `version-bump` skill, which updates every file that carries the version in lockstep (package.json, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, the README badge, the Cargo.lock `quark` entry, and the iOS Info.plist) and refuses to run if they're already out of sync.
 
 Rules:
 - **Feature** (new user-visible behaviour) → bump **minor** version (e.g. `0.1.0` → `0.2.0`)
 - **Bug fix** (corrects existing behaviour without adding features) → bump **patch** version (e.g. `0.1.0` → `0.1.1`)
+- If a branch mixes features and fixes, bump to the highest level any commit warrants (one feature ⇒ minor).
 
 ## Commands
 

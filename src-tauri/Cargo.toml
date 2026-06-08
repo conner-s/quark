@@ -5,7 +5,10 @@ edition = "2021"
 description = "A CLI-styled Matrix client"
 
 [dependencies]
-tauri = { version = "2", features = ["devtools", "protocol-asset"] }
+# `devtools` is intentionally NOT enabled: Tauri turns the Web Inspector on
+# automatically in debug builds, and the `devtools` feature is only what would
+# additionally enable it in *release* builds — which we don't want shipping.
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
 chrono = { version = "0.4", features = ["clock"] }
@@ -23,6 +26,9 @@ mime = "0.3"
 sha2 = "0.10"
 rand = "0.8"
 tiny_http = "0.12"
+# Allowlist sanitizer for remote `formatted_body` HTML (org.matrix.custom.html)
+# before it reaches the WebView. See matrix/html.rs.
+ammonia = "4"
 
 # matrix-sdk and reqwest pick their TLS stack from features.
 # Desktop + iOS use native-tls (Security framework on Apple, OpenSSL on Linux);
@@ -30,6 +36,20 @@ tiny_http = "0.12"
 [target.'cfg(not(target_os = "android"))'.dependencies]
 matrix-sdk = { version = "0.9", features = ["e2e-encryption", "bundled-sqlite"] }
 reqwest = { version = "0.12", features = ["json"] }
+# OS keyring: encrypts the SQLite store key + Matrix session at rest. Linux uses
+# the Secret Service (sync; crypto-rust avoids an OpenSSL build dep), macOS/iOS
+# use the Keychain, Windows uses Credential Manager. Android has no Secret
+# Service and isn't supported by `keyring`, so it's excluded here — `secrets.rs`
+# falls back to app-private file storage there (see that module).
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+
+# Native save dialogs. On Linux the `xdg-portal` backend talks to the XDG
+# desktop portal over D-Bus (no GTK/GSettings — avoids the "No GSettings schemas
+# installed" crash that sank the previous native picker, and is the only way a
+# Flatpak can write outside its sandbox); macOS/Windows use the OS picker.
+# Desktop-only — mobile has no equivalent and the save command stubs out there.
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 matrix-sdk = { version = "0.9", default-features = false, features = ["e2e-encryption", "automatic-room-key-forwarding", "sqlite", "bundled-sqlite", "rustls-tls"] }

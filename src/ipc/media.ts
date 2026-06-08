@@ -194,29 +194,22 @@ export async function serveMedia(
 }
 
 /**
- * Download media from the homeserver and write it to a caller-supplied path.
- * The frontend should first prompt the user for a destination via the in-app
- * save modal; this command just performs the download + write. Tilde-expansion
- * and parent-directory creation are handled by the backend.
+ * Download media from the homeserver and save it via the OS native save dialog
+ * (XDG desktop portal on Linux, native picker on macOS/Windows). The backend
+ * shows the dialog and writes the file; the user picks the destination there, so
+ * the frontend never supplies — or even sees — a filesystem path. Returns the
+ * written path, or `null` if the user cancelled.
  */
-export async function saveMediaToPath(
+export async function saveMediaWithDialog(
   mxcUrl: string,
-  destPath: string,
+  suggestedFilename?: string,
   encryptionInfo?: string | null,
-): Promise<string> {
-  return invoke<string>("save_media_to_path", {
+): Promise<string | null> {
+  return invoke<string | null>("save_media_with_dialog", {
     mxcUrl,
-    destPath,
+    suggestedFilename: suggestedFilename ?? null,
     encryptionInfo: encryptionInfo ?? null,
   });
-}
-
-/**
- * Get the user's default download directory (XDG_DOWNLOAD_DIR or `~/Downloads`).
- * Used to pre-populate the save modal's folder input.
- */
-export async function getDefaultSaveDir(): Promise<string> {
-  return invoke<string>("get_default_save_dir");
 }
 
 /**
