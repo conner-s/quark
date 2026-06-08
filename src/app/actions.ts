@@ -25,7 +25,7 @@ export {
 } from "./actions/context.js";
 
 // Session lifecycle.
-export { login, attemptSessionRestore, logout } from "./actions/session.js";
+export { login, attemptSessionRestore, logout, maybePromptSessionVerification } from "./actions/session.js";
 
 // Room & space navigation, pagination, joins, DMs, member loading.
 export {

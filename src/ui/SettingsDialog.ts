@@ -263,6 +263,12 @@ export class SettingsDialog extends DialogBase {
       (v) => { draft = { ...draft, general: { ...draft.general, show_read_receipts: v } }; },
     ));
 
+    section.appendChild(this._makeCheckbox(
+      "Prompt to verify this session on startup (when unverified)",
+      draft.general.prompt_session_verification,
+      (v) => { draft = { ...draft, general: { ...draft.general, prompt_session_verification: v } }; },
+    ));
+
     // Help — the keybindings/help screen is otherwise only reachable via `?`
     // or `:help`, which mouse/touch users can't discover. Surface it here.
     section.appendChild(this._makeSectionTitle("Help"));

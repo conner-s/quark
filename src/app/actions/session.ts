@@ -11,8 +11,12 @@ import {
   getOwnProfile,
   downloadMedia,
   getAppConfig,
+  setAppConfig,
+  getVerificationStatus,
+  getUserDevices,
 } from "../../ipc/index.js";
 import type { RestoreOutcome } from "../../ipc/index.js";
+import { startVerification } from "./crypto.js";
 
 import { showMainLayout } from "../../ui/App.js";
 import { showSuccess } from "../../ui/NotificationToast.js";
@@ -179,6 +183,46 @@ export async function attemptSessionRestore(components: import("../../ui/App.js"
   // Same race the login path guards against. (#33/#43)
   void _pollUntilRoomsLoaded();
   return true;
+}
+
+/**
+ * On startup, prompt the user to verify this session if it isn't verified yet
+ * and there's another device to emoji-compare against. Honors the
+ * `prompt_session_verification` config flag ("Never ask" turns it off). Safe to
+ * call on both fresh login and session restore; every check is best-effort and
+ * silently no-ops on error so it can never block sign-in.
+ *
+ * Note: on a brand-new login the homeserver's device list may not have synced
+ * yet, so `others` can be empty here — callers run this after a short delay, and
+ * if it still misses, the prompt simply appears on the next launch (restore).
+ */
+export async function maybePromptSessionVerification(): Promise<void> {
+  try {
+    const cfg = await getAppConfig();
+    if (!cfg.general.prompt_session_verification) return;
+
+    const status = await getVerificationStatus();
+    if (status.is_cross_signed) return; // this session is already verified
+
+    const devices = await getUserDevices(status.user_id);
+    const others = devices.filter((d) => d.device_id !== status.device_id);
+    if (others.length === 0) return; // no other device to compare against
+
+    getComponents().verificationPrompt.show((choice) => {
+      if (choice === "verify") {
+        // Reuses the existing SAS flow: device picker (if >1) → emoji compare.
+        void startVerification(status.user_id);
+      } else if (choice === "never") {
+        void setAppConfig({
+          ...cfg,
+          general: { ...cfg.general, prompt_session_verification: false },
+        }).catch(() => { /* best-effort; will just prompt again next time */ });
+      }
+      // "later" → do nothing; the prompt re-appears on the next startup.
+    });
+  } catch (err) {
+    console.warn("Verification prompt check skipped:", err);
+  }
 }
 
 /**

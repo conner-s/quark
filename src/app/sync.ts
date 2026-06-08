@@ -131,6 +131,20 @@ function timelineEventToMessage(e: TimelineEvent) {
 
 let _unlisteners: UnlistenFn[] = [];
 
+// Room keys arrive in bursts (e.g. the flush right after a session is verified,
+// or a key-backup restore). Each burst can newly decrypt room names / last
+// messages / avatars across many rooms, so the room LIST needs re-fetching — not
+// just the open room's timeline. Debounce so one refresh runs after the burst
+// settles instead of one per key event.
+let _roomListRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+function _scheduleRoomListRefresh(): void {
+  if (_roomListRefreshTimer) clearTimeout(_roomListRefreshTimer);
+  _roomListRefreshTimer = setTimeout(() => {
+    _roomListRefreshTimer = null;
+    void refreshRooms();
+  }, 800);
+}
+
 /**
  * Start listening for sync events from the Tauri backend.
  * Returns a cleanup function.
@@ -370,6 +384,11 @@ export async function startSync(components: AppComponents): Promise<() => void> 
   const unlistenRoomKeys = await tauriListen<RoomKeysReceivedPayload>(
     "quark://sync/room_keys",
     (payload) => {
+      // New keys can make room names / last-message previews decryptable across
+      // the whole list (this is what makes a freshly-verified session "fix
+      // itself" without a relaunch), so refresh the list, debounced.
+      _scheduleRoomListRefresh();
+
       const currentRoom = AppState.get("currentRoomId");
       if (currentRoom && payload.room_ids.includes(currentRoom)) {
         void reloadCurrentRoomTimeline();
