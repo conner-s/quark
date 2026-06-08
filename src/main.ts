@@ -3,7 +3,7 @@
 
 import { mountApp } from "./ui/App.js";
 import { AppState } from "./app/state.js";
-import { setComponents, login, logout, attemptSessionRestore, selectRoom, selectSpace, refreshRooms, openSettings, openRoomSettings, openOwnProfile } from "./app/actions.js";
+import { setComponents, login, logout, attemptSessionRestore, maybePromptSessionVerification, selectRoom, selectSpace, refreshRooms, openSettings, openRoomSettings, openOwnProfile } from "./app/actions.js";
 import { setupKeyboard } from "./app/keyboard.js";
 import { setupPanelNav } from "./app/panels.js";
 import { setupBackButton } from "./app/back.js";
@@ -78,6 +78,9 @@ if (!DEBUG_MODE) {
       setupKeyboard(components);
       void startSync(components);
       void initNotifications();
+      // Nudge unverified sessions to verify. Delayed so the first key-query has
+      // a chance to populate the other-device list and cross-signing status.
+      setTimeout(() => void maybePromptSessionVerification(), 2500);
     }
   });
 }
@@ -95,6 +98,9 @@ components.loginScreen.onLogin(async (homeserver, username, password) => {
     // this after login (not on cold start) keeps the system dialog tied to
     // an obvious "you're about to start chatting" context.
     void initNotifications();
+    // Nudge the user to verify this new session against another device. Delayed
+    // so the homeserver's device list / cross-signing status can settle first.
+    setTimeout(() => void maybePromptSessionVerification(), 2500);
   }
 });
 

@@ -83,16 +83,68 @@ pub async fn build_client(
     Ok(client)
 }
 
+/// Human-readable device name reported to the homeserver at login, so this
+/// session is recognizable in device lists / the verification picker, e.g.
+/// "Quark (macOS)", "Quark (Linux-Flatpak)", "Quark (Linux-AppImage)". The
+/// platform comes from the build target; on Linux a packaging suffix is added
+/// for the sandboxed/portable formats that can be identified at runtime
+/// (Flatpak/AppImage/Snap). The native deb and rpm packages are produced from a
+/// single shared binary in CI and install to the same prefix, so they can't be
+/// told apart — both report plain "Quark (Linux)".
+fn device_display_name() -> String {
+    let platform = if cfg!(target_os = "macos") {
+        "macOS"
+    } else if cfg!(target_os = "windows") {
+        "Windows"
+    } else if cfg!(target_os = "ios") {
+        "iOS"
+    } else if cfg!(target_os = "android") {
+        "Android"
+    } else if cfg!(target_os = "linux") {
+        "Linux"
+    } else {
+        "Unknown"
+    };
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(suffix) = linux_packaging_suffix() {
+            return format!("Quark ({platform}-{suffix})");
+        }
+    }
+
+    format!("Quark ({platform})")
+}
+
+/// Detect sandboxed/portable Linux packaging at runtime. Native deb/rpm share a
+/// single binary (bundled together in CI) and install to the same prefix, so
+/// they can't be identified here and fall through to `None` → plain "Linux".
+#[cfg(target_os = "linux")]
+fn linux_packaging_suffix() -> Option<String> {
+    use std::path::Path;
+    if Path::new("/.flatpak-info").exists() || std::env::var_os("FLATPAK_ID").is_some() {
+        return Some("Flatpak".to_string());
+    }
+    if std::env::var_os("APPIMAGE").is_some() {
+        return Some("AppImage".to_string());
+    }
+    if std::env::var_os("SNAP").is_some() {
+        return Some("Snap".to_string());
+    }
+    None
+}
+
 /// Perform a password login and return session info.
 pub async fn login_with_password(
     client: &Client,
     username: &str,
     password: &str,
 ) -> Result<SessionInfo, String> {
+    let device_name = device_display_name();
     let response = client
         .matrix_auth()
         .login_username(username, password)
-        .initial_device_display_name("Quark")
+        .initial_device_display_name(&device_name)
         .send()
         .await
         .map_err(|e| format!("Login failed: {e}"))?;

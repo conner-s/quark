@@ -278,6 +278,7 @@ describe("VerificationStatus", () => {
     const status = assertShape<VerificationStatus>({
       user_id: "@alice:example.com",
       device_id: "DEVXYZ",
+      display_name: "Element Desktop",
       is_verified: true,
       is_cross_signed: true,
       trust_level: "cross-signed",
@@ -289,6 +290,7 @@ describe("VerificationStatus", () => {
     const status = assertShape<VerificationStatus>({
       user_id: "@bob:example.com",
       device_id: "DEVABC",
+      display_name: null,
       is_verified: false,
       is_cross_signed: false,
       trust_level: "unverified",

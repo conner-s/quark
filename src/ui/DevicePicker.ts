@@ -101,20 +101,58 @@ export class DevicePicker extends PickerBase {
   private _render(): void {
     this._listEl.innerHTML = "";
 
+    // Named devices alphabetically (case-insensitive), then unnamed ones by ID.
+    this._devices.sort((a, b) => {
+      const na = a.display_name?.toLowerCase() ?? null;
+      const nb = b.display_name?.toLowerCase() ?? null;
+      if (na !== null && nb !== null) return na.localeCompare(nb) || a.device_id.localeCompare(b.device_id);
+      if (na !== null) return -1; // named before unnamed
+      if (nb !== null) return 1;
+      return a.device_id.localeCompare(b.device_id);
+    });
+
+    // Size each column to its widest cell so the columns align across rows, the
+    // card hugs the content (no dead space between ID and status), and names
+    // aren't clipped. Cells render in the monospace base font, so character
+    // count maps directly to `ch`; the name track is capped so a runaway name
+    // ellipsizes instead of stretching the card.
+    const labelLen = (d: VerificationStatus) => (d.display_name ?? "(unnamed)").length;
+    const maxName = Math.min(Math.max(...this._devices.map(labelLen), 8), 32);
+    const maxId = Math.max(...this._devices.map((d) => d.device_id.length), 6);
+    const maxStatus = Math.max(...this._devices.map((d) => d.trust_level.length + 2), 6);
+    this._listEl.style.setProperty("--device-name-col", `${maxName + 1}ch`);
+    this._listEl.style.setProperty("--device-id-col", `${maxId + 1}ch`);
+    this._listEl.style.setProperty("--device-status-col", `${maxStatus}ch`);
+
     this._devices.forEach((device, i) => {
       const item = document.createElement("li");
       item.className = "device-picker__item";
       item.setAttribute("role", "option");
       item.setAttribute("aria-selected", "false");
 
+      // Three fixed columns: friendly name | device ID | signed status. The
+      // widths are set in CSS (not via padding) so the columns line up across
+      // every row regardless of name/ID length.
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "device-picker__name";
+      if (device.display_name) {
+        nameSpan.textContent = device.display_name;
+        nameSpan.title = device.display_name;
+      } else {
+        nameSpan.textContent = "(unnamed)";
+        nameSpan.classList.add("device-picker__name--unnamed");
+      }
+      item.appendChild(nameSpan);
+
       const idSpan = document.createElement("span");
       idSpan.className = "device-picker__device-id";
       idSpan.textContent = device.device_id;
+      idSpan.title = device.device_id;
       item.appendChild(idSpan);
 
       const trustSpan = document.createElement("span");
       trustSpan.className = "device-picker__trust";
-      trustSpan.textContent = `  [${device.trust_level}]`;
+      trustSpan.textContent = `[${device.trust_level}]`;
       item.appendChild(trustSpan);
 
       item.addEventListener("click", () => {

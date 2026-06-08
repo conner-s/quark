@@ -11,6 +11,9 @@ use tracing::info;
 pub struct VerificationStatus {
     pub user_id: String,
     pub device_id: String,
+    /// Human-readable device name set at login (matrix-sdk `Device::display_name`,
+    /// e.g. "Quark on Linux", "Element iOS"). `None` if the device didn't set one.
+    pub display_name: Option<String>,
     pub is_verified: bool,
     pub is_cross_signed: bool,
     pub trust_level: String,
@@ -47,6 +50,7 @@ pub async fn get_own_verification_status(client: &Client) -> Result<Verification
     Ok(VerificationStatus {
         user_id: user_id.to_string(),
         device_id: device_id.to_string(),
+        display_name: own_device.display_name().map(str::to_string),
         is_verified,
         is_cross_signed,
         trust_level,
@@ -84,6 +88,7 @@ pub async fn get_user_verification_statuses(
             VerificationStatus {
                 user_id: user_id.to_string(),
                 device_id: device.device_id().to_string(),
+                display_name: device.display_name().map(str::to_string),
                 is_verified,
                 is_cross_signed,
                 trust_level,

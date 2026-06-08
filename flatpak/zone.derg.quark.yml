@@ -27,6 +27,11 @@ finish-args:
   - --talk-name=org.freedesktop.Notifications
   # Tray icon (optional, KDE/SNI)
   - --talk-name=org.kde.StatusNotifierWatcher
+  # Secret Service — the OS keyring holds the SQLite store-encryption key and the
+  # Matrix session (see secrets.rs). Without this the sandbox bus policy blocks
+  # org.freedesktop.secrets, is_available() returns false, and every login fails
+  # with "Secure storage is unavailable."
+  - --talk-name=org.freedesktop.secrets
 
 modules:
   - name: quark

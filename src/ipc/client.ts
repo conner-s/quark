@@ -21,14 +21,22 @@ export async function login(
 }
 
 /**
- * Restore a previously saved session from the OS keyring. Returns `true` if a
- * session was found and restored, `false` if there is nothing to restore.
- * Rejects if a stored session existed but couldn't be used (stale token, missing
- * key, keyring failure) — callers should then `clearStoredSession()`.
+ * Result of a session-restore attempt. Mirrors the Rust `RestoreOutcome` enum.
+ * Only `Invalid` means the stored session is dead and should be cleared — an
+ * `Unavailable` (locked/unreachable keyring) must NOT trigger a wipe, or a
+ * transient lock at startup would destroy the encrypted local store.
+ */
+export type RestoreOutcome = "Restored" | "NoSession" | "Unavailable" | "Invalid";
+
+/**
+ * Restore a previously saved session from the OS keyring. The returned outcome
+ * tells the caller what to do: `Restored` → syncing; `NoSession` → show login;
+ * `Unavailable` → show login with unlock guidance (do not clear); `Invalid` →
+ * `clearStoredSession()` then show login.
  * Matches the Rust `restore_session` command.
  */
-export async function restoreSession(): Promise<boolean> {
-  return invoke<boolean>("restore_session", {});
+export async function restoreSession(): Promise<RestoreOutcome> {
+  return invoke<RestoreOutcome>("restore_session", {});
 }
 
 /**

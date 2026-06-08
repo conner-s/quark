@@ -161,9 +161,13 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return null;
     case "restore_session":
       // No saved session in mock mode → fall through to the login screen.
-      return false;
+      return "NoSession";
     case "clear_session":
     case "logout":
+      return null;
+    case "verification_prompt_target":
+      return null; // mock: never prompt
+    case "log_verification_prompt_choice":
       return null;
     case "get_rooms":
       return MOCK_ROOMS;
@@ -437,7 +441,7 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
 
     // ─── Crypto ──────────────────────────────────────────────────────────
     case "get_verification_status":
-      return { user_id: "@you:matrix.org", device_id: "MOCKDEVICE", is_verified: true, is_cross_signed: false, trust_level: "self-verified" };
+      return { user_id: "@you:matrix.org", device_id: "MOCKDEVICE", display_name: "Quark (mock)", is_verified: true, is_cross_signed: false, trust_level: "self-verified" };
     case "get_cross_signing_status":
       return { has_master: false, has_self_signing: false, has_user_signing: false, is_complete: false };
     case "bootstrap_cross_signing":
@@ -446,8 +450,8 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return null;
     case "get_user_devices":
       return [
-        { user_id: args?.userId as string ?? "@alice:matrix.org", device_id: "ALICEPHONE", is_verified: false, is_cross_signed: false, trust_level: "unverified" },
-        { user_id: args?.userId as string ?? "@alice:matrix.org", device_id: "ALICEDESKTOP", is_verified: true, is_cross_signed: false, trust_level: "self-verified" },
+        { user_id: args?.userId as string ?? "@alice:matrix.org", device_id: "ALICEPHONE", display_name: "Element iOS", is_verified: false, is_cross_signed: false, trust_level: "unverified" },
+        { user_id: args?.userId as string ?? "@alice:matrix.org", device_id: "ALICEDESKTOP", display_name: null, is_verified: true, is_cross_signed: false, trust_level: "self-verified" },
       ];
     case "start_sas_verification":
       return "mock-flow-id-" + Date.now();
@@ -492,7 +496,7 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     }
     case "get_app_config":
       return {
-        general: { theme: "phosphor", notifications: true, confirm_redact: true, icon_radius: "50%", vim_mode: true },
+        general: { theme: "phosphor", notifications: true, confirm_redact: true, icon_radius: "50%", vim_mode: true, send_read_receipts: true, show_read_receipts: true, prompt_session_verification: true },
         sync: { sliding_sync: true, timeline_limit: 50 },
         media: { auto_load_images: true, inline_video: true, max_image_width: 600, max_image_height: 400, sticker_max_size: 256, cache_size_mb: 500 },
         gif: { provider: "tenor", api_key: "", rating: "pg", cache_results: true },

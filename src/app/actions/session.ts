@@ -11,7 +11,12 @@ import {
   getOwnProfile,
   downloadMedia,
   getAppConfig,
+  setAppConfig,
+  verificationPromptTarget,
+  logVerificationPromptChoice,
 } from "../../ipc/index.js";
+import type { RestoreOutcome } from "../../ipc/index.js";
+import { startVerification } from "./crypto.js";
 
 import { showMainLayout } from "../../ui/App.js";
 import { showSuccess } from "../../ui/NotificationToast.js";
@@ -130,19 +135,41 @@ export async function attemptSessionRestore(components: import("../../ui/App.js"
   // anything else — those users are sent through a fresh (encrypted) login.
   clearLegacySession();
 
-  let restored: boolean;
+  let outcome: RestoreOutcome;
   try {
-    // The backend loads the session from the keyring itself; false means there
-    // is nothing to restore (fresh install or pre-keyring upgrade).
-    restored = await ipcRestoreSession();
+    // The backend loads the session from the keyring itself and reports how it
+    // went; only `Invalid` means the stored session should be thrown away.
+    outcome = await ipcRestoreSession();
   } catch (err) {
-    // A stored session existed but couldn't be used (stale token, missing key,
-    // keyring failure). Drop it so the next launch starts clean, then show login.
-    try { await ipcClearStoredSession(); } catch { /* best effort */ }
+    // Unexpected internal failure (e.g. the backend task panicked). Be
+    // conservative — never wipe on an error we can't classify — and show login.
     console.warn("Session restore failed, showing login:", err);
     return false;
   }
-  if (!restored) return false;
+
+  switch (outcome) {
+    case "Restored":
+      break; // continue to the success path below
+    case "NoSession":
+      // Fresh install or pre-keyring upgrade — nothing to restore.
+      return false;
+    case "Unavailable":
+      // The keyring is locked/unreachable. Crucially, do NOT clear anything: a
+      // transient lock must not destroy the encrypted local store. Show login
+      // with guidance so unlocking + relaunching resumes the existing session.
+      getComponents().loginScreen.setStatus(
+        "Secure storage is locked. Unlock your system keyring (GNOME Keyring / " +
+          "KWallet on Linux, Keychain on macOS), then restart Quark to resume " +
+          "your session.",
+        "error",
+      );
+      return false;
+    case "Invalid":
+      // A stored session existed but is unusable (missing key, bad token). Drop
+      // it so the next launch starts from a clean login instead of looping.
+      try { await ipcClearStoredSession(); } catch { /* best effort */ }
+      return false;
+  }
 
   AppState.set("loggedIn", true);
   showMainLayout(components);
@@ -156,6 +183,47 @@ export async function attemptSessionRestore(components: import("../../ui/App.js"
   // Same race the login path guards against. (#33/#43)
   void _pollUntilRoomsLoaded();
   return true;
+}
+
+/**
+ * On startup, prompt the user to verify this session if it isn't verified yet
+ * and there's another device to emoji-compare against. Honors the
+ * `prompt_session_verification` config flag ("Never ask" turns it off). Safe to
+ * call on both fresh login and session restore; every check is best-effort and
+ * silently no-ops on error so it can never block sign-in.
+ *
+ * Note: on a brand-new login the homeserver's device list may not have synced
+ * yet, so `others` can be empty here — callers run this after a short delay, and
+ * if it still misses, the prompt simply appears on the next launch (restore).
+ */
+export async function maybePromptSessionVerification(): Promise<void> {
+  try {
+    // The backend decides (and logs at INFO why it skips: disabled, already
+    // cross-signed, or no other device). It returns the own user ID to verify
+    // against, or null to skip.
+    const userId = await verificationPromptTarget();
+    if (!userId) return;
+
+    getComponents().verificationPrompt.show((choice) => {
+      void logVerificationPromptChoice(choice); // record the choice in the log
+      if (choice === "verify") {
+        // Reuses the existing SAS flow: device picker (if >1) → emoji compare.
+        void startVerification(userId);
+      } else if (choice === "never") {
+        void getAppConfig()
+          .then((cfg) =>
+            setAppConfig({
+              ...cfg,
+              general: { ...cfg.general, prompt_session_verification: false },
+            }),
+          )
+          .catch(() => { /* best-effort; will just prompt again next time */ });
+      }
+      // "later" → do nothing; the prompt re-appears on the next startup.
+    });
+  } catch (err) {
+    console.warn("Verification prompt check skipped:", err);
+  }
 }
 
 /**

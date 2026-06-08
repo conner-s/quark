@@ -5,11 +5,16 @@
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
+    <!-- allowBackup is disabled because the Android secrets fallback (secrets.rs)
+         stores the store-encryption key and Matrix session as plaintext files in
+         the app-private data dir; Auto Backup / device-transfer would copy those
+         off-device. Disabling backup keeps them confined to the OS sandbox. -->
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.quark"
-        android:usesCleartextTraffic="${usesCleartextTraffic}">
+        android:usesCleartextTraffic="${usesCleartextTraffic}"
+        android:allowBackup="false">
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:launchMode="singleTask"

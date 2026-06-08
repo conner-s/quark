@@ -33,6 +33,10 @@ pub struct GeneralConfig {
     /// Show other users' read receipts as shifting avatars in the timeline.
     #[serde(default = "bool_true")]
     pub show_read_receipts: bool,
+    /// Prompt to verify a new/unverified session on startup, until it is verified
+    /// or the user opts out ("Never ask").
+    #[serde(default = "bool_true")]
+    pub prompt_session_verification: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -160,7 +164,7 @@ fn default_timeline_rooms() -> u32 { 30 }
 
 impl Default for GeneralConfig {
     fn default() -> Self {
-        Self { theme: default_theme_name(), notifications: true, confirm_redact: true, icon_radius: default_icon_radius(), vim_mode: true, send_read_receipts: true, show_read_receipts: true }
+        Self { theme: default_theme_name(), notifications: true, confirm_redact: true, icon_radius: default_icon_radius(), vim_mode: true, send_read_receipts: true, show_read_receipts: true, prompt_session_verification: true }
     }
 }
 

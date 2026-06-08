@@ -120,28 +120,65 @@ pub async fn login(
     Ok(())
 }
 
+/// Outcome of a session-restore attempt. The discriminant tells the frontend
+/// whether it is safe to wipe local state: only `Invalid` means "the stored
+/// session is genuinely unusable, throw it away." `Unavailable` (a locked or
+/// unreachable keyring) must **not** trigger a wipe, or a transient lock at
+/// startup would destroy the encrypted SQLite crypto store on disk.
+#[derive(Serialize)]
+pub enum RestoreOutcome {
+    /// A session was found and the client is now syncing.
+    Restored,
+    /// Nothing to restore (fresh install or pre-keyring upgrade) — show login.
+    NoSession,
+    /// Secure storage is locked/unreachable — show login with the unlock
+    /// guidance, but leave all local state untouched so a retry can recover.
+    Unavailable,
+    /// A stored session existed but can't be used (missing key, bad token,
+    /// undecryptable store) — the frontend should `clear_session` and show login.
+    Invalid,
+}
+
 /// Restore a previously saved session from the OS keyring.
 ///
-/// Returns `Ok(true)` if a session was found and restored, `Ok(false)` if there
-/// is nothing to restore (fresh install, or an upgrade from a pre-keyring
-/// version — those users are sent to the login screen). `Err` means a stored
-/// session existed but couldn't be used (bad token, missing key, keyring
-/// failure); the frontend clears it via `clear_session` and shows login.
+/// Never returns `Err` for an expected keyring/session condition — those map to
+/// a `RestoreOutcome` so the frontend can tell a transient lock (`Unavailable`,
+/// don't wipe) apart from a dead session (`Invalid`, wipe). `Err` is reserved
+/// for unexpected internal failures (e.g. the blocking task panicking).
 #[tauri::command]
 pub async fn restore_session(
     state: State<'_, MatrixState>,
     sync_state: State<'_, SyncState>,
     app_handle: AppHandle,
-) -> Result<bool, String> {
+) -> Result<RestoreOutcome, String> {
     let data_path = app_handle.path().app_data_dir()
         .map_err(|e| format!("Could not resolve app data dir: {e}"))?;
 
-    // Load the saved session from the keyring.
+    // Secure storage unreachable/locked → do not touch anything. Wiping here on a
+    // transient lock would delete the encrypted crypto store (forcing device
+    // re-verification + full re-sync). Tell the frontend to show login instead.
+    {
+        let dp = data_path.clone();
+        let available = tokio::task::spawn_blocking(move || crate::secrets::is_available(&dp))
+            .await
+            .map_err(|e| format!("secrets task failed: {e}"))?;
+        if !available {
+            return Ok(RestoreOutcome::Unavailable);
+        }
+    }
+
+    // Load the saved session. A keyring read error here is treated as transient
+    // (Unavailable, non-destructive) rather than wiping — a later fresh login
+    // cleans up on its own if the stored value really is bad.
     let session = {
         let dp = data_path.clone();
-        tokio::task::spawn_blocking(move || crate::secrets::load_session(&dp))
+        match tokio::task::spawn_blocking(move || crate::secrets::load_session(&dp))
             .await
-            .map_err(|e| format!("secrets task failed: {e}"))??
+            .map_err(|e| format!("secrets task failed: {e}"))?
+        {
+            Ok(s) => s,
+            Err(_) => return Ok(RestoreOutcome::Unavailable),
+        }
     };
 
     let Some(session) = session else {
@@ -150,21 +187,41 @@ pub async fn restore_session(
         // and leaving it keeps plaintext crypto/state data on disk.
         let dp = data_path.clone();
         let _ = tokio::task::spawn_blocking(move || clear_store(&dp)).await;
-        return Ok(false);
+        return Ok(RestoreOutcome::NoSession);
     };
 
     // The store-encryption key must accompany the saved session.
     let store_key = {
         let dp = data_path.clone();
-        tokio::task::spawn_blocking(move || crate::secrets::get_store_key(&dp))
+        match tokio::task::spawn_blocking(move || crate::secrets::get_store_key(&dp))
             .await
-            .map_err(|e| format!("secrets task failed: {e}"))??
-            .ok_or_else(|| "Saved session is missing its encryption key".to_string())?
+            .map_err(|e| format!("secrets task failed: {e}"))?
+        {
+            Ok(Some(k)) => k,
+            // Keyring read failed → transient, don't wipe.
+            Err(_) => return Ok(RestoreOutcome::Unavailable),
+            // Session present but its key is gone → the on-disk store can't be
+            // decrypted, so it's dead weight. Safe to discard.
+            Ok(None) => return Ok(RestoreOutcome::Invalid),
+        }
     };
 
-    let client =
-        crate::matrix::client::build_client(&session.homeserver_url, data_path.clone(), &store_key).await?;
-    crate::matrix::client::restore_session_from_info(&client, &session).await?;
+    let client = match crate::matrix::client::build_client(
+        &session.homeserver_url,
+        data_path.clone(),
+        &store_key,
+    )
+    .await
+    {
+        Ok(c) => c,
+        Err(_) => return Ok(RestoreOutcome::Invalid),
+    };
+    if crate::matrix::client::restore_session_from_info(&client, &session)
+        .await
+        .is_err()
+    {
+        return Ok(RestoreOutcome::Invalid);
+    }
 
     {
         let mut guard = state.0.lock().map_err(|_| "State lock poisoned")?;
@@ -177,7 +234,7 @@ pub async fn restore_session(
     *sync_state.handlers_registered.lock().map_err(|_| "Sync state lock poisoned")? = false;
 
     crate::matrix::client::start_sync(client, Some(app_handle), &sync_state).await;
-    Ok(true)
+    Ok(RestoreOutcome::Restored)
 }
 
 /// Start the background sync loop and register push-event handlers.
@@ -1387,6 +1444,56 @@ pub async fn get_user_devices(
 ) -> Result<Vec<VerificationStatus>, String> {
     let client = get_client(&state)?;
     crate::matrix::crypto::get_user_verification_statuses(&client, &user_id).await
+}
+
+/// Decide whether the post-login "verify this session" prompt should be shown,
+/// logging the reason at INFO so the decision is visible in the app log.
+///
+/// Returns `Some(own_user_id)` when the prompt should appear (the caller starts
+/// the SAS flow for that user), or `None` to skip. Skips when the user turned the
+/// prompt off, this session is already cross-signed, or there is no other device
+/// to emoji-compare against. Centralised here (rather than in the frontend) so
+/// the gating inputs are read where they live and the skip reason lands in the
+/// backend log.
+#[tauri::command]
+pub async fn verification_prompt_target(
+    state: State<'_, MatrixState>,
+    config_state: State<'_, Mutex<AppConfig>>,
+) -> Result<Option<String>, String> {
+    let enabled = {
+        let guard = config_state.lock().map_err(|_| "App config lock poisoned")?;
+        guard.general.prompt_session_verification
+    };
+    if !enabled {
+        tracing::info!("verification prompt: skipped (disabled in settings)");
+        return Ok(None);
+    }
+
+    let client = get_client(&state)?;
+    let status = crate::matrix::crypto::get_own_verification_status(&client).await?;
+    if status.is_cross_signed {
+        tracing::info!("verification prompt: skipped (session already cross-signed)");
+        return Ok(None);
+    }
+
+    let devices =
+        crate::matrix::crypto::get_user_verification_statuses(&client, &status.user_id).await?;
+    let others = devices.iter().filter(|d| d.device_id != status.device_id).count();
+    if others == 0 {
+        tracing::info!("verification prompt: skipped (no other device to compare against)");
+        return Ok(None);
+    }
+
+    tracing::info!(other_devices = others, "verification prompt: showing (session unverified)");
+    Ok(Some(status.user_id))
+}
+
+/// Record (at INFO) which action the user took on the verify-this-session prompt
+/// — "verify", "later", or "never" — so the choice is visible in the app log
+/// alongside the show/skip decision above.
+#[tauri::command]
+pub fn log_verification_prompt_choice(choice: String) {
+    tracing::info!(choice = %choice, "verification prompt: user choice");
 }
 
 // ─── Spaces Commands ──────────────────────────────────────────────────────────

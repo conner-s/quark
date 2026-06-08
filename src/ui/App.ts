@@ -15,6 +15,7 @@ import { EmojiPicker } from "./EmojiPicker.js";
 import { GifPicker } from "./GifPicker.js";
 import { HelpDialog } from "./HelpDialog.js";
 import { Verification } from "./Verification.js";
+import { VerificationPromptDialog } from "./VerificationPromptDialog.js";
 import { DevicePicker } from "./DevicePicker.js";
 import { ShortcodePreview } from "./ShortcodePreview.js";
 import { QuickReactPicker } from "./QuickReactPicker.js";
@@ -63,6 +64,7 @@ export interface AppComponents {
   emojiPicker: EmojiPicker;
   gifPicker: GifPicker;
   verification: Verification;
+  verificationPrompt: VerificationPromptDialog;
   devicePicker: DevicePicker;
   shortcodePreview: ShortcodePreview;
   helpDialog: HelpDialog;
@@ -121,6 +123,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   const emojiPicker = new EmojiPicker();
   const gifPicker = new GifPicker();
   const verification = new Verification();
+  const verificationPrompt = new VerificationPromptDialog();
   const devicePicker = new DevicePicker();
   const shortcodePreview = new ShortcodePreview();
   const helpDialog = new HelpDialog();
@@ -293,6 +296,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   document.body.appendChild(emojiPicker.getElement());
   document.body.appendChild(gifPicker.getElement());
   document.body.appendChild(verification.getElement());
+  document.body.appendChild(verificationPrompt.getElement());
   document.body.appendChild(devicePicker.getElement());
   document.body.appendChild(helpDialog.getElement());
   document.body.appendChild(quickReactPicker.getElement());
@@ -325,6 +329,7 @@ export function mountApp(container: HTMLElement): AppComponents {
     emojiPicker,
     gifPicker,
     verification,
+    verificationPrompt,
     devicePicker,
     shortcodePreview,
     helpDialog,
