@@ -6143,6 +6143,103 @@ body.quark-mobile .dialog-close-btn {
   opacity: 0.6;
 }
 
+/* Centered card that hugs its content (was an unstyled full-width block). The
+ * width follows the widest row rather than the viewport. PickerBase toggles the
+ * inline `display`, so the flex value here applies when shown. */
+.device-picker {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 80px);
+  background-color: var(--bg);
+  border: var(--border-width) solid var(--accent-primary);
+  box-shadow: 0 8px 32px var(--shadow-color), 0 0 0 1px var(--border-color);
+  z-index: 200;
+  overflow: hidden;
+  animation: gif-picker-fade-in 0.1s ease;
+}
+
+.device-picker__title {
+  font-weight: bold;
+  color: var(--fg);
+}
+
+.device-picker__hint {
+  padding: 0 8px 4px;
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  opacity: 0.7;
+}
+
+.device-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+}
+
+/* Device rows: three columns — name | id | signed status. Each track width is
+ * computed from its widest cell (in ch) by `_render` and shared across rows via
+ * the `--device-*-col` custom properties, so the columns line up and the card
+ * hugs the content with no dead space between columns. */
+.device-picker__item {
+  display: grid;
+  grid-template-columns:
+    var(--device-name-col, max-content)
+    var(--device-id-col, max-content)
+    var(--device-status-col, max-content);
+  column-gap: 2ch;
+  align-items: baseline;
+  padding: 3px 12px;
+  cursor: pointer;
+}
+
+.device-picker__item:hover {
+  background-color: var(--surface-hover);
+}
+
+.device-picker__item--selected {
+  background-color: var(--surface-hover-strong);
+}
+
+.device-picker__name {
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-picker__item--selected .device-picker__name {
+  color: var(--accent-primary);
+}
+
+.device-picker__name--unnamed {
+  color: var(--msg-timestamp);
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.device-picker__device-id {
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-picker__trust {
+  text-align: right;
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  opacity: 0.85;
+}
+
 /* Mobile layout: single column timeline, space + room list become a drawer. */
 body.quark-mobile .quark-layout,
 body.quark-mobile .quark-layout--thread-open,

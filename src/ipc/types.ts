@@ -210,6 +210,8 @@ export interface MediaDownload {
 export interface VerificationStatus {
   user_id: string;
   device_id: string;
+  /** Human-readable device name (set at login), or null if none was set. */
+  display_name: string | null;
   is_verified: boolean;
   is_cross_signed: boolean;
   trust_level: string;

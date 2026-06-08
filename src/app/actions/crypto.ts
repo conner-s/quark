@@ -4,6 +4,7 @@
 import {
   getCrossSigningStatus,
   bootstrapCrossSigning,
+  getVerificationStatus,
   getUserDevices,
   startSasVerification,
   acceptVerificationRequest,
@@ -27,9 +28,19 @@ export async function startVerification(userId: string): Promise<void> {
   const { verification, devicePicker } = getComponents();
 
   try {
-    const devices = await getUserDevices(userId);
+    let devices = await getUserDevices(userId);
+
+    // You can't emoji-verify the current device against itself, so drop it from
+    // the picker when verifying your own devices — otherwise the self entry
+    // (shown as "self-verified") is a dead-end that requests verification from
+    // the very device making the request.
+    const own = await getVerificationStatus();
+    if (userId === own.user_id) {
+      devices = devices.filter((d) => d.device_id !== own.device_id);
+    }
+
     if (devices.length === 0) {
-      showError(`No devices found for ${userId}`);
+      showError(`No other devices to verify against for ${userId}`);
       return;
     }
 

@@ -441,7 +441,7 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
 
     // ─── Crypto ──────────────────────────────────────────────────────────
     case "get_verification_status":
-      return { user_id: "@you:matrix.org", device_id: "MOCKDEVICE", is_verified: true, is_cross_signed: false, trust_level: "self-verified" };
+      return { user_id: "@you:matrix.org", device_id: "MOCKDEVICE", display_name: "Quark (mock)", is_verified: true, is_cross_signed: false, trust_level: "self-verified" };
     case "get_cross_signing_status":
       return { has_master: false, has_self_signing: false, has_user_signing: false, is_complete: false };
     case "bootstrap_cross_signing":
@@ -450,8 +450,8 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return null;
     case "get_user_devices":
       return [
-        { user_id: args?.userId as string ?? "@alice:matrix.org", device_id: "ALICEPHONE", is_verified: false, is_cross_signed: false, trust_level: "unverified" },
-        { user_id: args?.userId as string ?? "@alice:matrix.org", device_id: "ALICEDESKTOP", is_verified: true, is_cross_signed: false, trust_level: "self-verified" },
+        { user_id: args?.userId as string ?? "@alice:matrix.org", device_id: "ALICEPHONE", display_name: "Element iOS", is_verified: false, is_cross_signed: false, trust_level: "unverified" },
+        { user_id: args?.userId as string ?? "@alice:matrix.org", device_id: "ALICEDESKTOP", display_name: null, is_verified: true, is_cross_signed: false, trust_level: "self-verified" },
       ];
     case "start_sas_verification":
       return "mock-flow-id-" + Date.now();
