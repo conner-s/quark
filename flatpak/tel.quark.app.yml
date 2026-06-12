@@ -1,0 +1,73 @@
+app-id: tel.quark.app
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.node22
+command: quark-launch.sh
+
+finish-args:
+  # Display
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --device=dri
+  # Audio (inline video playback) — covers PipeWire via its pulse shim
+  - --socket=pulseaudio
+  # Network (Matrix)
+  - --share=network
+  # Config and data persistence
+  # xdg-config/quark maps to the real ~/.config/quark (not the sandbox redirect).
+  # Without this, ProjectDirs resolves XDG_CONFIG_HOME to
+  # ~/.var/app/tel.quark.app/config, so existing configs are invisible.
+  - --filesystem=xdg-config/quark:create
+  - --filesystem=~/.local/share/quark:create
+  # Notifications
+  - --talk-name=org.freedesktop.Notifications
+  # Tray icon (optional, KDE/SNI)
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # Secret Service — the OS keyring holds the SQLite store-encryption key and the
+  # Matrix session (see secrets.rs). Without this the sandbox bus policy blocks
+  # org.freedesktop.secrets, is_available() returns false, and every login fails
+  # with "Secure storage is unavailable."
+  - --talk-name=org.freedesktop.secrets
+
+modules:
+  - name: quark
+    buildsystem: simple
+    # NOTE: --share=network in build-args is needed because Cargo and pnpm
+    # fetch dependencies at build time. For a Flathub submission, replace with
+    # pre-generated offline sources using flatpak-cargo-generator.py and
+    # flatpak-node-generator, then remove build-args.
+    build-options:
+      build-args:
+        - --share=network
+      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node22/bin:/run/build/quark/npm-global/bin
+      env:
+        CARGO_HOME: /run/build/quark/cargo
+        CI: 'true'
+    build-commands:
+      # Install pnpm to a writable local prefix (SDK dirs are read-only)
+      - npm install --global --prefix /run/build/quark/npm-global pnpm
+      # Install JS dependencies and build the frontend (outputs to dist/)
+      - pnpm install --frozen-lockfile
+      - pnpm build
+      # Build the Tauri binary directly; frontend is already in dist/ from pnpm build
+      - cargo build --release --manifest-path src-tauri/Cargo.toml
+      # Install binary and launcher wrapper
+      - install -Dm755 src-tauri/target/release/quark /app/bin/quark
+      - install -Dm755 flatpak/quark-launch.sh /app/bin/quark-launch.sh
+      # Install icons
+      - install -Dm644 src-tauri/icons/128x128.png
+          /app/share/icons/hicolor/128x128/apps/tel.quark.app.png
+      - install -Dm644 src-tauri/icons/128x128@2x.png
+          /app/share/icons/hicolor/256x256/apps/tel.quark.app.png
+      # Install .desktop and AppStream metadata
+      - install -Dm644 flatpak/tel.quark.app.desktop
+          /app/share/applications/tel.quark.app.desktop
+      - install -Dm644 flatpak/tel.quark.app.metainfo.xml
+          /app/share/metainfo/tel.quark.app.metainfo.xml
+    sources:
+      - type: dir
+        path: ..

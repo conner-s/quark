@@ -1,0 +1,132 @@
+/* Phosphor theme — default CSS custom properties */
+:root {
+  /* ── Core palette ─────────────────────────────────────────────────────── */
+  --bg: #0a0a0a;
+  --fg: #b0b0b0;
+  --cursor: #00ff41;
+  --selection-bg: #1a3a1a;
+  --selection-fg: #00ff41;
+  --border: #333333;
+
+  /* ── Accent colors ───────────────────────────────────────────────────── */
+  --accent-primary: #00ff41;
+  --accent-secondary: #00aaff;
+  --accent-error: #ff3333;
+  --accent-warning: #ffaa00;
+  --accent-success: #00ff41;
+  --accent-link: #00aaff;
+
+  /* ── Message colors ──────────────────────────────────────────────────── */
+  --msg-own: #00ff41;
+  --msg-other: #b0b0b0;
+  --msg-system: #555555;
+  --msg-timestamp: #444444;
+  --msg-mention-bg: #1a1a00;
+  --msg-mention-fg: #ffaa00;
+  --msg-reply-border: #555555;
+  --msg-thread-indicator: #00aaff;
+
+  /* ── Room list colors ────────────────────────────────────────────────── */
+  --roomlist-active-bg: #2a2a2a;
+  --roomlist-active-fg: #00ff41;
+  --roomlist-unread: #ffffff;
+  --roomlist-mention-badge: #ff3333;
+  --roomlist-muted: #444444;
+
+  /* ── Reaction colors ─────────────────────────────────────────────────── */
+  --reaction-bg: #1a1a1a;
+  --reaction-border: #333333;
+  --reaction-own-bg: #1a3a1a;
+  --reaction-count: #888888;
+
+  /* ── Typography ──────────────────────────────────────────────────────── */
+  /* Emoji fallbacks (Apple/Segoe/Noto/Twemoji + the CSS `emoji` generic) are
+     appended so glyphs missing from the mono fonts still render in color
+     instead of falling back to a tofu box or monochrome outline. */
+  --font-emoji:
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+    "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", emoji;
+  --font-family:
+    "JetBrains Mono", "Fira Code", "Roboto Mono", monospace,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+    "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", emoji;
+  /* sans-serif must come BEFORE the emoji fonts: per-character font fallback
+     walks this list looking for a glyph, and Noto Color Emoji (preinstalled on
+     most Linux distros) contains Latin chars including a ~1em-wide space —
+     without a Latin generic in between, spaces inherit emoji-sized advance
+     width and message bodies render with huge gaps between words. */
+  --font-family-messages:
+    "Roboto", sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+    "Noto Color Emoji", "Twemoji Mozilla", "EmojiOne Color", emoji;
+  --font-size: 14px;
+  --line-height: 1.5;
+  --message-spacing: 4px;
+
+  /* ── Border styles ───────────────────────────────────────────────────── */
+  --border-style: rounded;
+  --border-h: "─";
+  --border-v: "│";
+  --border-tl: "╭";
+  --border-tr: "╮";
+  --border-bl: "╰";
+  --border-br: "╯";
+  --border-color: #333333;
+  --border-width: 2px;
+
+  /* ── Layout ──────────────────────────────────────────────────────────── */
+  --space-strip-width: 64px;
+  --room-list-width: 220px;
+  --thread-view-width: 300px;
+  --member-list-width: 200px;
+  --status-bar-height: 24px;
+
+  /* ── Emoji / sticker sizes ───────────────────────────────────────────── */
+  --emoji-size: 32px;
+  --sticker-max-size: 256px;
+  --reaction-size: 14px;
+
+  /* ── Prompt / mode indicator ─────────────────────────────────────────── */
+  --prompt-symbol: ":>";
+  --mode-normal: "NOR";
+  --mode-insert: "INS";
+  --mode-command: "CMD";
+  --mode-visual: "VIS";
+
+  /* ── Icon roundedness ────────────────────────────────────────────────── */
+  --icon-radius: 50%;
+
+  /* ── Scrollbar ───────────────────────────────────────────────────────── */
+  --scrollbar-width: 6px;
+  --scrollbar-thumb: #333333;
+  --scrollbar-track: transparent;
+
+  /* ── Focus ───────────────────────────────────────────────────────────── */
+  /* Derived from --accent-primary so that the focused-message highlight bar
+     and other focus rings track the active theme. Themes that want a
+     dedicated focus colour can still override --focus-color directly. */
+  --focus-color: var(--accent-primary);
+  --focus-width: 1px;
+
+  /* ── Overlays & shadows ──────────────────────────────────────────────── */
+  --overlay-bg: rgba(0, 0, 0, 0.65);
+  --overlay-bg-dark: rgba(0, 0, 0, 0.88);
+  --shadow-color: rgba(0, 0, 0, 0.6);
+
+  /* ── Hover / surface tints (white-on-dark) ───────────────────────────── */
+  --surface-dim: rgba(255, 255, 255, 0.02);
+  --surface-subtle: rgba(255, 255, 255, 0.03);
+  --surface-hover: rgba(255, 255, 255, 0.04);
+  --surface-hover-strong: rgba(255, 255, 255, 0.06);
+  --surface-hover-active: rgba(255, 255, 255, 0.1);
+
+  /* ── Media ───────────────────────────────────────────────────────────── */
+  --media-bg: #000;
+  --media-icon-fg: #fff;
+  --scanline-color: rgba(0, 0, 0, 0.22);
+
+  /* ── Eye-candy ─────────────────────────────────────────────────────── */
+  --glow-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
+  --glow-radius: 6px;
+  --transition-speed: 150ms;
+}

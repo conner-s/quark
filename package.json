@@ -1,0 +1,46 @@
+{
+  "name": "quark",
+  "private": true,
+  "version": "0.14.0",
+  "description": "A terminal-aesthetic Matrix client with vim-style navigation",
+  "author": "mcplummet",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mcplummet/quark.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mcplummet/quark/issues"
+  },
+  "homepage": "https://quark.tel",
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "tauri": "tauri",
+    "gen:emoji": "node scripts/gen-emoji.mjs",
+    "flatpak:build": "flatpak-builder --force-clean --repo=flatpak-repo flatpak-build flatpak/tel.quark.app.yml && flatpak build-bundle flatpak-repo quark.flatpak tel.quark.app"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-notification": "^2.3.3",
+    "@tauri-apps/plugin-shell": "^2.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "emojibase-data": "^17.0.0",
+    "jsdom": "^25.0.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

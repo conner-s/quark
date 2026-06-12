@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Quark
+Comment=A terminal-aesthetic Matrix client
+Exec=quark
+Icon=tel.quark.app
+Terminal=false
+Type=Application
+Categories=Network;InstantMessaging;Chat;
+Keywords=matrix;chat;messaging;im;
+StartupWMClass=quark

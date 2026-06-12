@@ -1,0 +1,360 @@
+# Quark — Release pipeline (tag-triggered builds + GitHub Release)
+#
+# Fires on tag pushes matching `v*` (e.g. `v0.14.0`). Builds installable
+# artifacts for every platform and attaches them to a single GitHub Release for
+# the tag. The release is created as a DRAFT first, all build jobs upload into
+# it, and a final job flips it to published once every build has succeeded — so
+# a half-built release is never visible.
+#
+# Jobs:
+#   • create-release — creates the DRAFT GitHub Release "Quark <tag>" and
+#                       exports its id for the build jobs to upload into.
+#   • build-tauri    — matrix over ubuntu-22.04 / macos-latest / windows-latest.
+#                       Uses tauri-apps/tauri-action to build and upload the
+#                       desktop bundles (.deb/.AppImage/.rpm, .dmg/.app,
+#                       .exe/.msi) to the draft release.
+#   • build-flatpak  — builds quark.flatpak via flatpak-builder and uploads it.
+#   • build-android  — builds an arm64-only release APK (debug-signed fallback
+#                       if no keystore secret), verifies the signature, uploads.
+#   • publish-release — needs all build jobs; flips the draft to published.
+#
+# ── Required repository secrets ──────────────────────────────────────────────
+# NONE are required for the pipeline to SUCCEED. Every signing input is
+# best-effort: desktop/macOS build unsigned when absent, and Android falls back
+# to a debug-signed APK when its keystore is absent.
+#
+#   Apple code-signing / notarisation (macOS — all optional; omit to build
+#   an unsigned .app/.dmg):
+#     APPLE_CERTIFICATE            base64 of the .p12 signing certificate
+#     APPLE_CERTIFICATE_PASSWORD   password for that .p12
+#     APPLE_SIGNING_IDENTITY       e.g. "Developer ID Application: … (TEAMID)"
+#     APPLE_ID                     Apple ID email (notarisation)
+#     APPLE_PASSWORD               app-specific password (notarisation)
+#     APPLE_TEAM_ID                Apple Developer Team ID
+#
+#   Android release-signing (optional — without these the APK is DEBUG-signed,
+#   which is installable on dev devices but NOT upgradeable/publishable; use a
+#   single permanent keystore for all public releases):
+#     ANDROID_KEYSTORE_BASE64      base64 of your .jks/.keystore
+#     ANDROID_KEYSTORE_PASSWORD    keystore password
+#     ANDROID_KEY_ALIAS            key alias inside the keystore
+#     ANDROID_KEY_PASSWORD         password for that key
+#
+# The built-in GITHUB_TOKEN (no secret to configure) is used for all release
+# create/upload/publish operations.
+#
+# pnpm is pinned via package.json "packageManager": "pnpm@10.32.1" (corepack),
+# on Node 20 — do not bump to pnpm 11 (needs Node 22.13+).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Release operations create the release and upload assets to it.
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ─── create the draft release ──────────────────────────────────────────────
+  create-release:
+    name: Create draft release
+    runs-on: ubuntu-22.04
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Resolve tag name
+        id: tag
+        run: echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      # Create the draft via the REST API so the numeric release id comes back
+      # directly (tauri-action uploads by releaseId). The later flatpak/android
+      # jobs and the publish job use `gh release …`, which DOES resolve draft
+      # releases by tag (the REST "get release by tag" endpoint 404s on drafts,
+      # which is why we don't key softprops/action-gh-release off the tag here).
+      - name: Create draft GitHub release
+        id: create
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          release_id=$(gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/releases" \
+            -f tag_name="${TAG}" \
+            -f name="Quark ${TAG}" \
+            -f body="Automated release — see commit history for details." \
+            -F draft=true \
+            --jq '.id')
+          echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
+
+  # ─── desktop bundles (Linux / macOS / Windows) ─────────────────────────────
+  build-tauri:
+    name: Build desktop (${{ matrix.platform }})
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-22.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Linux: Tauri v2 / webkit2gtk 4.1 system dependencies.
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libglib2.0-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev \
+            libayatana-appindicator3-dev \
+            libssl-dev \
+            libsqlite3-dev \
+            build-essential \
+            pkg-config \
+            file \
+            xdg-utils
+
+      # Windows: vendored OpenSSL (for bundled-sqlcipher) needs Perl + NASM.
+      # windows-latest already ships Perl; install NASM and add it to PATH.
+      - name: Install NASM (Windows, for vendored OpenSSL)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          choco install nasm -y
+          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: pwsh
+
+      - name: Set up Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          # Per-platform key so release artifacts don't collide across the matrix.
+          key: release-${{ matrix.platform }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      # tauri-action runs the beforeBuildCommand (`pnpm build`) itself, builds
+      # the release bundles, and uploads them to the draft release identified by
+      # releaseId. Bundles are named by Tauri; we don't force-rename them.
+      - name: Build and upload Tauri bundles
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Apple signing / notarisation — all optional. tauri-action signs only
+          # when these are populated; unset secrets resolve to empty strings and
+          # the build proceeds unsigned.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ needs.create-release.outputs.tag }}
+          # NOTE: tauri-action uses tauri.conf.json's bundle.targets ("all").
+          # On each host that yields the native installers (Linux: deb/rpm/
+          # appimage; macOS: dmg/app; Windows: nsis + msi). If you want to
+          # restrict Windows to NSIS only, add: args: --bundles nsis
+
+  # ─── Flatpak bundle ────────────────────────────────────────────────────────
+  build-flatpak:
+    name: Build Flatpak
+    needs: create-release
+    runs-on: ubuntu-22.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            flatpak flatpak-builder elfutils ca-certificates
+
+      # Cache the installed flatpak runtimes (~1 GB). Static key — runtime bumps
+      # are handled by `flatpak install` skipping anything already present; bump
+      # the -v1 suffix to force a clean cache.
+      - name: Cache Flatpak runtimes
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/flatpak
+          key: flatpak-runtimes-v1
+
+      - name: Add Flathub and install runtimes (user install)
+        run: |
+          flatpak remote-add --user --if-not-exists flathub \
+            https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub \
+            org.gnome.Platform//50 \
+            org.gnome.Sdk//50 \
+            org.freedesktop.Sdk.Extension.rust-stable//25.08 \
+            org.freedesktop.Sdk.Extension.node22//25.08
+
+      # NOTE: the flatpak manifest is expected at flatpak/tel.quark.app.yml with
+      # bundle id tel.quark.app. The manifest itself drives the frontend/Rust
+      # build inside the sandbox (network access via build-args if it vendors
+      # deps) — keep it in sync with the renamed bundle id.
+      - name: Build Flatpak bundle
+        run: |
+          flatpak-builder --user --force-clean --repo=flatpak-repo \
+            flatpak-build flatpak/tel.quark.app.yml
+          flatpak build-bundle flatpak-repo quark.flatpak tel.quark.app
+
+      - name: Rename bundle to release asset name
+        run: cp quark.flatpak "quark-${GITHUB_REF_NAME}.flatpak"
+
+      - name: Upload Flatpak to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: gh release upload "$TAG" "quark-${TAG}.flatpak" --repo "$GITHUB_REPOSITORY" --clobber
+
+  # ─── Android APK (arm64) ───────────────────────────────────────────────────
+  build-android:
+    name: Build Android APK
+    needs: create-release
+    runs-on: ubuntu-22.04
+    env:
+      NDK_VERSION: "26.1.10909125"
+      SDK_PLATFORM: "android-34"
+      BUILD_TOOLS_VERSION: "34.0.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform, build-tools and NDK
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;${SDK_PLATFORM}" \
+            "build-tools;${BUILD_TOOLS_VERSION}" \
+            "ndk;${NDK_VERSION}"
+          # tauri android reads NDK_HOME / ANDROID_HOME.
+          echo "NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          # Make apksigner (from build-tools) available on PATH for verification.
+          echo "${ANDROID_HOME}/build-tools/${BUILD_TOOLS_VERSION}" >> "$GITHUB_PATH"
+
+      - name: Set up Rust (stable) with Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: release-android
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Frontend bundle must exist before the Android build embeds it.
+      - name: Build frontend
+        run: pnpm build
+
+      # Idempotent; safe to re-run even though src-tauri/gen/android is in-tree.
+      - name: Initialise Android project
+        run: pnpm tauri android init --ci
+
+      # Build a release APK signed with the maintainer's keystore when present;
+      # otherwise fall back to a debug-signed APK so the pipeline still succeeds.
+      # The release signingConfig in app/build.gradle.kts reads
+      # ANDROID_KEYSTORE_PATH + the password/alias env vars.
+      - name: Build APK (release-signed if keystore present, else debug)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
+            echo "Building release APK (release-signed by Gradle)…"
+            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/quark.jks"
+            export ANDROID_KEYSTORE_PATH="${RUNNER_TEMP}/quark.jks"
+            pnpm tauri android build --apk --target aarch64
+            SIGNED=$(find src-tauri/gen/android/app/build/outputs/apk \
+              -name "*-release.apk" ! -name "*-unsigned.apk" | head -n1)
+            rm -f "${RUNNER_TEMP}/quark.jks"
+            if [ -z "${SIGNED}" ]; then
+              echo "ERROR: no signed *-release.apk produced. Is the signingConfig wired up in build.gradle.kts?" >&2
+              exit 1
+            fi
+            echo "Found signed APK: ${SIGNED}"
+            # Fail loudly if the APK didn't actually get signed.
+            apksigner verify --print-certs "${SIGNED}" \
+              | grep -i "Signer #1 certificate SHA-256" \
+              || { echo "ERROR: APK is not signed." >&2; exit 1; }
+            cp "${SIGNED}" "quark-${GITHUB_REF_NAME}-android.apk"
+          else
+            echo "No ANDROID_KEYSTORE_BASE64 set — building DEBUG-signed APK."
+            echo "  (Installable on dev devices, but NOT suitable for public"
+            echo "   release — the debug key is regenerated every CI run, so"
+            echo "   debug builds can NOT be installed over one another.)"
+            pnpm tauri android build --apk --debug --target aarch64
+            DEBUG_APK=$(find src-tauri/gen/android/app/build/outputs/apk \
+              -name "*-debug.apk" | head -n1)
+            cp "${DEBUG_APK}" "quark-${GITHUB_REF_NAME}-android.apk"
+          fi
+
+      - name: Upload APK to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: gh release upload "$TAG" "quark-${TAG}-android.apk" --repo "$GITHUB_REPOSITORY" --clobber
+
+  # ─── publish the release (flip draft → published) ──────────────────────────
+  publish-release:
+    name: Publish release
+    needs: [create-release, build-tauri, build-flatpak, build-android]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Mark release as published
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false

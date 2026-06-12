@@ -1,0 +1,65 @@
+[meta]
+name = "Catppuccin Mocha"
+author = "quark"
+version = "1.0"
+
+[colors]
+background = "#1e1e2e"
+foreground = "#cdd6f4"
+cursor = "#cba6f7"
+selection_bg = "#313244"
+selection_fg = "#cdd6f4"
+border = "#45475a"
+
+[colors.accent]
+primary = "#cba6f7"
+secondary = "#89b4fa"
+error = "#f38ba8"
+warning = "#f9e2af"
+success = "#a6e3a1"
+link = "#89b4fa"
+
+[colors.messages]
+own = "#a6e3a1"
+other = "#cdd6f4"
+system = "#585b70"
+timestamp = "#45475a"
+mention_bg = "#2a2040"
+mention_fg = "#f9e2af"
+reply_border = "#585b70"
+thread_indicator = "#89b4fa"
+
+[colors.roomlist]
+active_bg = "#313244"
+active_fg = "#cba6f7"
+unread = "#cdd6f4"
+mention_badge = "#f38ba8"
+muted = "#585b70"
+
+[colors.reactions]
+background = "#313244"
+border = "#45475a"
+own_bg = "#2a2e3a"
+count = "#585b70"
+
+[typography]
+font_family = "JetBrains Mono, Fira Code, monospace"
+font_size = 14
+line_height = 1.5
+message_spacing = 4
+
+[borders]
+style = "rounded"
+room_list_width = "25%"
+
+[emoji]
+size = 32
+sticker_max_size = 256
+reaction_size = 20
+
+[prompt]
+symbol = ":>"
+normal_indicator = "NOR"
+insert_indicator = "INS"
+command_indicator = "CMD"
+visual_indicator = "VIS"

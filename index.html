@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quark</title>
+    <link rel="stylesheet" href="/src/style/base.css" />
+    <link rel="stylesheet" href="/src/theme/vars.css" />
+  </head>
+  <body>
+    <!-- Startup overlay — visible from first paint, before any JS runs, so the
+         login screen never flashes during session restore. main.ts dismisses it
+         once the app is ready (see dismissStartupOverlay). -->
+    <div id="startup-overlay" aria-hidden="true">
+      <div class="startup-overlay__inner">
+        <div class="startup-overlay__logo">QUARK</div>
+        <div class="startup-overlay__sub">matrix client</div>
+        <div class="startup-overlay__progress">
+          <div class="startup-overlay__bar"></div>
+        </div>
+      </div>
+      <div class="startup-overlay__scanlines"></div>
+    </div>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

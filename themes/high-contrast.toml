@@ -1,0 +1,65 @@
+[meta]
+name = "High Contrast"
+author = "quark"
+version = "1.0"
+
+[colors]
+background = "#000000"
+foreground = "#ffffff"
+cursor = "#ffff00"
+selection_bg = "#0000cc"
+selection_fg = "#ffffff"
+border = "#ffffff"
+
+[colors.accent]
+primary = "#ffff00"
+secondary = "#00ffff"
+error = "#ff0000"
+warning = "#ff8800"
+success = "#00ff00"
+link = "#00ffff"
+
+[colors.messages]
+own = "#00ff00"
+other = "#ffffff"
+system = "#aaaaaa"
+timestamp = "#888888"
+mention_bg = "#330000"
+mention_fg = "#ff8800"
+reply_border = "#aaaaaa"
+thread_indicator = "#00ffff"
+
+[colors.roomlist]
+active_bg = "#0000aa"
+active_fg = "#ffff00"
+unread = "#ffffff"
+mention_badge = "#ff0000"
+muted = "#888888"
+
+[colors.reactions]
+background = "#111111"
+border = "#ffffff"
+own_bg = "#003300"
+count = "#cccccc"
+
+[typography]
+font_family = "JetBrains Mono, Fira Code, monospace"
+font_size = 16
+line_height = 1.6
+message_spacing = 6
+
+[borders]
+style = "double"
+room_list_width = "25%"
+
+[emoji]
+size = 32
+sticker_max_size = 256
+reaction_size = 20
+
+[prompt]
+symbol = ":>"
+normal_indicator = "NOR"
+insert_indicator = "INS"
+command_indicator = "CMD"
+visual_indicator = "VIS"

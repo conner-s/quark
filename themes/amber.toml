@@ -1,0 +1,65 @@
+[meta]
+name = "Amber"
+author = "quark"
+version = "1.0"
+
+[colors]
+background = "#0d0900"
+foreground = "#c8820a"
+cursor = "#ffb000"
+selection_bg = "#2e1f00"
+selection_fg = "#ffb000"
+border = "#3d2800"
+
+[colors.accent]
+primary = "#ffb000"
+secondary = "#e07b00"
+error = "#ff4422"
+warning = "#ffd040"
+success = "#c8a000"
+link = "#e07b00"
+
+[colors.messages]
+own = "#ffb000"
+other = "#c8820a"
+system = "#5a3d00"
+timestamp = "#4a3000"
+mention_bg = "#1f1200"
+mention_fg = "#ffd040"
+reply_border = "#5a3d00"
+thread_indicator = "#e07b00"
+
+[colors.roomlist]
+active_bg = "#1a1000"
+active_fg = "#ffb000"
+unread = "#ffd040"
+mention_badge = "#ff4422"
+muted = "#4a3000"
+
+[colors.reactions]
+background = "#1a1000"
+border = "#3d2800"
+own_bg = "#2e1f00"
+count = "#7a5500"
+
+[typography]
+font_family = "JetBrains Mono, Fira Code, monospace"
+font_size = 14
+line_height = 1.5
+message_spacing = 4
+
+[borders]
+style = "single"
+room_list_width = "25%"
+
+[emoji]
+size = 32
+sticker_max_size = 256
+reaction_size = 20
+
+[prompt]
+symbol = ":>"
+normal_indicator = "NOR"
+insert_indicator = "INS"
+command_indicator = "CMD"
+visual_indicator = "VIS"

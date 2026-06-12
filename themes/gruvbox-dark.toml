@@ -1,0 +1,65 @@
+[meta]
+name = "Gruvbox Dark"
+author = "quark"
+version = "1.0"
+
+[colors]
+background = "#282828"
+foreground = "#ebdbb2"
+cursor = "#fabd2f"
+selection_bg = "#3c3836"
+selection_fg = "#ebdbb2"
+border = "#504945"
+
+[colors.accent]
+primary = "#fabd2f"
+secondary = "#83a598"
+error = "#fb4934"
+warning = "#fe8019"
+success = "#b8bb26"
+link = "#83a598"
+
+[colors.messages]
+own = "#b8bb26"
+other = "#ebdbb2"
+system = "#7c6f64"
+timestamp = "#504945"
+mention_bg = "#32302f"
+mention_fg = "#fabd2f"
+reply_border = "#7c6f64"
+thread_indicator = "#83a598"
+
+[colors.roomlist]
+active_bg = "#3c3836"
+active_fg = "#fabd2f"
+unread = "#fbf1c7"
+mention_badge = "#fb4934"
+muted = "#7c6f64"
+
+[colors.reactions]
+background = "#3c3836"
+border = "#504945"
+own_bg = "#32382a"
+count = "#7c6f64"
+
+[typography]
+font_family = "JetBrains Mono, Fira Code, monospace"
+font_size = 14
+line_height = 1.5
+message_spacing = 4
+
+[borders]
+style = "single"
+room_list_width = "25%"
+
+[emoji]
+size = 32
+sticker_max_size = 256
+reaction_size = 20
+
+[prompt]
+symbol = ":>"
+normal_indicator = "NOR"
+insert_indicator = "INS"
+command_indicator = "CMD"
+visual_indicator = "VIS"

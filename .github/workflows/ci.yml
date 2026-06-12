@@ -1,0 +1,155 @@
+# Quark — Continuous Integration (test + lint)
+#
+# Runs on every pull request and on pushes to `main`. This is the gate that
+# keeps `main` green; the heavy release/build pipeline lives in release.yml and
+# only fires on tags.
+#
+# Jobs:
+#   • test   — HARD GATE. Installs the Linux/Tauri system deps, Rust, and pnpm,
+#              runs `pnpm build` (which also type-checks via tsc), then
+#              `pnpm test` (vitest) and `cargo test`. A failure blocks the merge.
+#   • clippy — ADVISORY. Runs `cargo clippy` but is marked continue-on-error so
+#              it never blocks a merge — the backend carries known clippy
+#              warnings and a deliberate hand-formatting style, so clippy can't
+#              hard-gate yet.
+#
+# Required repository secrets: NONE. This workflow needs no secrets at all —
+# only the automatically-provided GITHUB_TOKEN (not used here beyond checkout).
+#
+# pnpm is pinned via package.json "packageManager": "pnpm@10.32.1" and honoured
+# through corepack. pnpm 11 needs Node 22.13+, so we deliberately stay on Node
+# 20 + pnpm 10.x.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel an in-flight run when a newer commit is pushed to the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Incremental compilation state is dead weight in CI (the restored cache IS
+  # the increment) and debug info dominates debug-profile target size while
+  # nothing in CI reads it — disabling both keeps the Rust cache lean.
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+
+jobs:
+  # ─── test (hard gate) ──────────────────────────────────────────────────────
+  test:
+    name: Test (frontend + backend)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tauri v2 / webkit2gtk 4.1 system dependencies.
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libglib2.0-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev \
+            libayatana-appindicator3-dev \
+            libssl-dev \
+            libsqlite3-dev \
+            build-essential \
+            pkg-config \
+            file \
+            xdg-utils
+
+      - name: Set up Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Cargo workspace lives under src-tauri/.
+          workspaces: src-tauri
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        # Version is read from package.json "packageManager" (pnpm@10.32.1).
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `pnpm build` runs `tsc && vite build` — this also type-checks the
+      # frontend, so a type error fails here before any test runs. It produces
+      # dist/, which tauri::generate_context!() embeds at compile time.
+      - name: Build frontend
+        run: pnpm build
+
+      - name: Run frontend tests (vitest)
+        run: pnpm test
+
+      - name: Run backend tests (cargo test)
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  # ─── clippy (advisory — never blocks) ──────────────────────────────────────
+  clippy:
+    name: Clippy (advisory)
+    runs-on: ubuntu-22.04
+    # Advisory: surface lint signal without gating the merge.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      # clippy needs the same native libs to link against during analysis.
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libglib2.0-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libsqlite3-dev \
+            build-essential \
+            pkg-config
+
+      - name: Set up Rust (stable) with clippy
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          # Separate cache key from the test job so debug + clippy artifacts
+          # don't thrash one archive.
+          key: clippy
+
+      # tauri::generate_context!() embeds ../dist at compile time and panics if
+      # it's missing. clippy doesn't run `pnpm build`, so stage a placeholder.
+      - name: Stage dist placeholder for generate_context!
+        run: |
+          mkdir -p dist
+          echo '<!doctype html><title>quark</title>' > dist/index.html
+
+      - name: Run clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets

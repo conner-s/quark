@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Notifications (runtime-prompted on Android 13+; declared explicitly
+         rather than relying on the notification plugin's manifest merge). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Background sync foreground service (Settings → Notifications). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Lets the app ask the user to exempt it from battery optimization so
+         Doze doesn't strangle the persistent sync connection. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- AndroidTV support -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+
+    <!-- allowBackup is disabled because the Android secrets fallback (secrets.rs)
+         stores the store-encryption key and Matrix session as plaintext files in
+         the app-private data dir; Auto Backup / device-transfer would copy those
+         off-device. Disabling backup keeps them confined to the OS sandbox. -->
+    <application
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.quark"
+        android:usesCleartextTraffic="${usesCleartextTraffic}"
+        android:allowBackup="false">
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:launchMode="singleTask"
+            android:label="@string/main_activity_title"
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <!-- AndroidTV support -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Keeps the Rust sync loop alive while backgrounded. specialUse:
+             dataSync is runtime-capped on Android 15, and nothing else fits a
+             persistent Matrix connection with no push server. -->
+        <service
+            android:name=".SyncForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Persistent Matrix sync connection; no push server is available for this self-hostable chat client" />
+        </service>
+
+        <provider
+          android:name="androidx.core.content.FileProvider"
+          android:authorities="${applicationId}.fileprovider"
+          android:exported="false"
+          android:grantUriPermissions="true">
+          <meta-data
+            android:name="android.support.FILE_PROVIDER_PATHS"
+            android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>

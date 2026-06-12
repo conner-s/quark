@@ -1,0 +1,65 @@
+[meta]
+name = "Catppuccin Latte"
+author = "quark"
+version = "1.0"
+
+[colors]
+background = "#eff1f5"
+foreground = "#4c4f69"
+cursor = "#8839ef"
+selection_bg = "#dce0e8"
+selection_fg = "#4c4f69"
+border = "#bcc0cc"
+
+[colors.accent]
+primary = "#8839ef"
+secondary = "#1e66f5"
+error = "#d20f39"
+warning = "#df8e1d"
+success = "#40a02b"
+link = "#1e66f5"
+
+[colors.messages]
+own = "#40a02b"
+other = "#4c4f69"
+system = "#8c8fa1"
+timestamp = "#bcc0cc"
+mention_bg = "#e8e5f5"
+mention_fg = "#df8e1d"
+reply_border = "#8c8fa1"
+thread_indicator = "#1e66f5"
+
+[colors.roomlist]
+active_bg = "#dce0e8"
+active_fg = "#8839ef"
+unread = "#4c4f69"
+mention_badge = "#d20f39"
+muted = "#8c8fa1"
+
+[colors.reactions]
+background = "#dce0e8"
+border = "#bcc0cc"
+own_bg = "#e2eedd"
+count = "#8c8fa1"
+
+[typography]
+font_family = "JetBrains Mono, Fira Code, monospace"
+font_size = 14
+line_height = 1.5
+message_spacing = 4
+
+[borders]
+style = "rounded"
+room_list_width = "25%"
+
+[emoji]
+size = 32
+sticker_max_size = 256
+reaction_size = 20
+
+[prompt]
+symbol = ":>"
+normal_indicator = "NOR"
+insert_indicator = "INS"
+command_indicator = "CMD"
+visual_indicator = "VIS"

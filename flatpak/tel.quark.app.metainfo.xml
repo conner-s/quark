@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>tel.quark.app</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+
+  <name>Quark</name>
+  <summary>A terminal-aesthetic Matrix client</summary>
+
+  <description>
+    <p>
+      Quark is a desktop Matrix client with a terminal aesthetic and vim-style
+      navigation. Built with Tauri, it provides a fast, lightweight interface
+      for Matrix chat with support for E2EE, emoji reactions, stickers, GIFs,
+      and Spaces.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">tel.quark.app.desktop</launchable>
+
+  <url type="homepage">https://quark.tel</url>
+  <url type="bugtracker">https://github.com/mcplummet/quark/issues</url>
+
+  <provides>
+    <binary>quark</binary>
+  </provides>
+
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">moderate</content_attribute>
+  </content_rating>
+
+  <releases>
+    <release version="0.1.0" date="2026-04-04">
+      <description>
+        <p>Initial release.</p>
+      </description>
+    </release>
+  </releases>
+
+  <screenshots>
+    <!-- Add screenshots here before submitting to Flathub -->
+  </screenshots>
+</component>

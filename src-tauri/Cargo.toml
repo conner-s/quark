@@ -1,0 +1,117 @@
+[package]
+name = "quark"
+version = "0.14.0"
+edition = "2021"
+description = "A CLI-styled Matrix client"
+authors = ["mcplummet"]
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/mcplummet/quark"
+homepage = "https://quark.tel"
+
+[dependencies]
+# `devtools` is intentionally NOT enabled: Tauri turns the Web Inspector on
+# automatically in debug builds, and the `devtools` feature is only what would
+# additionally enable it in *release* builds — which we don't want shipping.
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-shell = "2"
+tauri-plugin-notification = "2"
+chrono = { version = "0.4", features = ["clock"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+toml = "0.8"
+directories = "6"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+mime = "0.3"
+sha2 = "0.10"
+rand = "0.8"
+tiny_http = "0.12"
+# Allowlist sanitizer for remote `formatted_body` HTML (org.matrix.custom.html)
+# before it reaches the WebView. See matrix/html.rs.
+ammonia = "4"
+
+# matrix-sdk and reqwest pick their TLS stack from features.
+# Desktop + iOS use native-tls (Security framework on Apple, OpenSSL on Linux);
+# Android can't cross-compile OpenSSL out of the box, so we use rustls there.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+matrix-sdk = { version = "0.9", features = ["e2e-encryption", "bundled-sqlite"] }
+reqwest = { version = "0.12", features = ["json"] }
+# OS keyring: encrypts the SQLite store key + Matrix session at rest. Linux uses
+# the Secret Service (sync; crypto-rust avoids an OpenSSL build dep), macOS/iOS
+# use the Keychain, Windows uses Credential Manager. Android has no Secret
+# Service and isn't supported by `keyring`, so it's excluded here — `secrets.rs`
+# falls back to app-private file storage there (see that module).
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+
+# Encrypted SQLite (SQLCipher) for the persistent message search index. Pinned
+# to the SAME rusqlite (0.32 → libsqlite3-sys 0.30) that matrix-sdk-sqlite uses,
+# so Cargo unifies them into ONE libsqlite3-sys and merges features
+# (bundled + bundled-sqlcipher → SQLCipher) instead of linking two copies. The
+# index DB is page-encrypted at rest under the keyring store key; matrix-sdk's
+# own unkeyed stores keep working (SQLCipher is a drop-in superset of SQLite).
+# Android is excluded (SQLCipher's OpenSSL crypto doesn't cross-compile cleanly —
+# the same reason matrix-sdk uses rustls there); the index is desktop/iOS-only.
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }
+
+# Native save dialogs. On Linux the `xdg-portal` backend talks to the XDG
+# desktop portal over D-Bus (no GTK/GSettings — avoids the "No GSettings schemas
+# installed" crash that sank the previous native picker, and is the only way a
+# Flatpak can write outside its sandbox); macOS/Windows use the OS picker.
+# Desktop-only — mobile has no equivalent and the save command stubs out there.
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+
+# Windows: native-tls uses SChannel (no OpenSSL), but SQLCipher's libcrypto still
+# needs one. Vendor OpenSSL for the Windows target (build-time Perl + NASM on the
+# runner). Cargo feature-unifies this with the `bundled-sqlcipher` rusqlite above
+# into ONE SQLCipher build with a vendored OpenSSL — this is what unblocks the
+# native Windows release build that the old Linux cross-compile couldn't do
+# (libsqlite3-sys failed on 'openssl/crypto.h' not found when cross-compiling).
+[target.'cfg(target_os = "windows")'.dependencies]
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+matrix-sdk = { version = "0.9", default-features = false, features = ["e2e-encryption", "automatic-room-key-forwarding", "sqlite", "bundled-sqlite", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[lib]
+name = "quark_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "quark"
+path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+# Cargo's default release profile keeps symbol tables, which leaves the Android
+# JNI .so (libquark_lib.so) unstripped — and nothing in the Gradle release path
+# re-strips it. Strip here so every ABI ships lean; LTO shrinks the binary
+# further. opt-level stays at the default 3 so desktop runtime perf is unchanged.
+[profile.release]
+strip = true
+lto = true
+
+# macOS Tahoe: objc2 debug assertions panic on removed NSApplicationDelegate methods
+[profile.dev.package.objc2]
+debug-assertions = false
+[profile.dev.package.objc2-app-kit]
+debug-assertions = false
+[profile.dev.package.objc2-foundation]
+debug-assertions = false
+[profile.dev.package.objc2-web-kit]
+debug-assertions = false
+[profile.dev.package.block2]
+debug-assertions = false

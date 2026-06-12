@@ -1,0 +1,65 @@
+[meta]
+name = "Dracula"
+author = "quark"
+version = "1.0"
+
+[colors]
+background = "#282a36"
+foreground = "#f8f8f2"
+cursor = "#bd93f9"
+selection_bg = "#44475a"
+selection_fg = "#f8f8f2"
+border = "#44475a"
+
+[colors.accent]
+primary = "#bd93f9"
+secondary = "#8be9fd"
+error = "#ff5555"
+warning = "#ffb86c"
+success = "#50fa7b"
+link = "#8be9fd"
+
+[colors.messages]
+own = "#50fa7b"
+other = "#f8f8f2"
+system = "#6272a4"
+timestamp = "#44475a"
+mention_bg = "#3a2e4a"
+mention_fg = "#ff79c6"
+reply_border = "#6272a4"
+thread_indicator = "#8be9fd"
+
+[colors.roomlist]
+active_bg = "#44475a"
+active_fg = "#bd93f9"
+unread = "#f8f8f2"
+mention_badge = "#ff5555"
+muted = "#6272a4"
+
+[colors.reactions]
+background = "#44475a"
+border = "#6272a4"
+own_bg = "#3a2e4a"
+count = "#6272a4"
+
+[typography]
+font_family = "JetBrains Mono, Fira Code, monospace"
+font_size = 14
+line_height = 1.5
+message_spacing = 4
+
+[borders]
+style = "single"
+room_list_width = "25%"
+
+[emoji]
+size = 32
+sticker_max_size = 256
+reaction_size = 20
+
+[prompt]
+symbol = ":>"
+normal_indicator = "NOR"
+insert_indicator = "INS"
+command_indicator = "CMD"
+visual_indicator = "VIS"

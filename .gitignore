@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+src-tauri/target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Android release signing — never commit real keystores or their passwords
+keystore.properties
+*.jks
+*.keystore
+
+# Flatpak
+flatpak-build/
+flatpak-repo/
+.flatpak-builder/
+*.flatpak
+repo/
+
+# direnv
+.direnv/

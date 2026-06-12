@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="format-detection" content="telephone=no" />
+    <title>Quark</title>
+    <link rel="stylesheet" href="./style/base.css" />
+    <link rel="stylesheet" href="./theme/vars.css" />
+  </head>
+  <body>
+    <div id="startup-overlay" aria-hidden="true">
+      <div class="startup-overlay__inner">
+        <div class="startup-overlay__logo">QUARK</div>
+        <div class="startup-overlay__sub">matrix client</div>
+        <div class="startup-overlay__progress">
+          <div class="startup-overlay__bar"></div>
+        </div>
+      </div>
+      <div class="startup-overlay__scanlines"></div>
+    </div>
+    <div id="app"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
