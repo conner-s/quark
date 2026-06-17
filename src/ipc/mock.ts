@@ -542,6 +542,7 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
         emoji: { shortcode_autocomplete: true, autocomplete_min_chars: 2 },
         home: { dm_limit: 12 },
         cache: { image_memory_mb: 150, timeline_rooms: 30 },
+        updater: { channel: "stable", auto_check: true },
       };
     case "get_event_cache_size":
       return 487654321;
@@ -653,6 +654,13 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       if (url) window.open(url, "_blank", "noopener,noreferrer");
       return null;
     }
+
+    // ─── Updater ──────────────────────────────────────────────────────────
+    case "update_check":
+      // Mock dev mode is always "up to date".
+      return null;
+    case "update_install":
+      return undefined;
 
     default:
       console.warn(`[mock] unhandled command: ${cmd}`, args);
