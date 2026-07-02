@@ -2,7 +2,7 @@
 
 **A keyboard-driven, terminal-aesthetic Matrix client.**
 
-![version](https://img.shields.io/badge/version-0.15.3-00ff41) ![license](https://img.shields.io/badge/license-AGPL--3.0-blue) ![stack](https://img.shields.io/badge/Tauri-v2-ffc131)
+![version](https://img.shields.io/badge/version-0.16.0-00ff41) ![license](https://img.shields.io/badge/license-AGPL--3.0-blue) ![stack](https://img.shields.io/badge/Tauri-v2-ffc131)
 
 Quark is a [Matrix](https://matrix.org) chat client that looks like a terminal but renders in a real GUI window. You drive it with vim-style keys and a `:` command bar, while still getting inline images, animated GIFs, custom emoji, and stickers — things a true TUI can't render reliably.
 
@@ -58,6 +58,32 @@ See [DESIGN.md](DESIGN.md) for the authoritative spec and [CLAUDE.md](CLAUDE.md)
 - Tauri v2 [system dependencies](https://v2.tauri.app/start/prerequisites/) for your OS (WebKitGTK, etc. on Linux)
 
 A [Nix flake](flake.nix) is provided — `direnv allow` (or `nix develop`) drops you into a shell with everything installed.
+
+### Install with Nix
+
+The flake also builds Quark as a package (Linux):
+
+```bash
+nix run github:mcplummet/quark    # try it without installing
+nix profile install github:mcplummet/quark
+```
+
+Or consume it declaratively from a NixOS / home-manager flake:
+
+```nix
+{
+  inputs.quark = {
+    url = "github:mcplummet/quark";
+    inputs.nixpkgs.follows = "nixpkgs"; # optional, builds against your nixpkgs
+  };
+
+  # then either add the package directly…
+  environment.systemPackages = [ inputs.quark.packages.${pkgs.system}.default ];
+
+  # …or use the overlay and refer to pkgs.quark
+  nixpkgs.overlays = [ inputs.quark.overlays.default ];
+}
+```
 
 ### Run it
 
