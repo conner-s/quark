@@ -89,6 +89,14 @@
           pkg-config
           squashfsTools  # provides mksquashfs for fakeAppimagetool
 
+          # Faster linking for the incremental `cargo build` / `cargo tauri dev`
+          # loop (devShell only — no effect on the sandboxed `nix build`). Wired
+          # via RUSTFLAGS in the shellHook. sccache was measured on this tree and
+          # gave a 0% cache hit rate — the matrix-sdk/Tauri dep graph is
+          # proc-macro/build-script heavy and sccache can't cache those or
+          # incremental output — so it's deliberately omitted.
+          mold
+
           # Flatpak packaging
           flatpak-builder
           appstream  # provides appstreamcli for metainfo validation
@@ -125,6 +133,13 @@
             # extract-and-run rather than mount via FUSE.
             export APPIMAGETOOL="${fakeAppimagetool}"
             export APPIMAGE_EXTRACT_AND_RUN=1
+
+            # Faster linking for the incremental Rust build loop (devShell only —
+            # no effect on the sandboxed `nix build`). Prepend mold to any
+            # existing RUSTFLAGS rather than clobbering. Use the bare
+            # `-fuse-ld=mold` name (mold is on PATH via nativeBuildInputs) — gcc
+            # rejects an absolute store path passed to -fuse-ld=.
+            export RUSTFLAGS="-C link-arg=-fuse-ld=mold ''${RUSTFLAGS:-}"
           '';
         };
       }
