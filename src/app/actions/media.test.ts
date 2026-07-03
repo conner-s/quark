@@ -2,9 +2,21 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { AppComponents } from "../../ui/App.js";
 
 // Mock the IPC surface so no real invoke happens; capture the send call.
-const sendPastedImage = vi.fn(async () => "$sent");
+// Typed with the real signature so `.mock.calls[n]` destructures cleanly under
+// `tsc` (the Nix build typechecks test files too, unlike vitest).
+const sendPastedImage =
+  vi.fn<
+    (
+      roomId: string,
+      dataBase64: string,
+      mimeType: string,
+      filename: string,
+      caption?: string,
+      replyToEventId?: string,
+    ) => Promise<string>
+  >(async () => "$sent");
 vi.mock("../../ipc/index.js", () => ({
-  sendPastedImage: (...args: unknown[]) => sendPastedImage(...args),
+  sendPastedImage: (...args: Parameters<typeof sendPastedImage>) => sendPastedImage(...args),
   // Referenced elsewhere in media.ts's module scope; stubbed to no-ops.
   serveMedia: vi.fn(),
   saveMediaToTemp: vi.fn(),
