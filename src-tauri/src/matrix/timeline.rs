@@ -1097,15 +1097,29 @@ pub async fn edit_message(
     Ok(response_event_id)
 }
 
-/// Send an image (m.image) event to a room.
+/// MSC2530 body mapping for outgoing images: with a caption, the event body is
+/// the caption and `filename` carries the real name; without one, the body is
+/// the filename and the field is omitted — matching the pre-caption wire format,
+/// which ruma's `caption()` reader treats as captionless.
+fn build_image_body(filename: &str, caption: Option<&str>) -> (String, Option<String>) {
+    match caption.map(str::trim).filter(|c| !c.is_empty()) {
+        Some(c) => (c.to_string(), Some(filename.to_string())),
+        None => (filename.to_string(), None),
+    }
+}
+
+/// Send an image (m.image) event to a room, with an optional MSC2530 caption,
+/// optionally as a reply.
 pub async fn send_image(
     client: &Client,
     room_id: &str,
-    body: &str,
+    filename: &str,
+    caption: Option<&str>,
     mxc_url: &str,
     mime_type: &str,
     width: Option<u64>,
     height: Option<u64>,
+    in_reply_to: Option<&str>,
 ) -> Result<String, String> {
     use matrix_sdk::ruma::{
         events::room::{
@@ -1128,10 +1142,20 @@ pub async fn send_image(
     img_info.width = width.and_then(|w| UInt::try_from(w).ok());
     img_info.height = height.and_then(|h| UInt::try_from(h).ok());
 
-    let mut img_content = ImageMessageEventContent::new(body.to_string(), source);
+    let (body, filename_field) = build_image_body(filename, caption);
+    let mut img_content = ImageMessageEventContent::new(body, source);
     img_content.info = Some(Box::new(img_info));
+    img_content.filename = filename_field;
 
-    let msg_content = RoomMessageEventContent::new(MessageType::Image(img_content));
+    let mut msg_content = RoomMessageEventContent::new(MessageType::Image(img_content));
+
+    if let Some(reply_event_id) = in_reply_to {
+        let owned_id = OwnedEventId::try_from(reply_event_id)
+            .map_err(|e| format!("Invalid reply event ID: {e}"))?;
+        msg_content.relates_to = Some(Relation::Reply {
+            in_reply_to: InReplyTo::new(owned_id),
+        });
+    }
 
     let response = room
         .send(msg_content)
