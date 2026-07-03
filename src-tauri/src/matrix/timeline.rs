@@ -1766,4 +1766,50 @@ mod tests {
             ("cat.png".to_string(), None)
         );
     }
+
+    #[test]
+    fn test_convert_sync_captioned_image_surfaces_caption() {
+        // An MSC2530 image event as it arrives over sync: body = caption,
+        // filename = the real name (what Quark sends and Element renders).
+        let json = serde_json::json!({
+            "type": "m.room.message",
+            "event_id": "$img1:example.com",
+            "sender": "@alice:example.com",
+            "origin_server_ts": 1_700_000_000_000i64,
+            "content": {
+                "msgtype": "m.image",
+                "body": "look at this cat",
+                "filename": "pasted-image-123.png",
+                "url": "mxc://example.com/abc123",
+                "info": { "mimetype": "image/png", "w": 800, "h": 600 }
+            }
+        });
+        let ev: OriginalSyncRoomMessageEvent =
+            serde_json::from_value(json).expect("deserialize image event");
+        let te = convert_sync_room_message(ev);
+        assert_eq!(te.msg_type, "m.image");
+        assert_eq!(te.body, "look at this cat");
+        assert_eq!(te.caption.as_deref(), Some("look at this cat"));
+    }
+
+    #[test]
+    fn test_convert_sync_uncaptioned_image_has_no_caption() {
+        // No filename → body is the bare name, not a caption.
+        let json = serde_json::json!({
+            "type": "m.room.message",
+            "event_id": "$img2:example.com",
+            "sender": "@alice:example.com",
+            "origin_server_ts": 1_700_000_000_000i64,
+            "content": {
+                "msgtype": "m.image",
+                "body": "pasted-image-123.png",
+                "url": "mxc://example.com/abc123",
+                "info": { "mimetype": "image/png" }
+            }
+        });
+        let ev: OriginalSyncRoomMessageEvent =
+            serde_json::from_value(json).expect("deserialize image event");
+        let te = convert_sync_room_message(ev);
+        assert_eq!(te.caption, None);
+    }
 }
