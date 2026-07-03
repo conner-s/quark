@@ -92,7 +92,21 @@
           # Flatpak packaging
           flatpak-builder
           appstream  # provides appstreamcli for metainfo validation
-        ];
+        ]
+        # Faster linking for the incremental `cargo build` / `cargo tauri dev`
+        # loop (devShell only — no effect on the sandboxed `nix build`). Wired
+        # via RUSTFLAGS in the shellHook. sccache was measured on this tree and
+        # gave a 0% cache hit rate — the matrix-sdk/Tauri dep graph is
+        # proc-macro/build-script heavy and sccache can't cache those or
+        # incremental output — so it's deliberately omitted.
+        #
+        # Linux-only. nixpkgs does list darwin in mold's meta.platforms, but the
+        # binary only speaks ELF: on aarch64-darwin it rejects the Apple linker
+        # flags the toolchain passes (`-platform_version`, `-no_deduplicate`), so
+        # `-fuse-ld=mold` fails every link — and the wrapper is broken enough that
+        # even `mold --version` exits non-zero. Gating on the package as well as
+        # the RUSTFLAGS export keeps an unusable linker out of the darwin shell.
+        ++ pkgs.lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.mold;
 
         buildInputs = tauriDeps;
       in
@@ -125,6 +139,15 @@
             # extract-and-run rather than mount via FUSE.
             export APPIMAGETOOL="${fakeAppimagetool}"
             export APPIMAGE_EXTRACT_AND_RUN=1
+
+            # Faster linking for the incremental Rust build loop (devShell only —
+            # no effect on the sandboxed `nix build`). Prepend mold to any
+            # existing RUSTFLAGS rather than clobbering. Use the bare
+            # `-fuse-ld=mold` name (mold is on PATH via nativeBuildInputs) — gcc
+            # rejects an absolute store path passed to -fuse-ld=.
+            ${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+              export RUSTFLAGS="-C link-arg=-fuse-ld=mold ''${RUSTFLAGS:-}"
+            ''}
           '';
         };
       }
