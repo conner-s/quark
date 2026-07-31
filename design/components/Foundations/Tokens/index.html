@@ -1,0 +1,195 @@
+<!-- @dsCard group="Foundations" -->
+<link rel="stylesheet" href="../../../styles.css" />
+
+<!--
+  Design tokens — the complete themeable surface.
+
+  Every token here is declared in src/theme/vars.css and consumed via var(--name)
+  throughout src/style/base.css. Themes (themes/*.toml) override a SUBSET of
+  them; the mapping from TOML key to CSS variable lives in
+  src/theme/loader.ts:159-224.
+
+  Tokens marked "not themeable" are declared in vars.css but never written by the
+  loader, so they hold the same value under every theme.
+-->
+
+<style>
+  .tok-sheet {
+    padding: 20px;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-family);
+    font-size: var(--font-size);
+  }
+  .tok-group {
+    margin-bottom: 28px;
+  }
+  .tok-group__title {
+    color: var(--accent-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+  .tok-group__note {
+    color: var(--msg-system);
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  .tok-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 6px;
+  }
+  .tok {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 5px 7px;
+    border: 1px solid var(--border-color);
+  }
+  .tok__chip {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    border: 1px solid var(--border-color);
+  }
+  .tok__name {
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tok-scale {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .tok-scale__row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .tok-scale__label {
+    color: var(--msg-system);
+    font-size: 11px;
+    min-width: 190px;
+  }
+</style>
+
+<div class="tok-sheet">
+  <div class="tok-group">
+    <div class="tok-group__title">Core palette</div>
+    <div class="tok-grid">
+      <div class="tok"><span class="tok__chip" style="background: var(--bg)"></span><span class="tok__name">--bg</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--fg)"></span><span class="tok__name">--fg</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--cursor)"></span><span class="tok__name">--cursor</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--selection-bg)"></span><span class="tok__name">--selection-bg</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--selection-fg)"></span><span class="tok__name">--selection-fg</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--border-color)"></span><span class="tok__name">--border-color</span></div>
+    </div>
+  </div>
+
+  <div class="tok-group">
+    <div class="tok-group__title">Accent</div>
+    <div class="tok-grid">
+      <div class="tok"><span class="tok__chip" style="background: var(--accent-primary)"></span><span class="tok__name">--accent-primary</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--accent-secondary)"></span><span class="tok__name">--accent-secondary</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--accent-error)"></span><span class="tok__name">--accent-error</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--accent-warning)"></span><span class="tok__name">--accent-warning</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--accent-success)"></span><span class="tok__name">--accent-success</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--accent-link)"></span><span class="tok__name">--accent-link</span></div>
+    </div>
+  </div>
+
+  <div class="tok-group">
+    <div class="tok-group__title">Messages</div>
+    <div class="tok-grid">
+      <div class="tok"><span class="tok__chip" style="background: var(--msg-own)"></span><span class="tok__name">--msg-own</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--msg-other)"></span><span class="tok__name">--msg-other</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--msg-system)"></span><span class="tok__name">--msg-system</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--msg-timestamp)"></span><span class="tok__name">--msg-timestamp</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--msg-mention-bg)"></span><span class="tok__name">--msg-mention-bg</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--msg-mention-fg)"></span><span class="tok__name">--msg-mention-fg</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--msg-reply-border)"></span><span class="tok__name">--msg-reply-border</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--msg-thread-indicator)"></span><span class="tok__name">--msg-thread-indicator</span></div>
+    </div>
+  </div>
+
+  <div class="tok-group">
+    <div class="tok-group__title">Room list</div>
+    <div class="tok-grid">
+      <div class="tok"><span class="tok__chip" style="background: var(--roomlist-active-bg)"></span><span class="tok__name">--roomlist-active-bg</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--roomlist-active-fg)"></span><span class="tok__name">--roomlist-active-fg</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--roomlist-unread)"></span><span class="tok__name">--roomlist-unread</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--roomlist-mention-badge)"></span><span class="tok__name">--roomlist-mention-badge</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--roomlist-muted)"></span><span class="tok__name">--roomlist-muted</span></div>
+    </div>
+  </div>
+
+  <div class="tok-group">
+    <div class="tok-group__title">Reactions</div>
+    <div class="tok-grid">
+      <div class="tok"><span class="tok__chip" style="background: var(--reaction-bg)"></span><span class="tok__name">--reaction-bg</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--reaction-border)"></span><span class="tok__name">--reaction-border</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--reaction-own-bg)"></span><span class="tok__name">--reaction-own-bg</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--reaction-count)"></span><span class="tok__name">--reaction-count</span></div>
+    </div>
+  </div>
+
+  <div class="tok-group">
+    <div class="tok-group__title">Surfaces &amp; overlays</div>
+    <div class="tok-group__note">
+      Not themeable — declared in vars.css, never written by the loader. These are
+      white-on-dark tints, so they are near-invisible under the light themes.
+    </div>
+    <div class="tok-grid">
+      <div class="tok"><span class="tok__chip" style="background: var(--surface-dim)"></span><span class="tok__name">--surface-dim</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--surface-subtle)"></span><span class="tok__name">--surface-subtle</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--surface-hover)"></span><span class="tok__name">--surface-hover</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--surface-hover-strong)"></span><span class="tok__name">--surface-hover-strong</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--surface-hover-active)"></span><span class="tok__name">--surface-hover-active</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--overlay-bg)"></span><span class="tok__name">--overlay-bg</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--overlay-bg-dark)"></span><span class="tok__name">--overlay-bg-dark</span></div>
+      <div class="tok"><span class="tok__chip" style="background: var(--shadow-color)"></span><span class="tok__name">--shadow-color</span></div>
+    </div>
+  </div>
+
+  <div class="tok-group">
+    <div class="tok-group__title">Typography &amp; layout</div>
+    <div class="tok-scale">
+      <div class="tok-scale__row">
+        <span class="tok-scale__label">--font-family</span>
+        <span style="font-family: var(--font-family)">The quick brown fox 0123</span>
+      </div>
+      <div class="tok-scale__row">
+        <span class="tok-scale__label">--font-family-messages</span>
+        <span style="font-family: var(--font-family-messages)">The quick brown fox 0123</span>
+      </div>
+      <div class="tok-scale__row">
+        <span class="tok-scale__label">--font-size / --line-height</span>
+        <span style="font-size: var(--font-size); line-height: var(--line-height)">14px / 1.5</span>
+      </div>
+      <div class="tok-scale__row">
+        <span class="tok-scale__label">--space-strip-width</span>
+        <span style="display: inline-block; height: 10px; background: var(--accent-secondary); width: var(--space-strip-width)"></span>
+      </div>
+      <div class="tok-scale__row">
+        <span class="tok-scale__label">--room-list-width</span>
+        <span style="display: inline-block; height: 10px; background: var(--accent-secondary); width: var(--room-list-width)"></span>
+      </div>
+      <div class="tok-scale__row">
+        <span class="tok-scale__label">--thread-view-width</span>
+        <span style="display: inline-block; height: 10px; background: var(--accent-secondary); width: var(--thread-view-width)"></span>
+      </div>
+      <div class="tok-scale__row">
+        <span class="tok-scale__label">--member-list-width</span>
+        <span style="display: inline-block; height: 10px; background: var(--accent-secondary); width: var(--member-list-width)"></span>
+      </div>
+      <div class="tok-scale__row">
+        <span class="tok-scale__label">--emoji-size</span>
+        <span style="font-size: var(--emoji-size)">🙂</span>
+      </div>
+    </div>
+  </div>
+</div>

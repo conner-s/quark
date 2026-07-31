@@ -1,0 +1,23 @@
+/* Quark design system — entry stylesheet.
+ *
+ * Everything a rendered design receives comes through this file's transitive
+ * @import closure, so every token set and every component slice must be
+ * reachable from here. A card that links a slice directly would render fine in
+ * its own preview and then break in real designs.
+ *
+ * Slices are extracted from src/style/base.css by scripts/extract-ds-slice.mjs;
+ * tokens are lifted from src/theme/vars.css and themes/*.toml. Both are
+ * generated — regenerate rather than hand-edit.
+ */
+
+/* ── Foundations ─────────────────────────────────────────────────────────── */
+@import "tokens/phosphor.css";
+@import "tokens/catppuccin-latte.css";
+@import "tokens/reset.css";
+
+/* ── Components ──────────────────────────────────────────────────────────── */
+@import "components/Timeline/MessageRow/slice.css";
+@import "components/Rooms/RoomListEntry/slice.css";
+@import "components/Input/InputBar/slice.css";
+@import "components/Pickers/EmojiPicker/slice.css";
+@import "components/Dialogs/HelpDialog/slice.css";

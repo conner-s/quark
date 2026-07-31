@@ -1,0 +1,237 @@
+/* While any overlay is open (quark-modal-open is maintained by ModalManager),
+   remove the layout tier's scrollbars outright. WebKitGTK draws native overlay
+   scrollbars that composite above the position:fixed dialog tier regardless of
+   z-index (#32), and ignores every scrollbar-styling mechanism (neither
+   ::-webkit-scrollbar nor scrollbar-color works as of 2.50) — but no engine
+   can draw a scrollbar on a non-scroll container, so make the layout panes
+   overflow:hidden for the duration. Scroll positions are preserved and
+   programmatic scrolling (timeline stick-to-bottom) still works. Overlays
+   mount on <body>, outside .quark-layout, so their own scrollbars are
+   unaffected. .timeline's right edge stays put on classic-scrollbar platforms
+   because scrollbar-gutter: stable reserves the gutter even while hidden. */
+body.quark-modal-open .space-strip,
+body.quark-modal-open .room-list__scroll,
+body.quark-modal-open .thread-view__timeline,
+body.quark-modal-open .thread-inline__timeline,
+body.quark-modal-open .member-list__scroll,
+body.quark-modal-open .timeline,
+body.quark-modal-open .input-bar__field {
+  overflow: hidden;
+}
+
+.quark-layout--home .room-list,
+.quark-layout--home .content-area,
+.quark-layout--home .thread-view,
+.quark-layout--home .member-list {
+  display: none;
+}
+
+/* ── Room list panel ─────────────────────────────────────────────────────── */
+
+.room-list {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--bg);
+  border-right: var(--border-width) solid var(--border-color);
+  position: relative;
+  isolation: isolate;
+}
+
+.room-list__header {
+  padding: 4px 8px;
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: var(--border-width) solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.room-list__scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: var(--status-bar-height);
+}
+
+.room-list__section-label {
+  padding: 4px 8px 2px;
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  user-select: none;
+}
+
+.room-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 8px;
+  color: var(--fg);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  outline: none;
+  transition: color var(--transition-speed), background-color var(--transition-speed),
+    text-shadow var(--transition-speed);
+}
+
+.room-list__item:hover {
+  background-color: var(--roomlist-active-bg);
+}
+
+.room-list__item:focus {
+  box-shadow: inset 0 0 0 var(--focus-width) var(--focus-color);
+  outline: none;
+}
+
+.room-list__item--active {
+  background-color: var(--roomlist-active-bg);
+  color: var(--roomlist-active-fg);
+  text-shadow: 0 0 var(--glow-radius) var(--glow-color);
+}
+
+.room-list__item--unread {
+  color: var(--roomlist-unread);
+  text-shadow: 0 0 4px color-mix(in srgb, var(--roomlist-unread) 15%, transparent);
+  animation: unread-pulse 2s ease-in-out infinite;
+}
+
+.room-list__item--muted {
+  color: var(--roomlist-muted);
+}
+
+.room-list__item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.room-list__item-badge {
+  margin-left: 6px;
+  font-size: calc(var(--font-size) - 3px);
+  color: var(--roomlist-mention-badge);
+  flex-shrink: 0;
+}
+
+.room-list__presence {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-right: 5px;
+}
+
+.room-list__presence--online {
+  background-color: var(--presence-online, #4caf50);
+  box-shadow: 0 0 4px var(--presence-online, #4caf50);
+}
+
+.room-list__presence--unavailable {
+  background-color: var(--presence-unavailable, #ff9800);
+}
+
+.room-list__presence--offline {
+  background-color: var(--presence-offline, #555);
+}
+
+/* Space strip + room list become a full-screen slide-over on mobile.
+ * They share a translateX so they animate as one drawer. The room-list
+ * absorbs the remainder of the viewport so room names aren't truncated. */
+body.quark-mobile .space-strip,
+body.quark-mobile .room-list {
+  position: fixed;
+  top: 0;
+  height: 100%;
+  z-index: 20;
+  transform: translateX(-100%);
+  transition: transform 220ms ease;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Drop-shadow only blooms outwards when the drawer is open; closed, it bled
+ * 24px into the viewport from the right edge of the off-screen panel and made
+ * the edge-swipe target look smudged. */
+body.quark-mobile-drawer-open .space-strip,
+body.quark-mobile-drawer-open .room-list,
+body.quark-mobile.quark-drawer-dragging .space-strip,
+body.quark-mobile.quark-drawer-dragging .room-list {
+  box-shadow: 0 0 24px var(--shadow-color);
+}
+
+body.quark-mobile .room-list {
+  /* Fill the rest of the viewport so long room names aren't cut off. */
+  left: var(--space-strip-width);
+  width: calc(100vw - var(--space-strip-width));
+  width: calc(100dvw - var(--space-strip-width));
+  /* The shared rule sets transform: translateX(-100%), which is -100% of the
+   * element's *own width*. Because the room-list is offset from the viewport
+   * edge by var(--space-strip-width), -100% leaves a slice equal to that
+   * offset peeking in from the left. Override with an extra space-strip-
+   * width's worth of translation so the right edge clears the viewport. */
+  transform: translateX(calc(-100% - var(--space-strip-width)));
+}
+
+/* Status bar is hidden on mobile — reclaim the bottom padding that desktop
+   reserves for it in the room list scroller. */
+body.quark-mobile .room-list__scroll {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+body.quark-mobile-drawer-open .space-strip,
+body.quark-mobile-drawer-open .room-list {
+  transform: translateX(0);
+}
+
+/* While a drag is in flight the drawer follows the finger: --drawer-shut runs
+ * from 1 (fully closed) to 0 (fully open), set live from touchmove. The
+ * transforms are written so shut:1 matches the closed resting state and shut:0
+ * matches the open one, so releasing the drag (which drops .quark-drawer-
+ * dragging and lets the transition animate) hands off without a jump. */
+body.quark-mobile.quark-drawer-dragging .space-strip,
+body.quark-mobile.quark-drawer-dragging .room-list {
+  transition: none;
+}
+
+body.quark-mobile.quark-drawer-dragging .room-list {
+  transform: translateX(calc((-100% - var(--space-strip-width)) * var(--drawer-shut, 1)));
+}
+
+/* Make the room-list header double as the drawer's close affordance on
+ * mobile: tappable, taller, with a back arrow. */
+body.quark-mobile .room-list__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  font-size: var(--font-size);
+  letter-spacing: 0.08em;
+  color: var(--accent-primary);
+  cursor: pointer;
+  min-height: 44px;
+  user-select: none;
+}
+
+body.quark-mobile .room-list__header::before {
+  content: "◀";
+  font-size: calc(var(--font-size) - 1px);
+  color: var(--accent-primary);
+}
+
+body.quark-mobile .room-list__header:active {
+  background-color: var(--surface-hover-active);
+}
+
+/* Larger touch targets in the room list (drawer). */
+body.quark-mobile .room-list__item {
+  padding: 12px 12px;
+  min-height: 44px;
+  font-size: calc(var(--font-size) + 1px);
+}

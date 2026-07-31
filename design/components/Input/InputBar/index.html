@@ -1,0 +1,93 @@
+<!-- @dsCard group="Input" -->
+<link rel="stylesheet" href="../../../styles.css" />
+
+<!--
+  Input bar — compose box with the vim mode indicator.
+
+  Markup mirrors Input's constructor (src/ui/Input.ts:43-246). Structure is
+  .input-bar-wrap > .input-bar > [.input-bar__mode, .input-bar__compose-box],
+  with the actions row nested INSIDE the compose box (Input.ts:237), not
+  alongside it.
+
+  The mode indicator's text comes from MODE_LABELS (Input.ts:430) and its
+  modifier class tracks the vim mode — the label strings themselves are tokens
+  (--mode-normal/--mode-insert/--mode-command/--mode-visual in vars.css), so a
+  theme can rename them.
+
+  The paste preview (.paste-preview, Input.ts:49-81) is a sibling of .input-bar
+  inside the wrap and is hidden until an image is pasted; shown here in its
+  revealed state.
+-->
+
+<div style="padding: 16px; background: var(--bg); display: flex; flex-direction: column; gap: 24px">
+  <!-- Normal mode -->
+  <div class="input-bar-wrap">
+    <div class="input-bar">
+      <span class="input-bar__mode">NOR</span>
+      <div class="input-bar__compose-box">
+        <textarea
+          class="input-bar__field"
+          rows="1"
+          placeholder="Press i to insert"
+          aria-label="Message"
+        ></textarea>
+        <div class="input-bar__actions">
+          <button class="input-bar__action-btn" title="Emoji">🙂</button>
+          <button class="input-bar__action-btn input-bar__action-btn--gif" title="GIF">GIF</button>
+          <button class="input-bar__action-btn" title="Attach">📎</button>
+          <button class="input-bar__action-btn input-bar__send-btn" title="Send">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Insert mode, with text -->
+  <div class="input-bar-wrap">
+    <div class="input-bar">
+      <span class="input-bar__mode input-bar__mode--insert">INS</span>
+      <div class="input-bar__compose-box">
+        <textarea class="input-bar__field" rows="1" aria-label="Message">
+rebasing now — should be green in a few minutes</textarea
+        >
+        <div class="input-bar__actions">
+          <button class="input-bar__action-btn" title="Emoji">🙂</button>
+          <button class="input-bar__action-btn input-bar__action-btn--gif" title="GIF">GIF</button>
+          <button class="input-bar__action-btn" title="Attach">📎</button>
+          <button class="input-bar__action-btn input-bar__send-btn" title="Send">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Command mode -->
+  <div class="input-bar-wrap">
+    <div class="input-bar">
+      <span class="input-bar__mode input-bar__mode--command">CMD</span>
+      <div class="input-bar__compose-box">
+        <textarea class="input-bar__field" rows="1" aria-label="Command">:join #quark-dev</textarea>
+        <div class="input-bar__actions">
+          <button class="input-bar__action-btn" title="Emoji">🙂</button>
+          <button class="input-bar__action-btn input-bar__action-btn--gif" title="GIF">GIF</button>
+          <button class="input-bar__action-btn" title="Attach">📎</button>
+          <button class="input-bar__action-btn input-bar__send-btn" title="Send">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visual mode -->
+  <div class="input-bar-wrap">
+    <div class="input-bar">
+      <span class="input-bar__mode input-bar__mode--visual">VIS</span>
+      <div class="input-bar__compose-box">
+        <textarea class="input-bar__field" rows="1" aria-label="Message"></textarea>
+        <div class="input-bar__actions">
+          <button class="input-bar__action-btn" title="Emoji">🙂</button>
+          <button class="input-bar__action-btn input-bar__action-btn--gif" title="GIF">GIF</button>
+          <button class="input-bar__action-btn" title="Attach">📎</button>
+          <button class="input-bar__action-btn input-bar__send-btn" title="Send">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

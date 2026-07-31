@@ -1,0 +1,106 @@
+<!-- @dsCard group="Dialogs" -->
+<link rel="stylesheet" href="../../../styles.css" />
+
+<!--
+  Help dialog — the panelled DialogBase shape.
+
+  DialogBase (src/ui/DialogBase.ts:76-145) owns the chrome and takes a `prefix`;
+  every class below is that prefix plus a BEM suffix, so this markup is the
+  template for the whole dialog family — swap "help-dialog" for the subclass's
+  own prefix.
+
+  Two shapes exist. panel: true (the default, shown here) makes the root a
+  full-screen backdrop and .{prefix}__panel the visible box; clicking the
+  backdrop closes. panel: false makes the root itself the box. Subclasses append
+  into `this.content`, which is the panel here and the root otherwise (:59-62).
+
+  .dialog-close-btn is the one shared, un-prefixed class in the family — it
+  rides alongside .{prefix}__close-hint (:145).
+
+  Content below mirrors HelpDialog (src/ui/HelpDialog.ts:94-266): a tab bar, a
+  content region whose column headings switch with the active tab, and a footer.
+-->
+
+<style>
+  /* Preview harness, NOT part of the component. .help-dialog is
+     position:fixed + inset:0 — the full-screen backdrop — so it would cover the
+     viewport rather than sit in this card. A transform on an ancestor makes it
+     the containing block for fixed descendants, so the backdrop fills this frame
+     instead, with none of the component's own rules changed. */
+  .preview-frame {
+    position: relative;
+    transform: translateZ(0);
+    width: 100%;
+    height: 560px;
+    background: var(--bg);
+  }
+</style>
+
+<div class="preview-frame">
+  <div class="help-dialog" role="dialog" aria-modal="true" aria-label="Help">
+    <div class="help-dialog__panel" tabindex="-1">
+      <div class="help-dialog__header">
+        <span class="help-dialog__title">Help</span>
+        <button class="help-dialog__close-hint dialog-close-btn" aria-label="Close">esc</button>
+      </div>
+
+      <div class="help-dialog__tabs">
+        <button class="help-dialog__tab help-dialog__tab--active">Bindings</button>
+        <button class="help-dialog__tab">Commands</button>
+      </div>
+
+      <div class="help-dialog__content">
+        <div class="help-dialog__headings help-dialog__headings--bindings">
+          <span>Key</span>
+          <span>Mode</span>
+          <span>Action</span>
+        </div>
+
+        <div class="help-dialog__table">
+          <div class="help-dialog__row help-dialog__row--bindings">
+            <span class="help-dialog__key">j</span>
+            <span class="help-dialog__mode">normal</span>
+            <span class="help-dialog__cmd-desc">Move down one message</span>
+          </div>
+          <div class="help-dialog__row help-dialog__row--bindings">
+            <span class="help-dialog__key">k</span>
+            <span class="help-dialog__mode">normal</span>
+            <span class="help-dialog__cmd-desc">Move up one message</span>
+          </div>
+          <div class="help-dialog__row help-dialog__row--bindings">
+            <span class="help-dialog__key">gg</span>
+            <span class="help-dialog__mode">normal</span>
+            <span class="help-dialog__cmd-desc">Jump to oldest message</span>
+          </div>
+          <div class="help-dialog__row help-dialog__row--bindings">
+            <span class="help-dialog__key">G</span>
+            <span class="help-dialog__mode">normal</span>
+            <span class="help-dialog__cmd-desc">Jump to newest message</span>
+          </div>
+          <div class="help-dialog__row help-dialog__row--bindings">
+            <span class="help-dialog__key">i</span>
+            <span class="help-dialog__mode">normal</span>
+            <span class="help-dialog__cmd-desc">Enter insert mode</span>
+          </div>
+          <div class="help-dialog__row help-dialog__row--bindings">
+            <span class="help-dialog__key">e</span>
+            <span class="help-dialog__mode">normal</span>
+            <span class="help-dialog__cmd-desc">React to selected message</span>
+          </div>
+          <div class="help-dialog__row help-dialog__row--bindings">
+            <span class="help-dialog__key">r</span>
+            <span class="help-dialog__mode">normal</span>
+            <span class="help-dialog__cmd-desc">Reply to selected message</span>
+          </div>
+          <div class="help-dialog__row help-dialog__row--bindings">
+            <span class="help-dialog__key">esc</span>
+            <span class="help-dialog__mode">insert</span>
+            <span class="help-dialog__cmd-desc">Return to normal mode</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-dialog__footer">Press ? to toggle this dialog</div>
+    </div>
+  </div>
+</div>
