@@ -1,0 +1,117 @@
+<!-- @dsCard group="Rooms" -->
+<link rel="stylesheet" href="../../../styles.css" />
+
+<!--
+  Room list — the left rail.
+
+  Markup mirrors RoomList._createItem() (src/ui/RoomList.ts:172-229) and
+  _render() (:139-170). Every state below is a real class the component sets:
+
+    --active    current room (set by _updateActive, not _createItem)
+    --unread    unreadCount > 0 and not muted
+    --muted     room is muted; suppresses the unread class entirely
+    __badge     mention count as a number, else a "●" dot for plain unread
+                (the dot carries an inline --roomlist-unread color, matching
+                 the component — the numeric badge does not)
+    __presence  DM rooms only, one of --online/--unavailable/--offline
+
+  Sections come from the space filter; the label is aria-hidden and gets
+  cursor:context-menu when it belongs to a space.
+-->
+
+<div style="padding: 16px; background: var(--bg)">
+  <div class="room-list" style="width: var(--room-list-width); min-width: 220px">
+    <div class="room-list__header">ROOMS</div>
+    <div class="room-list__scroll" role="listbox">
+      <div class="room-list__section-label" aria-hidden="true" style="cursor: context-menu">
+        matrix hq
+      </div>
+
+      <div
+        class="room-list__item room-list__item--active"
+        role="option"
+        tabindex="0"
+        aria-selected="true"
+        aria-label="#quark-dev"
+        data-room-id="!a:matrix.org"
+      >
+        <span class="room-list__item-name">#quark-dev</span>
+      </div>
+
+      <div
+        class="room-list__item room-list__item--unread"
+        role="option"
+        tabindex="0"
+        aria-label="#matrix-spec"
+        data-room-id="!b:matrix.org"
+      >
+        <span class="room-list__item-name">#matrix-spec</span>
+        <span class="room-list__item-badge" aria-label="4 mentions">4</span>
+      </div>
+
+      <div
+        class="room-list__item room-list__item--unread"
+        role="option"
+        tabindex="0"
+        aria-label="#offtopic"
+        data-room-id="!c:matrix.org"
+      >
+        <span class="room-list__item-name">#offtopic</span>
+        <span class="room-list__item-badge" style="color: var(--roomlist-unread)" aria-label="12 unread"
+          >●</span
+        >
+      </div>
+
+      <div
+        class="room-list__item room-list__item--muted"
+        role="option"
+        tabindex="0"
+        aria-label="#firehose"
+        data-room-id="!d:matrix.org"
+      >
+        <span class="room-list__item-name">#firehose</span>
+      </div>
+
+      <div class="room-list__section-label" aria-hidden="true">direct</div>
+
+      <div
+        class="room-list__item"
+        role="option"
+        tabindex="0"
+        aria-label="ada"
+        data-room-id="!e:matrix.org"
+        data-dm-user-id="@ada:matrix.org"
+      >
+        <span class="room-list__presence room-list__presence--online" aria-label="online"></span>
+        <span class="room-list__item-name">ada</span>
+      </div>
+
+      <div
+        class="room-list__item"
+        role="option"
+        tabindex="0"
+        aria-label="lin"
+        data-room-id="!f:matrix.org"
+        data-dm-user-id="@lin:matrix.org"
+      >
+        <span
+          class="room-list__presence room-list__presence--unavailable"
+          aria-label="unavailable"
+        ></span>
+        <span class="room-list__item-name">lin</span>
+      </div>
+
+      <div
+        class="room-list__item"
+        role="option"
+        tabindex="0"
+        aria-label="deploy-bot"
+        data-room-id="!g:matrix.org"
+        data-dm-user-id="@deploy-bot:matrix.org"
+      >
+        <span class="room-list__presence room-list__presence--offline" aria-label="offline"></span>
+        <span class="room-list__item-name">deploy-bot</span>
+      </div>
+    </div>
+  </div>
+</div>
