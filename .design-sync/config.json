@@ -1,0 +1,7 @@
+{
+  "projectId": "9505de75-1556-4600-b6ee-bf4e10f50b44",
+  "shape": "hand-authored",
+  "localDir": "./design",
+  "readmeHeader": ".design-sync/conventions.md",
+  "note": "Quark is a Tauri app, not a component library: no React, no exports, no dist/ of components. The design-sync converter (package + storybook shapes) is inapplicable. Cards are hand-authored static HTML with @dsCard markers, lifted from src/ui/*.ts markup and src/style/base.css slices. Tokens come from src/theme/vars.css."
+}

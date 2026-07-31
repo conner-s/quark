@@ -1,0 +1,63 @@
+/* Quark design tokens — Catppuccin Latte (light).
+
+   Generated from themes/catppuccin-latte.toml using the TOML→CSS-var mapping in
+   src/theme/loader.ts:159-224. Scoped to [data-theme="latte"] so a card can show
+   both palettes at once; in the real app the loader writes these onto :root.
+
+   NOTE — the surface tints (--surface-*), overlays and shadows are NOT part of a
+   theme's TOML surface. No theme file sets them and the loader does not derive
+   them, so every theme inherits the white-on-dark values from vars.css. On a
+   light palette like this one a 4% white tint is invisible: hover states here
+   are effectively unstyled. That is Quark's real current behaviour, reproduced
+   faithfully rather than papered over. */
+
+[data-theme="latte"] {
+  /* ── Core palette ─────────────────────────────────────────────────────── */
+  --bg: #eff1f5;
+  --fg: #4c4f69;
+  --cursor: #8839ef;
+  --selection-bg: #dce0e8;
+  --selection-fg: #4c4f69;
+  --border-color: #bcc0cc;
+
+  /* ── Accent colors ───────────────────────────────────────────────────── */
+  --accent-primary: #8839ef;
+  --accent-secondary: #1e66f5;
+  --accent-error: #d20f39;
+  --accent-warning: #df8e1d;
+  --accent-success: #40a02b;
+  --accent-link: #1e66f5;
+
+  /* ── Message colors ──────────────────────────────────────────────────── */
+  --msg-own: #40a02b;
+  --msg-other: #4c4f69;
+  --msg-system: #8c8fa1;
+  --msg-timestamp: #bcc0cc;
+  --msg-mention-bg: #e8e5f5;
+  --msg-mention-fg: #df8e1d;
+  --msg-reply-border: #8c8fa1;
+  --msg-thread-indicator: #1e66f5;
+
+  /* ── Room list colors ────────────────────────────────────────────────── */
+  --roomlist-active-bg: #dce0e8;
+  --roomlist-active-fg: #8839ef;
+  --roomlist-unread: #4c4f69;
+  --roomlist-mention-badge: #d20f39;
+  --roomlist-muted: #8c8fa1;
+
+  /* ── Reaction colors ─────────────────────────────────────────────────── */
+  --reaction-bg: #dce0e8;
+  --reaction-border: #bcc0cc;
+  --reaction-own-bg: #e2eedd;
+  --reaction-count: #8c8fa1;
+
+  /* ── Typography / layout / emoji (theme-set subset) ──────────────────── */
+  --font-family: "JetBrains Mono", "Fira Code", monospace;
+  --font-size: 14px;
+  --line-height: 1.5;
+  --message-spacing: 4px;
+  --room-list-width: 25%;
+  --emoji-size: 32px;
+  --sticker-max-size: 256px;
+  --reaction-size: 20px;
+}

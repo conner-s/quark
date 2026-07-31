@@ -1,0 +1,89 @@
+<!-- @dsCard group="Pickers" -->
+<link rel="stylesheet" href="../../../styles.css" />
+
+<!--
+  Emoji picker — the canonical PickerBase subclass.
+
+  Root element and its className come from PickerBase (src/ui/PickerBase.ts:51-52),
+  which every picker shares: role="dialog", aria-modal, and a vim keymap bound to
+  nav-up/down/left/right, jump-top/bottom. EmojiPicker supplies "emoji-picker" as
+  its className and builds the inner tree in this order
+  (src/ui/EmojiPicker.ts:91-162):
+
+    .emoji-picker
+      .emoji-picker__tabs        > .emoji-picker__tab (+ --active)
+      .emoji-picker__section     (emoji)
+        .emoji-picker__categories > .emoji-picker__category-btn (+ --active)
+        .emoji-picker__search
+        .emoji-picker__grid       > .emoji-picker__cell
+      .emoji-picker__section     (stickers, hidden unless that tab is active)
+
+  Cells hold either a unicode glyph as text or an .emoji-picker__img for custom
+  MSC2545 emoji (:445 / :439). Both variants are shown below.
+-->
+
+<style>
+  /* Preview harness, NOT part of the component. .emoji-picker is position:fixed
+     (bottom:80px right:16px) so it would otherwise anchor to the viewport corner
+     and escape this card. A transform on an ancestor makes it the containing
+     block for fixed descendants, which frames the picker without altering a
+     single one of its own rules. */
+  .preview-frame {
+    position: relative;
+    transform: translateZ(0);
+    width: 400px;
+    height: 520px;
+    background: var(--bg);
+  }
+</style>
+
+<div class="preview-frame">
+  <div class="emoji-picker" role="dialog" aria-modal="true" aria-label="Emoji picker">
+    <div class="emoji-picker__tabs">
+      <button class="emoji-picker__tab emoji-picker__tab--active">Emoji</button>
+      <button class="emoji-picker__tab">Stickers</button>
+    </div>
+
+    <div class="emoji-picker__section">
+      <div class="emoji-picker__categories">
+        <button class="emoji-picker__category-btn emoji-picker__category-btn--active">🕘</button>
+        <button class="emoji-picker__category-btn">😀</button>
+        <button class="emoji-picker__category-btn">🐻</button>
+        <button class="emoji-picker__category-btn">🍔</button>
+        <button class="emoji-picker__category-btn">⚽</button>
+        <button class="emoji-picker__category-btn">🚗</button>
+        <button class="emoji-picker__category-btn">💡</button>
+        <button class="emoji-picker__category-btn">🔣</button>
+      </div>
+
+      <input class="emoji-picker__search" type="text" placeholder="Search emoji" aria-label="Search emoji" />
+
+      <div class="emoji-picker__grid">
+        <button class="emoji-picker__cell">😀</button>
+        <button class="emoji-picker__cell">😃</button>
+        <button class="emoji-picker__cell">😄</button>
+        <button class="emoji-picker__cell">😁</button>
+        <button class="emoji-picker__cell">😆</button>
+        <button class="emoji-picker__cell">😅</button>
+        <button class="emoji-picker__cell">🤣</button>
+        <button class="emoji-picker__cell">😂</button>
+        <button class="emoji-picker__cell">🙂</button>
+        <button class="emoji-picker__cell">🙃</button>
+        <button class="emoji-picker__cell">😉</button>
+        <button class="emoji-picker__cell">😊</button>
+        <button class="emoji-picker__cell">😇</button>
+        <button class="emoji-picker__cell">🥰</button>
+        <button class="emoji-picker__cell">😍</button>
+        <button class="emoji-picker__cell">🤩</button>
+        <button class="emoji-picker__cell">😘</button>
+        <button class="emoji-picker__cell">😗</button>
+        <button class="emoji-picker__cell">😚</button>
+        <button class="emoji-picker__cell">😙</button>
+        <button class="emoji-picker__cell">🥲</button>
+        <button class="emoji-picker__cell">😋</button>
+        <button class="emoji-picker__cell">😛</button>
+        <button class="emoji-picker__cell">😜</button>
+      </div>
+    </div>
+  </div>
+</div>
