@@ -1,0 +1,110 @@
+<!-- @dsCard group="Timeline" -->
+<link rel="stylesheet" href="../../../styles.css" />
+
+<!--
+  Message group — the timeline's core unit.
+
+  Markup mirrors buildMessageGroup() (src/ui/Timeline.ts:799-860) and
+  buildMessageElement() (:511+). Consecutive messages from one sender share a
+  group: the sender name and timestamp appear once on the group header (CSS
+  positions it on the top border), and each message's own .message__header is
+  hidden by the group builder. Reaction bars come from createReactionBar()
+  (src/ui/Reactions.ts:18-72).
+
+  The avatar fallback carries inline color/border from senderColor() — that is a
+  per-sender derived value, not a token, so it stays inline here too.
+-->
+
+<div style="padding: 16px; display: flex; flex-direction: column; gap: 12px">
+  <!-- Another sender's group, two messages, with reactions -->
+  <div class="message-group-wrapper" data-sender="@ada:matrix.org">
+    <div class="message-group__avatar-col">
+      <span
+        class="message-group__avatar-fallback"
+        style="color: #00aaff; border: 1px solid #00aaff; opacity: 0.85"
+        aria-hidden="true"
+        >A</span
+      >
+    </div>
+    <div class="message-group">
+      <div class="message-group__header">
+        <span class="message-group__sender" style="cursor: pointer">ada</span>
+        <span class="message-group__timestamp">14:02</span>
+      </div>
+
+      <div class="message">
+        <div class="message__header" style="display: none"></div>
+        <!-- .message__body is white-space: pre-wrap — keep content on one line,
+             or the source indentation renders as leading whitespace. -->
+        <div class="message__body">the sliding sync branch is green — rooms hydrate in about 400ms cold</div>
+      </div>
+
+      <div class="message">
+        <div class="message__header" style="display: none"></div>
+        <div class="message__body">worth landing before we touch the timeline pagination</div>
+        <div class="reaction-bar">
+          <button class="reaction">
+            <span class="reaction__emoji">🎉</span>
+            <span class="reaction__count">3</span>
+          </button>
+          <button class="reaction reaction--own">
+            <span class="reaction__emoji">👍</span>
+            <span class="reaction__count">2</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Own group — sender name takes --msg-own via the --own modifier -->
+  <div class="message-group-wrapper" data-sender="@conner:matrix.org">
+    <div class="message-group__avatar-col">
+      <span
+        class="message-group__avatar-fallback"
+        style="color: #00ff41; border: 1px solid #00ff41; opacity: 0.85"
+        aria-hidden="true"
+        >C</span
+      >
+    </div>
+    <div class="message-group">
+      <div class="message-group__header">
+        <span class="message-group__sender message-group__sender--own" style="cursor: pointer"
+          >conner</span
+        >
+        <span class="message-group__timestamp">14:05</span>
+      </div>
+
+      <div class="message">
+        <div class="message__header" style="display: none"></div>
+        <div class="message__body">agreed — I'll rebase it tonight</div>
+        <div class="message__actions" aria-hidden="true">
+          <span class="message__actions-time">14:05:31</span>
+          <button class="message__action-btn" title="React (e)" tabindex="-1">😀</button>
+          <button class="message__action-btn" title="Reply (r)" tabindex="-1">↩</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Selected state, as set by vim-style j/k navigation -->
+  <div class="message-group-wrapper" data-sender="@lin:matrix.org">
+    <div class="message-group__avatar-col">
+      <span
+        class="message-group__avatar-fallback"
+        style="color: #ffaa00; border: 1px solid #ffaa00; opacity: 0.85"
+        aria-hidden="true"
+        >L</span
+      >
+    </div>
+    <div class="message-group message-group--selected">
+      <div class="message-group__header">
+        <span class="message-group__sender" style="cursor: pointer">lin</span>
+        <span class="message-group__timestamp">14:11</span>
+      </div>
+      <div class="message message--selected">
+        <div class="message__header" style="display: none"></div>
+        <div class="message__body">this row is the vim cursor target</div>
+      </div>
+    </div>
+  </div>
+</div>

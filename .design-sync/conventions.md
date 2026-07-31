@@ -1,0 +1,78 @@
+# Quark — how to build with this design system
+
+**Quark is not a React component library.** It is a Tauri desktop Matrix client
+whose UI is plain DOM built by imperative TypeScript classes, styled by one
+stylesheet. There is nothing to import and no `<Provider>` to wrap. You compose
+designs by **writing HTML with Quark's class names**, and the stylesheet styles
+it. Do not invent class names — the vocabulary below is the whole contract.
+
+## Setup
+
+No wrapper component is required. Two things must be true:
+
+1. `styles.css` is loaded. It `@import`s the tokens and every component slice.
+2. Nothing overrides `--bg` / `--fg` / `--font-family` on an ancestor.
+
+To preview an alternate theme, put `data-theme="latte"` on a container; the real
+app writes those same variables onto `:root` instead.
+
+## The styling idiom: BEM classes + CSS custom properties
+
+Every component follows BEM — *block*, then `__element`, then `--modifier`.
+State is a modifier class, never an inline style. The blocks available here:
+
+| Block | Elements | Modifiers |
+|---|---|---|
+| `.room-list` | `__header` `__scroll` `__section-label` `__item` `__item-name` `__item-badge` `__presence` | `__item--active` `__item--unread` `__item--muted` `__presence--online` `__presence--unavailable` `__presence--offline` |
+| `.message-group` | `__header` `__sender` `__timestamp` `__avatar-col` `__avatar` `__avatar-fallback` | `--selected` `__sender--own` |
+| `.message` | `__header` `__sender` `__timestamp` `__body` `__actions` `__actions-time` `__action-btn` | `--selected` `--ungrouped` |
+| `.reaction-bar` / `.reaction` | `__emoji` `__count` | `--own` |
+| `.input-bar` | `__mode` `__compose-box` `__field` `__actions` `__action-btn` `__send-btn` | `__mode--insert` `__mode--command` `__mode--visual` `__action-btn--gif` |
+| `.emoji-picker` | `__tabs` `__tab` `__section` `__categories` `__category-btn` `__search` `__grid` `__cell` `__img` | `__tab--active` `__category-btn--active` |
+| `.help-dialog` | `__panel` `__header` `__title` `__tabs` `__tab` `__content` `__headings` `__table` `__row` `__key` `__mode` `__cmd-name` `__cmd-args` `__cmd-desc` `__footer` `__close-hint` | `__tab--active` `__row--bindings` `__row--commands` |
+
+`.dialog-close-btn` is the one shared, un-prefixed class; it rides alongside
+`.{prefix}__close-hint`.
+
+For your own layout glue, use the tokens directly — `var(--bg)`,
+`var(--fg)`, `var(--border-color)`, `var(--accent-primary)`,
+`var(--surface-hover)`, `var(--font-family)`. Never hard-code a hex value: a
+literal colour is invisible to all 11 themes.
+
+Three traps worth knowing:
+
+- **`.message__body` is `white-space: pre-wrap`.** Put its text on one line or
+  your source indentation renders as leading whitespace.
+- **`.emoji-picker` and `.help-dialog` are `position: fixed`.** To frame one
+  inside a bounded region, put `transform: translateZ(0)` on an ancestor.
+- **`--surface-*`, `--overlay-*` and `--shadow-color` are not themeable.** They
+  are white-on-dark tints fixed across every theme, so they nearly vanish on the
+  light palettes. Don't rely on them for meaningful contrast.
+
+## Where the truth lives
+
+- `styles.css` — the entry point; its `@import` closure is everything.
+- `tokens/phosphor.css` — the full token set with comments.
+- `tokens/catppuccin-latte.css` — what a theme actually overrides (a subset).
+- `components/<Group>/<Name>/slice.css` — a component's real, complete CSS.
+- Each `components/<Group>/<Name>/index.html` — the exact markup the TypeScript
+  emits, with the source file and line range cited in a comment.
+
+Read the slice before styling a component. It is the shipped CSS, not a summary.
+
+## An idiomatic snippet
+
+```html
+<div class="room-list" style="width: var(--room-list-width)">
+  <div class="room-list__header">ROOMS</div>
+  <div class="room-list__scroll" role="listbox">
+    <div class="room-list__item room-list__item--active" role="option" aria-selected="true">
+      <span class="room-list__item-name">#quark-dev</span>
+    </div>
+    <div class="room-list__item room-list__item--unread" role="option">
+      <span class="room-list__item-name">#matrix-spec</span>
+      <span class="room-list__item-badge">4</span>
+    </div>
+  </div>
+</div>
+```
