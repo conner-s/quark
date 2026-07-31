@@ -1,0 +1,204 @@
+<!-- @dsCard group="Foundations" -->
+<link rel="stylesheet" href="../../../styles.css" />
+
+<!--
+  Theming — the same components under two palettes.
+
+  Quark ships 11 themes in themes/*.toml. A theme sets colors, typography, some
+  layout widths and the emoji sizes; src/theme/loader.ts writes them onto :root
+  as the tokens shown in the Tokens card. Nothing else changes — there is one
+  stylesheet and one set of class names, so a component is themeable exactly to
+  the extent it uses var(--*) rather than literal values.
+
+  Left is phosphor (the default, from vars.css). Right is Catppuccin Latte,
+  scoped here to [data-theme="latte"] so both render side by side; in the app the
+  loader writes to :root instead.
+
+  Look at the hover-tint row: the light side is washed out because --surface-* is
+  not part of a theme's TOML surface and stays white-on-dark under every theme.
+-->
+
+<style>
+  .thm {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: #666;
+    font-family: var(--font-family);
+  }
+  .thm__pane {
+    background: var(--bg);
+    color: var(--fg);
+    padding: 16px;
+  }
+  .thm__label {
+    color: var(--accent-primary);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+  }
+  .thm__section {
+    margin-bottom: 16px;
+  }
+  .thm__caption {
+    color: var(--msg-system);
+    font-size: 10px;
+    margin-bottom: 5px;
+  }
+  .thm__tint {
+    display: flex;
+    gap: 4px;
+  }
+  .thm__tint span {
+    flex: 1;
+    height: 22px;
+    border: 1px solid var(--border-color);
+  }
+</style>
+
+<div class="thm">
+  <!-- ── Phosphor (default) ─────────────────────────────────────────────── -->
+  <div class="thm__pane">
+    <div class="thm__label">phosphor — default</div>
+
+    <div class="thm__section">
+      <div class="thm__caption">room list</div>
+      <div class="room-list" style="width: 100%">
+        <div class="room-list__scroll" role="listbox">
+          <div class="room-list__item room-list__item--active" role="option" aria-selected="true">
+            <span class="room-list__item-name">#quark-dev</span>
+          </div>
+          <div class="room-list__item room-list__item--unread" role="option">
+            <span class="room-list__item-name">#matrix-spec</span>
+            <span class="room-list__item-badge">4</span>
+          </div>
+          <div class="room-list__item room-list__item--muted" role="option">
+            <span class="room-list__item-name">#firehose</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="thm__section">
+      <div class="thm__caption">message + reactions</div>
+      <div class="message-group-wrapper">
+        <div class="message-group__avatar-col">
+          <span class="message-group__avatar-fallback" style="color: #00aaff; border: 1px solid #00aaff; opacity: 0.85" aria-hidden="true">A</span>
+        </div>
+        <div class="message-group">
+          <div class="message-group__header">
+            <span class="message-group__sender">ada</span>
+            <span class="message-group__timestamp">14:02</span>
+          </div>
+          <div class="message">
+            <div class="message__body">sliding sync is green</div>
+            <div class="reaction-bar">
+              <button class="reaction"><span class="reaction__emoji">🎉</span><span class="reaction__count">3</span></button>
+              <button class="reaction reaction--own"><span class="reaction__emoji">👍</span><span class="reaction__count">2</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="thm__section">
+      <div class="thm__caption">input bar</div>
+      <div class="input-bar-wrap">
+        <div class="input-bar">
+          <span class="input-bar__mode input-bar__mode--insert">INS</span>
+          <div class="input-bar__compose-box">
+            <textarea class="input-bar__field" rows="1" aria-label="Message">rebasing now</textarea>
+            <div class="input-bar__actions">
+              <button class="input-bar__action-btn">🙂</button>
+              <button class="input-bar__action-btn input-bar__send-btn">➤</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="thm__section">
+      <div class="thm__caption">--surface-* hover tints (not themeable)</div>
+      <div class="thm__tint">
+        <span style="background: var(--surface-dim)"></span>
+        <span style="background: var(--surface-subtle)"></span>
+        <span style="background: var(--surface-hover)"></span>
+        <span style="background: var(--surface-hover-strong)"></span>
+        <span style="background: var(--surface-hover-active)"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Catppuccin Latte ───────────────────────────────────────────────── -->
+  <div class="thm__pane" data-theme="latte">
+    <div class="thm__label">catppuccin latte</div>
+
+    <div class="thm__section">
+      <div class="thm__caption">room list</div>
+      <div class="room-list" style="width: 100%">
+        <div class="room-list__scroll" role="listbox">
+          <div class="room-list__item room-list__item--active" role="option" aria-selected="true">
+            <span class="room-list__item-name">#quark-dev</span>
+          </div>
+          <div class="room-list__item room-list__item--unread" role="option">
+            <span class="room-list__item-name">#matrix-spec</span>
+            <span class="room-list__item-badge">4</span>
+          </div>
+          <div class="room-list__item room-list__item--muted" role="option">
+            <span class="room-list__item-name">#firehose</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="thm__section">
+      <div class="thm__caption">message + reactions</div>
+      <div class="message-group-wrapper">
+        <div class="message-group__avatar-col">
+          <span class="message-group__avatar-fallback" style="color: #1e66f5; border: 1px solid #1e66f5; opacity: 0.85" aria-hidden="true">A</span>
+        </div>
+        <div class="message-group">
+          <div class="message-group__header">
+            <span class="message-group__sender">ada</span>
+            <span class="message-group__timestamp">14:02</span>
+          </div>
+          <div class="message">
+            <div class="message__body">sliding sync is green</div>
+            <div class="reaction-bar">
+              <button class="reaction"><span class="reaction__emoji">🎉</span><span class="reaction__count">3</span></button>
+              <button class="reaction reaction--own"><span class="reaction__emoji">👍</span><span class="reaction__count">2</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="thm__section">
+      <div class="thm__caption">input bar</div>
+      <div class="input-bar-wrap">
+        <div class="input-bar">
+          <span class="input-bar__mode input-bar__mode--insert">INS</span>
+          <div class="input-bar__compose-box">
+            <textarea class="input-bar__field" rows="1" aria-label="Message">rebasing now</textarea>
+            <div class="input-bar__actions">
+              <button class="input-bar__action-btn">🙂</button>
+              <button class="input-bar__action-btn input-bar__send-btn">➤</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="thm__section">
+      <div class="thm__caption">--surface-* hover tints (not themeable)</div>
+      <div class="thm__tint">
+        <span style="background: var(--surface-dim)"></span>
+        <span style="background: var(--surface-subtle)"></span>
+        <span style="background: var(--surface-hover)"></span>
+        <span style="background: var(--surface-hover-strong)"></span>
+        <span style="background: var(--surface-hover-active)"></span>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,856 @@
+/* ── Message group (consecutive messages from the same sender) ──────────── */
+/* CSS-bordered box with a fieldset-legend–style inline sender label.       */
+
+.message-group {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 8px;
+  position: relative;
+  padding-top: calc(var(--font-size) * var(--line-height) * 0.25);
+  transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
+}
+
+.message-group:hover {
+  border-color: color-mix(in srgb, var(--border-color) 70%, var(--accent-primary));
+}
+
+.message-group--selected {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 30%, transparent),
+              inset 0 0 12px color-mix(in srgb, var(--accent-primary) 5%, transparent);
+}
+
+.message-group--selected .message-group__sender {
+  color: var(--accent-primary);
+  text-shadow: 0 0 var(--glow-radius) var(--glow-color);
+}
+
+/* ── Inline sender label (sits on the top border) ───────────────────────── */
+
+.message-group__header {
+  position: absolute;
+  top: -1px;
+  transform: translateY(-50%);
+  left: 1.5ch;
+  right: 1.5ch;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0.6ch;
+  white-space: nowrap;
+  z-index: 1;
+  pointer-events: none;
+  font-family: var(--font-family)
+}
+
+/* ── Message group wrapper (avatar + box side by side) ───────────────────── */
+
+.message-group-wrapper {
+  display: flex;
+  align-items: stretch; /* column must stretch to group height for sticky to work */
+  gap: 8px;
+  font-family: var(--font-family-messages);
+  /* Spacing that was on .message-group moved here so it stays outside the
+     flex cross-axis calculation — keeps the avatar column the same height
+     as the group box and prevents the sticky avatar from releasing too late. */
+  margin-top: calc(var(--font-size) * 0.5 + 8px);
+  margin-bottom: calc(var(--font-size) * 1.75);
+}
+
+.message-group-wrapper .message-group {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Avatar column (stretches to the full group height) ──────────────────── */
+
+.message-group__avatar-col {
+  width: 32px;
+  flex-shrink: 0;
+  /* No overflow:hidden — sticky requires an unclipped ancestor */
+}
+
+/* ── Avatar (sticky within its column so it tracks the viewport top) ──────── */
+
+.message-group__avatar,
+.message-group__avatar-fallback {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--icon-radius);
+  cursor: pointer;
+  /* Stick to the viewport top while still inside the group's column.
+     top: how far down before sticking kicks in.
+     margin-bottom: releases the sticky that many px before the column bottom. */
+  position: sticky;
+  top: 0px;
+  margin-top: 5px;
+  margin-bottom: 4px;
+}
+
+.message-group__avatar {
+  object-fit: cover;
+  display: block;
+}
+
+.message-group__avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  /* color and border-color set inline from JS */
+}
+
+.message-group__sender {
+  color: var(--msg-other);
+  flex-shrink: 0;
+  background-color: var(--bg);
+  padding: 0 0.4ch;
+}
+
+.message-group__sender--own {
+  color: var(--msg-own);
+  text-shadow: 0 0 var(--glow-radius) var(--glow-color);
+}
+
+.message-group__timestamp {
+  color: var(--msg-timestamp);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 2px);
+  flex-shrink: 0;
+  margin-left: auto;
+  background-color: var(--bg);
+  padding: 0 0.4ch;
+}
+
+/* ── Individual messages inside a group ─────────────────────────────────── */
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 10px;
+  outline: none;
+  position: relative;
+  transition: background-color var(--transition-speed);
+}
+
+/* Dashed separator between messages in the same group */
+.message-group .message + .message {
+  border-top: 1px dashed color-mix(in srgb, var(--border-color) 60%, transparent);
+}
+
+.message-group .message {
+  padding-top: 4px;
+  padding-bottom: 8px;
+}
+
+.message:hover {
+  background-color: var(--surface-dim);
+}
+
+/* ── Hover action bar ────────────────────────────────────────────────────── */
+
+.message__actions {
+  position: absolute;
+  right: 4px;
+  top: 0px;
+  transform: translateY(-50%);
+  display: none;
+  gap: 2px;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border-color);
+  padding: 1px 4px;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.message:hover .message__actions {
+  display: flex;
+}
+
+.message__actions-time {
+  font-size: 11px;
+  color: var(--msg-timestamp);
+  padding-right: 6px;
+  margin-right: 2px;
+  border-right: 1px solid var(--border-color);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.message__action-btn {
+  background: none;
+  border: none;
+  padding: 0 3px;
+  height: 20px;
+  line-height: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--fg);
+  border-radius: 2px;
+  transition: background-color var(--transition-speed), color var(--transition-speed);
+}
+
+.message__action-btn:hover {
+  background-color: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  color: var(--accent-primary);
+}
+
+.message:focus {
+  background-color: var(--roomlist-active-bg);
+  box-shadow: inset 3px 0 0 var(--focus-color);
+  outline: none;
+}
+
+.message--selected {
+  background-color: color-mix(in srgb, var(--accent-primary) 6%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+/* ── Ungrouped messages (system, standalone) ─────────────────────────────── */
+
+.message--ungrouped {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 8px;
+  padding: 4px 10px;
+}
+
+.message--ungrouped:hover {
+  border-color: color-mix(in srgb, var(--border-color) 70%, var(--accent-primary));
+}
+
+.message__header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.message__sender {
+  color: var(--msg-other);
+  font-weight: normal;
+  flex-shrink: 0;
+}
+
+.message__sender--own {
+  color: var(--msg-own);
+}
+
+.message__timestamp {
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  flex-shrink: 0;
+}
+
+.message__body {
+  color: var(--fg);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* Markdown lists: the global `*` reset zeroes the browser's default list
+   padding, which leaves bullets/numbers hanging outside the message box to
+   the left. Restore indentation in every container that renders message HTML. */
+.message__body ul,
+.message__body ol,
+.thread-view__root-body ul,
+.thread-view__root-body ol,
+.thread-view__message-body ul,
+.thread-view__message-body ol,
+.thread-inline__message-body ul,
+.thread-inline__message-body ol {
+  padding-left: 2em;
+}
+
+/* Text-select mode: caret is placed inside this message body via `o`. */
+.message__body--text-select {
+  outline: 1px dashed color-mix(in srgb, var(--cursor) 60%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
+  caret-color: var(--cursor);
+  user-select: text;
+}
+
+.message__body--text-select:focus {
+  outline-color: var(--cursor);
+}
+
+/* Block-cursor styling: in text-select Normal mode the keymap layer keeps a
+   1-character-wide selection at the caret position so the selection highlight
+   reads as a vim-style block. Hide the native I-beam to complete the effect.
+   Stays on in Visual too — the selection-as-cursor model is consistent. */
+.message__body--text-select-block,
+.input-bar__field--text-select-block {
+  caret-color: transparent;
+}
+
+/* Normal-mode block: render the 1-char selection with the theme's cursor
+   color so the block pops like vim's "Cursor" highlight group. Foreground
+   uses --bg for an inverse-video effect that stays readable on any theme. */
+.message__body--text-select-block::selection,
+.message__body--text-select-block *::selection {
+  background-color: var(--cursor);
+  color: var(--bg);
+}
+
+/* Visual-mode override: while extending a selection, use the secondary accent
+   (with --bg as text for an inverse-video read) so the user can tell the
+   difference between "this is my cursor" (--cursor, the block above) and "this
+   is what I've selected" (a distinct, still high-contrast colour). The old
+   --selection-bg was nearly invisible on most themes, and --cursor equals
+   --accent-primary in every built-in theme, so the secondary accent is the
+   readable colour that stays distinct from the block cursor. Toggled Normal↔Visual. */
+.message__body--text-select-visual::selection,
+.message__body--text-select-visual *::selection {
+  background-color: var(--accent-secondary);
+  color: var(--bg);
+}
+
+.message--system .message__body {
+  color: var(--msg-system);
+  font-style: italic;
+}
+
+.message--mention {
+  background-color: var(--msg-mention-bg);
+  color: var(--msg-mention-fg);
+}
+
+.message--highlight {
+  animation: message-highlight-flash 1.4s ease forwards;
+}
+
+/* ── Image messages ──────────────────────────────────────────────────────── */
+
+.message--image {
+  padding-left: 8px;
+}
+
+.message__image {
+  display: block;
+  max-width: 600px;
+  max-height: 400px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: left;
+  margin-top: 4px;
+  cursor: zoom-in;
+}
+
+/* Reserve vertical space for an image whose dimensions weren't in the event
+   (no info.w/h). Without this the <img> is 0px tall until it decodes, so
+   prepended history doesn't grow scrollHeight — the scroll-position restore and
+   the near-top prefetch margin both rely on it. updateMessageMedia removes this
+   class and sets the real width/height once the bitmap loads. The placeholder
+   is intentionally modest so the decoded-size correction is small in either
+   direction. */
+.message__image--unsized {
+  min-height: 200px;
+}
+
+/* MSC2530 caption rendered beneath an image message */
+.message__image-caption {
+  margin-top: 4px;
+}
+
+/* ── Video messages ──────────────────────────────────────────────────────── */
+
+.message--video {
+  padding-left: 8px;
+}
+
+/* Click-to-play affordance (shown before the user opens the video) */
+.message__video-affordance {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  cursor: pointer;
+  user-select: none;
+  max-width: 400px;
+  color: var(--fg);
+  background: var(--surface-subtle);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.message__video-affordance:hover,
+.message__video-affordance:focus-visible {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  outline: none;
+}
+
+/* Loading state: animated progress sweep across the background */
+.message__video-affordance--loading {
+  position: relative;
+  overflow: hidden;
+  pointer-events: none;
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.message__video-affordance--loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent-primary) 50%,
+    transparent 100%
+  );
+  opacity: 0.15;
+  animation: video-load-sweep 1.2s linear infinite;
+  transform: translateX(-100%);
+}
+
+.message__video-affordance-icon {
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.message__video-affordance-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}
+
+/* Thumbnail shown in video affordance when available */
+.message__video-affordance-thumb {
+  position: relative;
+  width: 160px;
+  height: 90px;
+  flex-shrink: 0;
+  background: var(--bg);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.message__video-affordance-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.message__video-affordance-thumb-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4em;
+  color: var(--media-icon-fg);
+  text-shadow: 0 0 6px var(--shadow-color);
+  pointer-events: none;
+}
+
+/* ── File attachment affordance ─────────────────────────────────────────── */
+
+.message__file-affordance {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  cursor: pointer;
+  user-select: none;
+  max-width: 400px;
+  color: var(--fg);
+  background: var(--surface-subtle);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.message__file-affordance:hover,
+.message__file-affordance:focus-visible {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  outline: none;
+}
+
+.message__file-affordance-icon {
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.message__file-affordance-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+.message__file-affordance-type {
+  font-size: calc(var(--font-size) - 3px);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* Inline <video> element shown after GStreamer-capable playback begins */
+.message__video {
+  display: block;
+  max-width: 600px;
+  max-height: 400px;
+  width: auto;
+  height: auto;
+  margin-top: 4px;
+  background: var(--media-bg);
+  border-radius: 2px;
+}
+
+/* ── URL preview cards ───────────────────────────────────────────────────── */
+
+.message__url-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--accent-primary);
+  background: var(--surface-subtle);
+  max-width: 480px;
+  border-radius: 0 2px 2px 0;
+}
+
+.message__url-preview-img-wrap {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--bg);
+}
+
+.message__url-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.message__url-preview-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.message__url-preview-site {
+  font-size: calc(var(--font-size) - 2px);
+  color: var(--accent-primary);
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.message__url-preview-title {
+  font-size: var(--font-size);
+  color: var(--fg);
+  font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message__url-preview-desc {
+  font-size: calc(var(--font-size) - 1px);
+  color: var(--reaction-count);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Sticker messages ────────────────────────────────────────────────────── */
+
+.message__sticker {
+  display: block;
+  max-width: var(--sticker-max-size);
+  max-height: var(--sticker-max-size);
+  width: auto;
+  height: auto;
+  /* Preserve the intrinsic aspect ratio: the width/height attributes reserve
+     layout space, and object-fit letterboxes the bitmap into that box rather
+     than stretching non-square stickers to fill it. */
+  object-fit: contain;
+  object-position: left;
+  margin-top: 4px;
+}
+
+/* Placeholder reservation for a sticker with no dimensions in the event — see
+   .message__image--unsized. Stickers are small, so reserve their max box. */
+.message__sticker--unsized {
+  min-height: var(--sticker-max-size);
+}
+
+/* ── Spoilers (data-mx-spoiler) ──────────────────────────────────────────────
+   Hidden text is blurred and dimmed until clicked/tapped. Inline custom emoji
+   inside a spoiler are obscured the same way. JS toggles --revealed. */
+
+.message__spoiler {
+  filter: blur(6px);
+  background: var(--fg);
+  border-radius: 2px;
+  color: transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: filter 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.message__spoiler img[data-mx-emoticon] {
+  visibility: hidden;
+}
+
+.message__spoiler--revealed {
+  filter: none;
+  background: transparent;
+  color: inherit;
+  cursor: text;
+  user-select: text;
+}
+
+.message__spoiler--revealed img[data-mx-emoticon] {
+  visibility: visible;
+}
+
+/* ── Reaction bar ────────────────────────────────────────────────────────── */
+
+.reaction-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+/* Inside a group: reactions flow inline under each message body.
+   Only the very last message's reactions get the bottom-right corner
+   treatment so a single-message group keeps the classic look. */
+
+/* Mid-group reactions: float absolute to the right, centered on the
+   dashed border below. Chips are ~24px tall so translateY(50%) puts
+   their midpoint exactly on the border line. */
+.message-group .message:not(:last-of-type) .reaction-bar {
+  position: absolute;
+  bottom: 0;
+  right: 10px;
+  transform: translateY(50%);
+  z-index: 2;
+  margin-top: 0;
+}
+
+/* Extra spacing only when a reaction bar is present — sized to fit
+   the chips (≈24px tall) centered on the dashed border. */
+.message-group .message:not(:last-of-type):has(.reaction-bar) {
+  padding-bottom: 14px;
+}
+
+.message-group .message:not(:last-of-type):has(.reaction-bar) + .message {
+  padding-top: 16px;
+}
+
+.message-group .message:last-of-type .reaction-bar {
+  position: absolute;
+  bottom: 0;
+  right: 1.5ch;
+  transform: translateY(50%);
+  z-index: 1;
+}
+
+/* Indent the right edge of the last message when it has reactions so text
+   wraps before it can slide under the chips. Uses a fixed reserve wide
+   enough for ~2 chips; extra reactions wrap upward via flex-wrap. */
+.message-group .message:last-of-type:has(.reaction-bar) {
+  padding-right: 6rem;
+}
+
+/* Lift clear of the reaction chips when a message has both — the chips hang on
+   the bottom edge (translateY(50%)), so receipts sit just above them. */
+.message:has(.reaction-bar) .read-receipts {
+  bottom: 22px;
+}
+
+.reaction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0px 2px;
+  padding: 2px 8px;
+  background-color: var(--bg);
+  border: var(--border-width) solid var(--reaction-border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-size: calc(var(--font-size) - 1px);
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition: border-color var(--transition-speed), background-color var(--transition-speed),
+    transform var(--transition-speed);
+}
+
+.reaction:hover {
+  border-color: var(--fg);
+  transform: translateY(-1px);
+}
+
+.message-group .reaction:hover {
+  transform: none;
+}
+
+.reaction:focus {
+  box-shadow: 0 0 0 var(--focus-width) var(--focus-color);
+  outline: none;
+}
+
+.reaction--own {
+  background-color: var(--reaction-own-bg);
+  border-color: var(--accent-primary);
+}
+
+img.reaction__emoji {
+  height: calc(var(--reaction-size) + 4px);
+  padding: 2px;
+  width: auto;
+  vertical-align: middle;
+}
+
+span.reaction__emoji {
+  font-size: calc(var(--font-size));
+  line-height: 1;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  margin-right: 2px;
+}
+
+.reaction__count {
+  color: var(--reaction-count);
+  font-size: calc(var(--font-size) - 2px);
+  line-height: 1;
+}
+
+/* ── Thread indicator (shown on thread root messages) ───────────────────── */
+
+.message__thread-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 8px;
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--msg-thread-indicator) 40%, transparent);
+  border-radius: 10px;
+  color: var(--msg-thread-indicator);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 3px);
+  font-weight: bold;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--transition-speed), border-color var(--transition-speed);
+}
+
+.message__thread-indicator:hover {
+  background-color: color-mix(in srgb, var(--msg-thread-indicator) 12%, transparent);
+  border-color: var(--msg-thread-indicator);
+}
+
+.message__thread-indicator:focus {
+  outline: none;
+  box-shadow: 0 0 0 var(--focus-width) var(--msg-thread-indicator);
+}
+
+/* ── Input bar ───────────────────────────────────────────────────────────── */
+
+/*
+ * padding-left: 8px so that: padding-left (8px) + mode margin-left (4px) + mode width (40px) = 52px
+ * = timeline padding-left (12px) + avatar width (32px) + wrapper gap (8px).
+ * This aligns the compose box left-edge exactly with .message-group boxes above,
+ * making the send animation a clean vertical translate.
+ *
+ * padding-right starts at 12px (= timeline padding-right) and is dynamically adjusted by
+ * App.ts via ResizeObserver to add the timeline's actual scrollbar gutter width
+ * (offsetWidth - clientWidth), keeping the compose-box right edge aligned with message
+ * bubbles regardless of OS scrollbar style (overlay = 0px extra, classic = N px extra).
+ */
+.input-bar {
+  display: flex;
+  align-items: stretch; /* mode indicator stretches full height */
+  /* border-top: var(--border-width) solid var(--border-color); */
+  flex-shrink: 0;
+  background-color: var(--bg);
+  margin-top: auto;
+  padding: 0px 12px 0px 8px;
+}
+
+/* The bordered compose box — visually matches .message-group */
+.input-bar__compose-box {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  border: var(--border-width) solid color-mix(in srgb, var(--border-color) 70%, var(--accent-primary) 30%);
+  border-radius: 0px 8px 8px 0px;
+  min-width: 0;
+  margin: 8px 0px 8px 0;
+  /* Matches .message-group padding-top so text aligns with message body.
+     Kept on the box (not the field) so the clone can animate it to 0 during
+     flight, mirroring how the real group's padding-top is revealed on landing. */
+  padding-top: calc(var(--font-size) * var(--line-height) * 0.25);
+  transition: border-color var(--transition-speed), box-shadow var(--transition-speed), border-radius var(--transition-speed);
+}
+
+.message--entering {
+  animation: msgMergeReveal 160ms ease forwards;
+}
+
+/* ── Message links ───────────────────────────────────────────────────────── */
+
+.message__link {
+  color: var(--accent-link, var(--accent-secondary, #00aaff));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.message__link:hover {
+  opacity: 0.8;
+}
+
+/* ── Edited marker ─────────────────────────────────────────────────────────── */
+
+.message__edited-marker {
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  cursor: pointer;
+  opacity: 0.7;
+  user-select: none;
+}
+
+.message__edited-marker:hover {
+  opacity: 1;
+  text-decoration: underline;
+  color: var(--accent-primary);
+}
+
+/* Hover-driven message action bar is meaningless on touch; replaced by
+ * long-press → context menu wired up in Timeline.ts. */
+body.quark-mobile .message:hover .message__actions {
+  display: none;
+}
+
+/* Larger tap target for inline links — iOS Human Interface Guidelines
+ * recommend ≥44pt. We pad vertically so the underline stays tight. */
+body.quark-mobile .message__link {
+  padding: 4px 0;
+  -webkit-touch-callout: default;
+}
