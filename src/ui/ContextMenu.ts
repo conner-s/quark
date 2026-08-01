@@ -289,11 +289,11 @@ export class ContextMenu implements Modal {
   private _buildChipRow(chips: ContextMenuChip[]): HTMLElement {
     const rowIdx = this._rows.length;
 
+    // Equal-width flex children, so the row fills the menu width however many
+    // toggles a caller passes.
     const wrap = document.createElement("div");
     wrap.className = "context-menu__chips";
     wrap.setAttribute("role", "group");
-    // The grid fills the menu width however many toggles there are.
-    wrap.style.setProperty("--context-menu-chip-cols", String(chips.length));
 
     const els: HTMLButtonElement[] = [];
     chips.forEach((chip, i) => {
@@ -406,33 +406,46 @@ export class ContextMenu implements Modal {
     row.item.action();
   }
 
+  /**
+   * Keys the menu owns are stopped here, never re-dispatched.
+   *
+   * The global keydown handler swallows everything while a modal is open, but
+   * hide() deregisters this menu *before* the event finishes bubbling — so an
+   * un-stopped Escape would dismiss the menu and then run the app's Escape
+   * (leave Insert, close the panel) on the way out.
+   */
+  private _consume(e: KeyboardEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
   private _handleKey(e: KeyboardEvent): void {
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
-      e.preventDefault();
+      this._consume(e);
       this.hide();
       return;
     }
     if (e.key === "ArrowDown" || (e.key === "j" && !e.ctrlKey)) {
-      e.preventDefault();
+      this._consume(e);
       this._moveRow(1);
       return;
     }
     if (e.key === "ArrowUp" || (e.key === "k" && !e.ctrlKey)) {
-      e.preventDefault();
+      this._consume(e);
       this._moveRow(-1);
       return;
     }
     if (e.key === "ArrowRight" || (e.key === "l" && !e.ctrlKey)) {
-      if (this._moveChip(1)) e.preventDefault();
+      if (this._moveChip(1)) this._consume(e);
       return;
     }
     if (e.key === "ArrowLeft" || (e.key === "h" && !e.ctrlKey)) {
-      if (this._moveChip(-1)) e.preventDefault();
+      if (this._moveChip(-1)) this._consume(e);
       return;
     }
     if (e.key === "Enter" || e.key === " ") {
       if (this._activeRow < 0) return;
-      e.preventDefault();
+      this._consume(e);
       this._activate();
     }
   }
