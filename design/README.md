@@ -30,6 +30,7 @@ State is a modifier class, never an inline style. The blocks available here:
 | `.input-bar` | `__mode` `__compose-box` `__field` `__actions` `__action-btn` `__send-btn` | `__mode--insert` `__mode--command` `__mode--visual` `__action-btn--gif` |
 | `.emoji-picker` | `__tabs` `__tab` `__section` `__categories` `__category-btn` `__search` `__grid` `__cell` `__img` | `__tab--active` `__category-btn--active` |
 | `.help-dialog` | `__panel` `__header` `__title` `__tabs` `__tab` `__content` `__headings` `__table` `__row` `__key` `__mode` `__cmd-name` `__cmd-args` `__cmd-desc` `__footer` `__close-hint` | `__tab--active` `__row--bindings` `__row--commands` |
+| `.context-menu` | `__header` `__title` `__esc` `__section` `__chips` `__chip` `__item` `__item-label` `__item-hint` `__separator` | `--mobile` `__chip--active` `__chip--accent` `__chip--focus` `__item--active` `__item--disabled` `__item--danger` |
 
 `.dialog-close-btn` is the one shared, un-prefixed class; it rides alongside
 `.{prefix}__close-hint`.
@@ -43,8 +44,9 @@ Three traps worth knowing:
 
 - **`.message__body` is `white-space: pre-wrap`.** Put its text on one line or
   your source indentation renders as leading whitespace.
-- **`.emoji-picker` and `.help-dialog` are `position: fixed`.** To frame one
-  inside a bounded region, put `transform: translateZ(0)` on an ancestor.
+- **`.emoji-picker`, `.help-dialog` and `.context-menu` are `position: fixed`.**
+  To frame one inside a bounded region, put `transform: translateZ(0)` on an
+  ancestor.
 - **`--surface-*`, `--overlay-*` and `--shadow-color` are not themeable.** They
   are white-on-dark tints fixed across every theme, so they nearly vanish on the
   light palettes. Don't rely on them for meaningful contrast.
@@ -105,11 +107,15 @@ range its markup was lifted from.
 - `components/Dialogs/HelpDialog/index.html` — the panelled `DialogBase` shape,
   the template for the whole dialog family. From `src/ui/DialogBase.ts:76-145`
   and `src/ui/HelpDialog.ts:94-266`.
+- `components/Overlays/ContextMenu/index.html` — the right-click / long-press
+  menu: header bar, section strips, formatting chips, disabled and danger rows,
+  and the touch bottom-sheet. From `src/ui/ContextMenu.ts:126-196` and
+  `src/app/context_menus.ts`.
 
 ## Not covered
 
 This is a deliberate first slice, not the full surface. `src/ui/` holds roughly
-60 components; the ~55 not listed above — spaces strip, status bar, member list,
+60 components; the ~54 not listed above — spaces strip, status bar, member list,
 thread view, GIF and sticker pickers, lightbox, settings, verification, and the
 rest of the dialog family — have no card yet. Their CSS is still in
 `src/style/base.css`; it is simply not in this bundle's `@import` closure, so
