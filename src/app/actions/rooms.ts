@@ -179,6 +179,9 @@ export function swapComposeDraft(prevRoom: string | null, nextRoom: string): voi
     else _composeDrafts.delete(prevRoom);
   }
   input.setValue(_composeDrafts.get(nextRoom) ?? "");
+  // The box now holds a different composition — undoing across that boundary
+  // would resurrect the previous room's text.
+  input.resetUndoHistory();
 }
 
 /**
