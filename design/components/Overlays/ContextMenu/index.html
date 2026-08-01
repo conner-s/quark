@@ -1,0 +1,216 @@
+<!-- @dsCard group="Overlays" -->
+<link rel="stylesheet" href="../../../styles.css" />
+
+<!--
+  Context menu — the right-click / long-press menu.
+
+  Markup mirrors ContextMenu.show() (src/ui/ContextMenu.ts:126-196). Structure
+  is .context-menu > [.context-menu__header, .context-menu__section,
+  .context-menu__chips, .context-menu__item, .context-menu__separator], in
+  whatever order the caller's entry list produced. Content comes from
+  src/app/context_menus.ts.
+
+  The shell is squared off on purpose: it must read as menu chrome, not as the
+  thing it was summoned from, so it keeps a plain --border-color edge rather
+  than the compose box's accent-tinted one. Groups carry a section header
+  (--surface-dim strip, hairline both sides) instead of a bare separator; the
+  .context-menu__separator variant is still styled and used by the room-list
+  and space-strip menus.
+
+  A row that doesn't apply is --disabled (greyed, inert), not omitted. The
+  highlighted row is --active, which is also what :focus paints — arrow keys
+  move focus row to row.
+
+  .context-menu is position: fixed, so the framing wrappers below carry
+  transform: translateZ(0) to contain it (see the README's third trap). In the
+  app it mounts on <body> and is positioned from the pointer coordinates.
+-->
+
+<div style="padding: 16px; background: var(--bg); display: flex; flex-wrap: wrap; gap: 28px">
+  <!-- Compose menu, with a selection: the only place formatting appears -->
+  <div style="position: relative; width: 300px; height: 470px; transform: translateZ(0)">
+    <div class="context-menu" style="position: absolute; left: 0; top: 0" role="menu">
+      <div class="context-menu__header">
+        <span class="context-menu__title">compose</span>
+        <span class="context-menu__esc">esc</span>
+      </div>
+
+      <div class="context-menu__section">format</div>
+      <div class="context-menu__chips" role="group">
+        <button class="context-menu__chip context-menu__chip--active" title="Bold — **text**">B</button>
+        <button class="context-menu__chip" title="Italic — *text*">I</button>
+        <button class="context-menu__chip" title="Underline — __text__">U</button>
+        <button class="context-menu__chip" title="Strikethrough — ~~text~~">S</button>
+        <button class="context-menu__chip" title="Spoiler — ||text||">‖</button>
+        <button class="context-menu__chip context-menu__chip--accent" title="Inline code — `text`">`</button>
+      </div>
+
+      <div class="context-menu__section">clipboard</div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Cut</span>
+        <span class="context-menu__item-hint">Ctrl+X</span>
+      </div>
+      <div class="context-menu__item context-menu__item--active" role="menuitem">
+        <span class="context-menu__item-label">Copy</span>
+        <span class="context-menu__item-hint">Ctrl+C</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Paste</span>
+        <span class="context-menu__item-hint">Ctrl+V</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Paste as plain text</span>
+        <span class="context-menu__item-hint">⇧Ctrl+V</span>
+      </div>
+
+      <div class="context-menu__section">selection</div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Search web for “sliding sync”</span>
+        <span class="context-menu__item-hint">↗</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Copy as quote</span>
+        <span class="context-menu__item-hint">&gt;</span>
+      </div>
+
+      <div class="context-menu__section">insert</div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Emoji…</span>
+        <span class="context-menu__item-hint">Ctrl-e</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">GIF…</span>
+        <span class="context-menu__item-hint">Ctrl-g</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Attach file…</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Mention…</span>
+        <span class="context-menu__item-hint">@</span>
+      </div>
+
+      <div class="context-menu__section">draft</div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Undo</span>
+        <span class="context-menu__item-hint">u</span>
+      </div>
+      <div class="context-menu__item context-menu__item--danger" role="menuitem">
+        <span class="context-menu__item-label">Discard draft</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Message menu: same shell, no formatting. Edit/Delete greyed on someone
+       else's message rather than dropped. -->
+  <div style="position: relative; width: 300px; height: 470px; transform: translateZ(0)">
+    <div class="context-menu" style="position: absolute; left: 0; top: 0" role="menu">
+      <div class="context-menu__header">
+        <span class="context-menu__title">message · ada</span>
+        <span class="context-menu__esc">esc</span>
+      </div>
+
+      <div class="context-menu__section">respond</div>
+      <div class="context-menu__item context-menu__item--active" role="menuitem">
+        <span class="context-menu__item-label">Reply</span>
+        <span class="context-menu__item-hint">r</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">React</span>
+        <span class="context-menu__item-hint">e</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Thread</span>
+        <span class="context-menu__item-hint">t</span>
+      </div>
+
+      <div class="context-menu__section">clipboard</div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Copy message text</span>
+        <span class="context-menu__item-hint">y</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Copy as quote</span>
+        <span class="context-menu__item-hint">&gt;</span>
+      </div>
+
+      <div class="context-menu__section">selection</div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Search web for “sliding sync”</span>
+        <span class="context-menu__item-hint">↗</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Copy selected text</span>
+        <span class="context-menu__item-hint">Ctrl+C</span>
+      </div>
+
+      <div class="context-menu__section">event</div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">View raw event</span>
+        <span class="context-menu__item-hint">:debug</span>
+      </div>
+      <div class="context-menu__item context-menu__item--disabled" role="menuitem" aria-disabled="true">
+        <span class="context-menu__item-label">Edit</span>
+        <span class="context-menu__item-hint">E</span>
+      </div>
+      <div class="context-menu__item context-menu__item--disabled" role="menuitem" aria-disabled="true">
+        <span class="context-menu__item-label">Delete</span>
+        <span class="context-menu__item-hint">dd</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Room-list menu: the same shell with plain separators, no sections -->
+  <div style="position: relative; width: 300px; height: 470px; transform: translateZ(0)">
+    <div class="context-menu" style="position: absolute; left: 0; top: 0" role="menu">
+      <div class="context-menu__header">
+        <span class="context-menu__title">room · #quark-dev</span>
+        <span class="context-menu__esc">esc</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Open</span>
+      </div>
+      <div class="context-menu__separator" role="separator"></div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Room settings</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Room info</span>
+      </div>
+      <div class="context-menu__separator" role="separator"></div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Mark as read</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Touch: the same entries redocked as a bottom sheet. --mobile is added
+       from ContextMenu.ts:show() and pins the menu to the viewport edge, so
+       here it is shown outside a framing wrapper. -->
+  <div style="position: relative; width: 320px; height: 470px; overflow: hidden; transform: translateZ(0); border: var(--border-width) solid var(--border-color)">
+    <div class="context-menu context-menu--mobile" role="menu">
+      <div class="context-menu__header">
+        <span class="context-menu__title">message · ada</span>
+        <span class="context-menu__esc">esc</span>
+      </div>
+      <div class="context-menu__section">respond</div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Reply</span>
+        <span class="context-menu__item-hint">r</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">React</span>
+        <span class="context-menu__item-hint">e</span>
+      </div>
+      <div class="context-menu__item" role="menuitem">
+        <span class="context-menu__item-label">Thread</span>
+        <span class="context-menu__item-hint">t</span>
+      </div>
+      <div class="context-menu__section">event</div>
+      <div class="context-menu__item context-menu__item--disabled" role="menuitem" aria-disabled="true">
+        <span class="context-menu__item-label">Delete</span>
+        <span class="context-menu__item-hint">dd</span>
+      </div>
+    </div>
+  </div>
+</div>
