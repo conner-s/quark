@@ -562,6 +562,49 @@ Scoped maps (`tmap`, `rmap`, `pmap`) take precedence over global `nmap` when tha
 :version                     Show the current app version
 ```
 
+### Context Menus
+
+Right-click (desktop) or long-press (touch) opens Quark's own menu in place of the browser's. Every menu wears the same chrome, deliberately: a menu must read as **menu chrome**, not as the thing it was summoned from, so it stays squared off and keeps a plain `--border-color` edge rather than the compose box's accent-tinted one.
+
+```
+┌──────────────────────────────┐
+│ COMPOSE                  esc │  header bar    — --surface-subtle, accent title
+├──────────────────────────────┤
+│ FORMAT                       │  section strip — --surface-dim, hairline both sides
+│ [B][I][U][S][‖][`]           │  chip row      — formatting toggles
+│ CLIPBOARD                    │
+│ Cut                   Ctrl+X │  item row      — label + shortcut hint
+│ Copy                  Ctrl+C │
+└──────────────────────────────┘
+```
+
+Groups carry a **section header** rather than a bare separator. A row that doesn't apply is shown **greyed rather than omitted** — an absent row reads as a missing feature, a greyed one reads as "not here, not now".
+
+Keys: `j`/`k` (or ↑/↓) move between rows, `h`/`l` (or ←/→) move within the chip row, `Enter`/`Space` activates, `Esc` dismisses and returns the caret to wherever it was. Dismissing never runs anything.
+
+**Compose menu** — right-click inside the compose box. The only place formatting appears: you are editing text you own.
+
+| Group | Entries |
+|-------|---------|
+| `format` | B / I / U / S / ‖ / ` — one toggle per markdown marker. Shown only with a selection. A toggle renders lit when its marker is already applied and strips it on the next press; `Ctrl`/`Cmd`+`B`/`I`/`U`/`Shift+X` route through the same toggle. |
+| `clipboard` | Cut, Copy (both greyed without a selection), Paste, Paste as plain text. **Paste** mirrors `Ctrl+V` — an image on the clipboard is staged for sending. **Paste as plain text** always inserts the text flavour, with markdown metacharacters escaped so it arrives literally. |
+| `selection` | Search web for "…" (system browser, DuckDuckGo), Copy as quote (`> `-prefixed, to the clipboard). Shown only with a selection. |
+| `insert` | Emoji…, GIF…, Attach file…, Mention… (inserts `@` and opens the member autocomplete). |
+| `draft` | Undo — steps back through compose history; typed runs coalesce into one step, and the history is dropped on room switch so it can't resurrect another room's draft. Discard draft — clears the text, any staged image, and a pending edit or reply; one Undo brings the text back. |
+
+**Message menu** — right-click or long-press a message. Same shell, no formatting: you are not editing text here.
+
+| Group | Entries |
+|-------|---------|
+| `respond` | Reply `r`, React `e`, Thread `t` |
+| `clipboard` | Copy message text `y`, Copy as quote |
+| `selection` | Search web for "…", Copy selected text — shown only when text is highlighted **inside that message** |
+| `event` | View raw event `:debug`, Edit `E`, Delete `dd` — Edit and Delete are greyed on someone else's message |
+
+Room-list and space-strip menus use the same shell with a header and plain separators.
+
+On touch the menu redocks as a **bottom sheet**: full-width, docked to the viewport edge, 44px rows, sticky header, shortcut hints hidden. Inside the compose field, touch keeps the platform's native selection callout instead — the OS long-press UI is what users expect there.
+
 ### Settings Dialog
 
 Opened via `:settings` or the settings UI affordance. The dialog has eight tabs, rendered in this order:

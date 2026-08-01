@@ -6256,15 +6256,19 @@ body.quark-mobile .profile-edit-dialog__panel {
 }
 
 /* Formatting toggles — squared and stretched to fill the menu width rather
- * than floating as pills. */
+ * than floating as pills. Equal-width flex children rather than a grid whose
+ * track count comes from a custom property: `repeat(var(…), 1fr)` needs
+ * var() substitution inside repeat(), which WebKitGTK has historically not
+ * handled, and this renders identically for any number of chips. */
 .context-menu__chips {
-  display: grid;
-  grid-template-columns: repeat(var(--context-menu-chip-cols, 6), 1fr);
+  display: flex;
   gap: 4px;
   padding: 8px 10px;
 }
 
 .context-menu__chip {
+  flex: 1 1 0;
+  min-width: 0;
   height: 26px;
   padding: 0;
   background: var(--bg);
