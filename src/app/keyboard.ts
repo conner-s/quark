@@ -5,7 +5,12 @@ import { keymapManager } from "../vim/keybindings.js";
 import { ComposeNormalEditor } from "../vim/compose_normal.js";
 import { modalManager } from "../ui/ModalManager.js";
 import type { AppComponents } from "../ui/App.js";
-import type { ContextMenuEntry } from "../ui/ContextMenu.js";
+import {
+  showComposeContextMenu,
+  showMessageContextMenu,
+  showRoomContextMenu,
+  showSpaceContextMenu,
+} from "./context_menus.js";
 import {
   sendMessage,
   sendReaction,
@@ -18,7 +23,6 @@ import {
   openRoomSettings,
   openSpaceSettings,
   openDebugViewer,
-  openDebugViewerForEvent,
   openPinnedMessages,
   openSearch,
   openRoomDirectory,
@@ -767,7 +771,9 @@ function handleInsertKeydown(e: KeyboardEvent, components: AppComponents): void 
   // Rich-text formatting shortcuts (#54): wrap the selection in markdown
   // markers. Cmd on macOS, Ctrl elsewhere. Bold/italic/underline are the bare
   // chord; strikethrough is Shift+X (no conventional bare chord), and the
-  // mobile toolbar covers the rest.
+  // mobile toolbar covers the rest. Toggling (rather than always wrapping)
+  // keeps the chord in step with the context menu's formatting chips, which
+  // render lit when the marker is already applied.
   if ((e.ctrlKey || e.metaKey) && !e.altKey) {
     const key = e.key.toLowerCase();
     let marker: string | null = null;
@@ -777,7 +783,7 @@ function handleInsertKeydown(e: KeyboardEvent, components: AppComponents): void 
     else if (e.shiftKey && key === "x") marker = "~~";
     if (marker) {
       e.preventDefault();
-      input.wrapSelection(marker);
+      input.toggleWrap(marker);
       return;
     }
   }
@@ -876,7 +882,7 @@ export function setupKeyboard(components: AppComponents): void {
   // are destructured.
   const { input, commandBar, shortcodePreview, mentionPreview, timeline,
           quickReactPicker, pinnedMessagesDialog, searchDialog, revisionHistoryDialog,
-          roomHeader, imageLightbox, quickNavPalette, contextMenu,
+          roomHeader, imageLightbox, quickNavPalette,
           spaceStrip, roomList } = components;
 
   registerDefaultBindings();
@@ -944,123 +950,26 @@ export function setupKeyboard(components: AppComponents): void {
   });
 
   // Right-click / long-press context menu for messages
-  timeline.onContextMenu((eventId, x, y) => {
-    const events = AppState.get("currentTimeline");
-    const evt = events.find((ev) => ev.event_id === eventId);
-    const ownUserId = AppState.get("ownUserId");
-    const isOwn = !!evt && !!ownUserId && evt.sender === ownUserId;
-
-    const entries: ContextMenuEntry[] = [
-      {
-        label: "Reply",
-        hint: "r",
-        action: () => {
-          if (evt) {
-            startReply(eventId, evt.sender, evt.body.slice(0, 80));
-            input.focus();
-          }
-        },
-      },
-      {
-        label: "React",
-        hint: "e",
-        action: () => openQuickReactPicker(eventId),
-      },
-      {
-        label: "Thread",
-        hint: "t",
-        action: () => void openThread(eventId),
-      },
-      { separator: true },
-      {
-        label: "Copy message text",
-        hint: "y",
-        action: () => {
-          const text = evt?.body ?? "";
-          void navigator.clipboard.writeText(text);
-        },
-      },
-      {
-        label: "View raw event",
-        action: () => void openDebugViewerForEvent(eventId),
-      },
-    ];
-
-    // Own-message actions: edit and delete. Both the desktop right-click menu
-    // and the mobile long-press sheet flow through this callback, so this is
-    // the single place that gives finger-input users a way to delete/edit.
-    if (isOwn) {
-      entries.push(
-        { separator: true },
-        {
-          label: "Edit",
-          hint: "E",
-          action: () => {
-            // Prefer the MessageData body (reflects applied edits) over the
-            // raw timeline event.
-            const body = timeline.getMessageBodyById(eventId) ?? evt?.body ?? "";
-            startEdit(eventId, body);
-            modeManager.transition(Mode.Insert);
-            input.focus();
-          },
-        },
-        {
-          label: "Delete",
-          hint: "dd",
-          action: () => void redactMessage(eventId),
-        },
-      );
-    }
-
-    contextMenu.show(x, y, entries);
+  timeline.onContextMenu((eventId, x, y, selection) => {
+    showMessageContextMenu(components, eventId, x, y, selection);
   });
+
+  // Right-click inside the compose box — formatting, clipboard, insert, draft
+  input.onContextMenu((x, y) => showComposeContextMenu(components, x, y));
 
   // Right-click context menu for rooms in the room list
   roomList.onContextMenu((roomId, x, y) => {
-    const rooms = AppState.get("roomListCache");
-    const room = rooms.find((r) => r.room_id === roomId);
-    contextMenu.show(x, y, [
-      {
-        label: "Open",
-        action: () => void selectRoom(roomId),
-      },
-      { separator: true },
-      {
-        label: "Room settings",
-        action: () => void selectRoom(roomId).then(() => openRoomSettings()),
-      },
-      {
-        label: "Room info",
-        action: () => void selectRoom(roomId).then(() => openRoomInfo()),
-      },
-      ...(room && room.unread_count > 0 ? [
-        { separator: true } as const,
-        {
-          label: "Mark as read",
-          action: () => void selectRoom(roomId),
-        },
-      ] : []),
-    ]);
+    showRoomContextMenu(components, roomId, x, y);
   });
 
   // Right-click context menu for subspace section labels in the room list
   roomList.onSectionContextMenu((spaceId, x, y) => {
-    contextMenu.show(x, y, [
-      {
-        label: "Space settings",
-        action: () => void openSpaceSettings(spaceId),
-      },
-    ]);
+    showSpaceContextMenu(components, spaceId, x, y);
   });
 
   // Right-click context menu for spaces in the space strip
   spaceStrip.onContextMenu((spaceId, x, y) => {
-    contextMenu.show(x, y, [
-      {
-        label: "Space settings",
-        action: () => void openSpaceSettings(spaceId),
-      },
-    ]);
+    showSpaceContextMenu(components, spaceId, x, y);
   });
 
   // ── User keybindings ──────────────────────────────────────────────────────
