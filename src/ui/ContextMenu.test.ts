@@ -149,6 +149,28 @@ describe("ContextMenu", () => {
       expect(onReply).not.toHaveBeenCalled();
     });
 
+    // hide() deregisters the menu before the event finishes bubbling, so an
+    // un-stopped Escape would dismiss the menu *and then* run the app's own
+    // Escape — leaving Insert mode and closing the panel behind it.
+    it("does not leak the keys it handles to the global handler", () => {
+      const global = vi.fn();
+      document.addEventListener("keydown", global);
+      menu.show(0, 0, [
+        { label: "One", action: vi.fn() },
+        { label: "Two", action: vi.fn() },
+      ]);
+
+      key("ArrowDown");
+      key("Enter");
+      expect(global).not.toHaveBeenCalled();
+
+      menu.show(0, 0, [{ label: "One", action: vi.fn() }]);
+      key("Escape");
+      expect(global).not.toHaveBeenCalled();
+
+      document.removeEventListener("keydown", global);
+    });
+
     it("returns focus to whatever summoned it", () => {
       const field = document.createElement("textarea");
       document.body.appendChild(field);
@@ -163,14 +185,13 @@ describe("ContextMenu", () => {
   });
 
   describe("formatting chips", () => {
-    it("lays the row out to fill the menu width", () => {
+    it("renders one toggle per chip", () => {
       menu.show(0, 0, [
         { chips: [{ label: "B", action: vi.fn() }, { label: "I", action: vi.fn() }] },
       ]);
 
-      const row = el().querySelector<HTMLElement>(".context-menu__chips");
-      expect(row?.style.getPropertyValue("--context-menu-chip-cols")).toBe("2");
-      expect(chips()).toHaveLength(2);
+      expect(chips().map((c) => c.textContent)).toEqual(["B", "I"]);
+      expect(el().querySelector(".context-menu__chips")?.getAttribute("role")).toBe("group");
     });
 
     it("reflects an active predicate", () => {
