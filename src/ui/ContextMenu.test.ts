@@ -182,6 +182,20 @@ describe("ContextMenu", () => {
       expect(document.activeElement).toBe(field);
       field.remove();
     });
+
+    it("keeps the original focus target when re-shown while already open", () => {
+      const field = document.createElement("textarea");
+      document.body.appendChild(field);
+      field.focus();
+
+      menu.show(0, 0, [{ label: "One", action: vi.fn() }]);
+      // Right-clicking a second target without dismissing the first menu.
+      menu.show(0, 0, [{ label: "Two", action: vi.fn() }]);
+      menu.hide();
+
+      expect(document.activeElement).toBe(field);
+      field.remove();
+    });
   });
 
   describe("formatting chips", () => {
