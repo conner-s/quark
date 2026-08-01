@@ -297,4 +297,137 @@ describe("Input", () => {
       expect(bar.classList.contains("input-bar--no-vim")).toBe(false);
     });
   });
+
+  // The context menu's formatting chips render lit when the marker is already
+  // applied and strip it on the next press, so wrapping has to be a toggle and
+  // the "is it applied?" test has to work from either side of the selection.
+  describe("formatting toggles", () => {
+    const field = (): HTMLTextAreaElement =>
+      input.getElement().querySelector<HTMLTextAreaElement>(".input-bar__field")!;
+
+    const select = (text: string, start: number, end: number): void => {
+      input.setValue(text);
+      field().setSelectionRange(start, end);
+    };
+
+    it("wraps a selection that isn't wrapped yet", () => {
+      select("the branch is green", 4, 10);
+      input.toggleWrap("**");
+
+      expect(input.getValue()).toBe("the **branch** is green");
+      expect(input.getSelectedText()).toBe("branch");
+    });
+
+    it("unwraps when the markers surround the selection", () => {
+      select("the **branch** is green", 6, 12);
+      expect(input.isSelectionWrapped("**")).toBe(true);
+
+      input.toggleWrap("**");
+      expect(input.getValue()).toBe("the branch is green");
+      expect(input.getSelectedText()).toBe("branch");
+    });
+
+    it("unwraps when the markers sit inside the selection", () => {
+      select("the **branch** is green", 4, 14);
+      expect(input.isSelectionWrapped("**")).toBe(true);
+
+      input.toggleWrap("**");
+      expect(input.getValue()).toBe("the branch is green");
+    });
+
+    it("reports the caret-adjacent markers, not just the selected ones", () => {
+      select("a ||spoiler|| b", 4, 11);
+      expect(input.isSelectionWrapped("||")).toBe(true);
+      expect(input.isSelectionWrapped("~~")).toBe(false);
+    });
+
+    it("inserts an empty pair when nothing is selected", () => {
+      select("hi", 2, 2);
+      input.toggleWrap("`");
+
+      expect(input.getValue()).toBe("hi``");
+    });
+
+    it("replaceSelection drops text at the caret", () => {
+      select("ab", 1, 1);
+      input.replaceSelection("@");
+
+      expect(input.getValue()).toBe("a@b");
+      expect(input.getSelectionRange()).toEqual({ start: 2, end: 2 });
+    });
+  });
+
+  // Backs the context menu's `draft → Undo` entry.
+  describe("undo history", () => {
+    const field = (): HTMLTextAreaElement =>
+      input.getElement().querySelector<HTMLTextAreaElement>(".input-bar__field")!;
+
+    it("starts with nothing to undo", () => {
+      expect(input.canUndo()).toBe(false);
+      expect(input.undo()).toBe(false);
+    });
+
+    it("steps back over a formatting toggle", () => {
+      input.setValue("branch");
+      field().setSelectionRange(0, 6);
+      input.toggleWrap("**");
+      expect(input.getValue()).toBe("**branch**");
+
+      expect(input.canUndo()).toBe(true);
+      expect(input.undo()).toBe(true);
+      expect(input.getValue()).toBe("branch");
+    });
+
+    it("restores the caret along with the text", () => {
+      input.setValue("ab");
+      field().setSelectionRange(1, 1);
+      input.replaceSelection("XY");
+
+      input.undo();
+      expect(input.getValue()).toBe("ab");
+      expect(input.getSelectionRange()).toEqual({ start: 1, end: 1 });
+    });
+
+    it("captures native edits from beforeinput", () => {
+      input.setValue("draft");
+      field().dispatchEvent(new Event("beforeinput", { bubbles: true }));
+      field().value = "draft!";
+
+      expect(input.canUndo()).toBe(true);
+      input.undo();
+      expect(input.getValue()).toBe("draft");
+    });
+
+    it("is dropped on reset, so a room switch can't resurrect another draft", () => {
+      input.setValue("branch");
+      field().setSelectionRange(0, 6);
+      input.toggleWrap("**");
+
+      input.resetUndoHistory();
+      expect(input.canUndo()).toBe(false);
+    });
+  });
+
+  describe("right-click", () => {
+    const field = (): HTMLTextAreaElement =>
+      input.getElement().querySelector<HTMLTextAreaElement>(".input-bar__field")!;
+
+    it("fires the handler with the pointer position and suppresses the native menu", () => {
+      const onMenu = vi.fn();
+      input.onContextMenu(onMenu);
+
+      const evt = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 12, clientY: 34 });
+      field().dispatchEvent(evt);
+
+      expect(onMenu).toHaveBeenCalledWith(12, 34);
+      expect(evt.defaultPrevented).toBe(true);
+    });
+
+    it("leaves the native menu alone when no handler is registered", () => {
+      const evt = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+      field().dispatchEvent(evt);
+
+      expect(evt.defaultPrevented).toBe(false);
+    });
+  });
 });
