@@ -1,0 +1,243 @@
+/* ── Context Menu ───────────────────────────────────────────────────────────── */
+
+/* Squared off, not rounded: the menu reads as menu chrome, not as a chat item.
+ * The edge stays --border-color rather than the compose box's accent-tinted
+ * one so there is no visual rhyme with the thing that was right-clicked. */
+.context-menu {
+  position: fixed;
+  z-index: 10000;
+  background: var(--bg);
+  border: var(--border-width) solid var(--border-color);
+  min-width: 264px;
+  max-width: 380px;
+  /* Header and section strips are full-bleed, so the shell carries no padding. */
+  padding: 0;
+  outline: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-color);
+  /* The compose menu is long; never let it run off the viewport. */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}
+
+/* Header bar — same shape as .settings-dialog's title strip. */
+.context-menu__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 12px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  background: var(--surface-subtle);
+  user-select: none;
+}
+
+.context-menu__title {
+  color: var(--accent-primary);
+  font-size: calc(var(--font-size) - 1px);
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-menu__esc {
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+/* Section header — the grouped replacement for a bare separator. */
+.context-menu__section {
+  padding: 4px 10px 2px;
+  background: var(--surface-dim);
+  border-top: var(--border-width) solid var(--border-color);
+  border-bottom: var(--border-width) solid var(--border-color);
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+/* The header bar already draws that hairline. */
+.context-menu__header + .context-menu__section {
+  border-top: none;
+}
+
+/* Formatting toggles — squared and stretched to fill the menu width rather
+ * than floating as pills. Equal-width flex children rather than a grid whose
+ * track count comes from a custom property: `repeat(var(…), 1fr)` needs
+ * var() substitution inside repeat(), which WebKitGTK has historically not
+ * handled, and this renders identically for any number of chips. */
+.context-menu__chips {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px;
+}
+
+.context-menu__chip {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 26px;
+  padding: 0;
+  background: var(--bg);
+  border: var(--border-width) solid var(--reaction-border);
+  border-radius: 0;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) - 1px);
+  line-height: 1;
+  cursor: pointer;
+  outline: none;
+}
+
+.context-menu__chip--accent {
+  color: var(--accent-secondary);
+}
+
+/* The marker is already applied to the selection. */
+.context-menu__chip--active {
+  background: var(--reaction-own-bg);
+  border-color: var(--accent-primary);
+}
+
+.context-menu__chip:hover,
+.context-menu__chip--focus,
+.context-menu__chip:focus {
+  border-color: var(--accent-primary);
+}
+
+.context-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 14px;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  gap: 24px;
+  color: var(--fg);
+  font-size: var(--font-size);
+}
+
+.context-menu__item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --accent / --surface were never real tokens, so the highlighted row had no
+ * background at all. The menu's own palette is accent-primary on --bg. */
+.context-menu__item--active:not(.context-menu__item--disabled),
+.context-menu__item:focus:not(.context-menu__item--disabled) {
+  background: var(--accent-primary);
+  color: var(--bg);
+}
+
+.context-menu__item--danger {
+  color: var(--accent-error);
+}
+
+.context-menu__item--danger.context-menu__item--active,
+.context-menu__item--danger:focus {
+  background: var(--accent-error);
+  color: var(--bg);
+}
+
+/* Shown rather than omitted so the row's absence never reads as a missing
+ * feature — e.g. Edit/Delete on someone else's message. */
+.context-menu__item--disabled {
+  color: var(--msg-system);
+  cursor: not-allowed;
+}
+
+.context-menu__item-hint {
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  flex-shrink: 0;
+}
+
+.context-menu__item--disabled .context-menu__item-hint {
+  color: var(--msg-timestamp);
+}
+
+.context-menu__item--active:not(.context-menu__item--disabled) .context-menu__item-hint,
+.context-menu__item:focus:not(.context-menu__item--disabled) .context-menu__item-hint {
+  color: var(--bg);
+  opacity: 0.7;
+}
+
+.context-menu__separator {
+  height: var(--border-width);
+  background: var(--border-color);
+  margin: 3px 0;
+}
+
+/* Long-press context menu (#26): on touch, the floating context menu is
+ * useless — taps from the user's finger usually land on top of it because
+ * the menu opens at the long-press point. Redock as a bottom sheet with
+ * full-width rows and bigger tap targets so react / reply / thread are
+ * obvious affordances. The base .context-menu styles still apply on
+ * desktop — this overrides only when `.context-menu--mobile` is added
+ * from ContextMenu.ts:show().
+ */
+.context-menu--mobile {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  top: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  border-radius: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  border-top: var(--border-width) solid var(--accent-primary) !important;
+  padding: 0 !important;
+  padding-bottom: max(4px, env(safe-area-inset-bottom)) !important;
+  max-height: 75vh !important;
+  animation: context-menu-sheet-in 140ms ease;
+}
+
+.context-menu--mobile .context-menu__item {
+  padding: 14px 18px;
+  font-size: calc(var(--font-size) + 1px);
+  min-height: 44px;
+}
+
+.context-menu--mobile .context-menu__item-hint {
+  /* Keybinding hints are noise on touch — hide them. */
+  display: none;
+}
+
+/* The header doubles as the sheet's grab handle, so it stays put while the
+ * (potentially long) body scrolls under it. */
+.context-menu--mobile .context-menu__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 18px;
+  font-size: calc(var(--font-size) + 1px);
+}
+
+.context-menu--mobile .context-menu__section {
+  padding: 8px 18px 6px;
+}
+
+.context-menu--mobile .context-menu__chips {
+  gap: 6px;
+  padding: 10px 14px;
+}
+
+.context-menu--mobile .context-menu__chip {
+  height: 44px;
+  font-size: calc(var(--font-size) + 1px);
+}
+
+.context-menu--mobile .context-menu__separator {
+  margin: 4px 0;
+}
