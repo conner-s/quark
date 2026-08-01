@@ -132,8 +132,12 @@ export class ContextMenu implements Modal {
     this._rows = [];
     this._activeRow = -1;
     this._activeChip = 0;
+    // Re-showing while already open (right-clicking a second message) would
+    // otherwise record the menu itself as the thing to focus on dismiss.
     const active = document.activeElement;
-    this._restoreFocusEl = active instanceof HTMLElement ? active : null;
+    if (active instanceof HTMLElement && !this._el.contains(active)) {
+      this._restoreFocusEl = active;
+    }
 
     if (opts.title) this._el.appendChild(this._buildHeader(opts.title));
 
