@@ -28,7 +28,13 @@ import { modalManager, type Modal } from "./ModalManager.js";
 
 export interface ContextMenuItem {
   label: string;
-  hint?: string;        // optional keyboard shortcut hint shown on the right
+  /**
+   * Keyboard shortcut shown in the right-hand column — and, when it names an
+   * actual keystroke, the accelerator that fires this row while the menu is
+   * open. See {@link parseAccel} for the forms that are live: `E`, `>`,
+   * `Ctrl+X`, `⇧Ctrl+V`, `dd`. Prose hints (`:debug`, `↗`) stay documentation.
+   */
+  hint?: string;
   /** Rendered greyed out and inert (e.g. Edit/Delete on someone else's message). */
   disabled?: boolean;
   /** Destructive action — rendered in `--accent-error` (e.g. Discard draft). */
@@ -82,11 +88,95 @@ export interface ContextMenuOptions {
 
 /** A keyboard-navigable row: either one item, or the whole chip row. */
 type NavRow =
-  | { kind: "item"; el: HTMLElement; item: ContextMenuItem }
+  | { kind: "item"; el: HTMLElement; item: ContextMenuItem; accel: Accel | null }
   | { kind: "chips"; els: HTMLButtonElement[]; chips: ContextMenuChip[] };
 
 function chipIsActive(chip: ContextMenuChip): boolean {
   return typeof chip.active === "function" ? chip.active() : !!chip.active;
+}
+
+// ── Accelerators ──────────────────────────────────────────────────────────────
+//
+// The hint column advertises the global shortcut for each row. But the menu
+// takes focus when it opens and the global keydown guard swallows every key
+// while a modal is registered, so those hints used to be inert the moment you
+// could read them — right-click a message, press `E`, nothing happens. The menu
+// therefore honours its own hints: whatever the right-hand column claims is
+// what the keystroke does while the menu is up.
+
+/** One hint parsed into the keystroke it names. */
+interface Accel {
+  /** Single-key chord (`E`, `>`, the `x` of `Ctrl+X`), or null for a sequence. */
+  key: string | null;
+  /** Vim-style literal sequence (`dd`), or null for a chord. */
+  seq: string | null;
+  ctrl: boolean;
+  shift: boolean;
+  alt: boolean;
+  meta: boolean;
+}
+
+type ModifierName = "ctrl" | "shift" | "alt" | "meta";
+
+/** Every spelling of a modifier the hints use, glyphs included. */
+const MODIFIERS: Record<string, ModifierName> = {
+  "⌃": "ctrl", ctrl: "ctrl", control: "ctrl",
+  "⇧": "shift", shift: "shift",
+  "⌥": "alt", alt: "alt", opt: "alt", option: "alt",
+  "⌘": "meta", cmd: "meta", meta: "meta", super: "meta",
+};
+
+/**
+ * Parse a hint into the keystroke it names, or null when it names none.
+ *
+ * Live forms: a single character (`E`, `r`, `>`, `@` — case-sensitive, so a
+ * capital means the shifted key), a modifier chord with either separator
+ * (`Ctrl+X`, `Ctrl-e`, `⇧Ctrl+V`), and a bare run of letters as a vim-style
+ * sequence (`dd`). Everything else — a `:command`, a glyph like `↗` — is a
+ * pointer at some other affordance and gets no accelerator.
+ */
+export function parseAccel(hint: string): Accel | null {
+  let rest = hint.trim();
+  if (!rest) return null;
+  const mods = { ctrl: false, shift: false, alt: false, meta: false };
+
+  // Peel leading modifiers. Glyphs need no separator (`⇧Ctrl+V`); spelled-out
+  // names are only modifiers when a `+` or `-` follows, which keeps `dd` whole.
+  for (;;) {
+    const glyph = MODIFIERS[rest[0]];
+    if (glyph) {
+      mods[glyph] = true;
+      rest = rest.slice(1).replace(/^[+-]/, "");
+      continue;
+    }
+    const word = /^([A-Za-z]+)[+-]/.exec(rest);
+    const named = word ? MODIFIERS[word[1].toLowerCase()] : undefined;
+    if (word && named) {
+      mods[named] = true;
+      rest = rest.slice(word[0].length);
+      continue;
+    }
+    break;
+  }
+
+  if (rest.length === 1) return { key: rest, seq: null, ...mods };
+  const bare = !mods.ctrl && !mods.shift && !mods.alt && !mods.meta;
+  if (bare && /^[a-z]{2,}$/.test(rest)) return { key: null, seq: rest, ...mods };
+  return null;
+}
+
+/** Whether a keydown is the chord this accelerator names. */
+function matchesChord(accel: Accel, e: KeyboardEvent): boolean {
+  if (accel.key === null) return false;
+  if (e.ctrlKey !== accel.ctrl || e.altKey !== accel.alt || e.metaKey !== accel.meta) return false;
+  // A bare single character is matched exactly: `event.key` already carries the
+  // shift state (`E`, `>`), so no separate shift check is right — or possible,
+  // since `>` needs Shift on a US layout but not everywhere. With a modifier
+  // held the key is reported unshifted (`Ctrl+X` → `x`), so fold case and test
+  // the shift flag on its own.
+  const plain = !accel.ctrl && !accel.alt && !accel.meta && !accel.shift;
+  if (plain) return e.key === accel.key;
+  return e.key.toLowerCase() === accel.key.toLowerCase() && e.shiftKey === accel.shift;
 }
 
 export class ContextMenu implements Modal {
@@ -95,6 +185,8 @@ export class ContextMenu implements Modal {
   private _rows: NavRow[] = [];
   private _activeRow = -1;
   private _activeChip = 0;
+  /** Characters typed so far towards a multi-key hint (`d` of `dd`). */
+  private _pendingSeq = "";
   /** Element focused when the menu opened, refocused on dismiss. */
   private _restoreFocusEl: HTMLElement | null = null;
 
@@ -132,6 +224,7 @@ export class ContextMenu implements Modal {
     this._rows = [];
     this._activeRow = -1;
     this._activeChip = 0;
+    this._pendingSeq = "";
     // Re-showing while already open (right-clicking a second message) would
     // otherwise record the menu itself as the thing to focus on dismiss.
     const active = document.activeElement;
@@ -212,6 +305,7 @@ export class ContextMenu implements Modal {
     this._rows = [];
     this._activeRow = -1;
     this._activeChip = 0;
+    this._pendingSeq = "";
     modalManager.remove(this);
     document.removeEventListener("mousedown", this._outsideHandler, { capture: true });
     document.removeEventListener("touchstart", this._outsideHandler, { capture: true });
@@ -285,7 +379,7 @@ export class ContextMenu implements Modal {
       });
     }
 
-    this._rows.push({ kind: "item", el: row, item });
+    this._rows.push({ kind: "item", el: row, item, accel: item.hint ? parseAccel(item.hint) : null });
     return row;
   }
 
@@ -404,9 +498,66 @@ export class ContextMenu implements Modal {
       this._activateChip(this._activeRow, this._activeChip);
       return;
     }
-    if (row.item.disabled) return;
+    this._activateItem(this._activeRow);
+  }
+
+  /** Run one item row's action and dismiss. Disabled rows are inert — the same
+   *  no-op a click on a greyed row gets. */
+  private _activateItem(rowIdx: number): void {
+    const row = this._rows[rowIdx];
+    if (row?.kind !== "item" || row.item.disabled) return;
     this.hide();
     row.item.action();
+  }
+
+  // ── Accelerators ────────────────────────────────────────────────────────────
+
+  /** First item row whose parsed hint satisfies `pred`, or -1. Disabled rows are
+   *  included so their key is still claimed rather than falling through to be
+   *  swallowed by the global guard. */
+  private _findAccelRow(pred: (accel: Accel) => boolean): number {
+    return this._rows.findIndex((r) => r.kind === "item" && r.accel !== null && pred(r.accel));
+  }
+
+  /**
+   * Honour the hint column. Returns true when a hint claimed the keystroke —
+   * including a bare prefix of a multi-key hint, which is claimed while the menu
+   * waits for the rest of the sequence.
+   */
+  private _tryAccel(e: KeyboardEvent): boolean {
+    const ch =
+      e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey ? e.key.toLowerCase() : null;
+
+    // A sequence already under way owns the next character.
+    if (this._pendingSeq && ch) {
+      const candidate = this._pendingSeq + ch;
+      const exact = this._findAccelRow((a) => a.seq === candidate);
+      if (exact >= 0) {
+        this._pendingSeq = "";
+        this._activateItem(exact);
+        return true;
+      }
+      if (this._findAccelRow((a) => !!a.seq?.startsWith(candidate)) >= 0) {
+        this._pendingSeq = candidate;
+        return true;
+      }
+      this._pendingSeq = "";
+    }
+
+    const chord = this._findAccelRow((a) => matchesChord(a, e));
+    if (chord >= 0) {
+      this._pendingSeq = "";
+      this._activateItem(chord);
+      return true;
+    }
+
+    if (ch && this._findAccelRow((a) => !!a.seq?.startsWith(ch)) >= 0) {
+      this._pendingSeq = ch;
+      return true;
+    }
+
+    this._pendingSeq = "";
+    return false;
   }
 
   /**
@@ -428,28 +579,39 @@ export class ContextMenu implements Modal {
       this.hide();
       return;
     }
+    // Navigation outranks the hint column: `j`/`k`/`h`/`l` move, and a half-typed
+    // sequence is abandoned the moment the user navigates instead.
     if (e.key === "ArrowDown" || (e.key === "j" && !e.ctrlKey)) {
       this._consume(e);
+      this._pendingSeq = "";
       this._moveRow(1);
       return;
     }
     if (e.key === "ArrowUp" || (e.key === "k" && !e.ctrlKey)) {
       this._consume(e);
+      this._pendingSeq = "";
       this._moveRow(-1);
       return;
     }
     if (e.key === "ArrowRight" || (e.key === "l" && !e.ctrlKey)) {
+      this._pendingSeq = "";
       if (this._moveChip(1)) this._consume(e);
       return;
     }
     if (e.key === "ArrowLeft" || (e.key === "h" && !e.ctrlKey)) {
+      this._pendingSeq = "";
       if (this._moveChip(-1)) this._consume(e);
       return;
     }
     if (e.key === "Enter" || e.key === " ") {
       if (this._activeRow < 0) return;
       this._consume(e);
+      this._pendingSeq = "";
       this._activate();
+      return;
     }
+    // Last: whatever the hint column advertises. Unclaimed keys fall through to
+    // the global guard, which swallows them while any modal is open.
+    if (this._tryAccel(e)) this._consume(e);
   }
 }
