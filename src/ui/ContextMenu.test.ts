@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { ContextMenu, type ContextMenuEntry } from "./ContextMenu.js";
+import { ContextMenu, parseAccel, type ContextMenuEntry } from "./ContextMenu.js";
 import { modalManager } from "./ModalManager.js";
 
 // The converged context-menu design: a header bar, section-header strips in
@@ -14,8 +14,8 @@ describe("ContextMenu", () => {
     Array.from(el().querySelectorAll<HTMLElement>(".context-menu__item"));
   const chips = (): HTMLElement[] =>
     Array.from(el().querySelectorAll<HTMLElement>(".context-menu__chip"));
-  const key = (k: string): void => {
-    el().dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+  const key = (k: string, mods: KeyboardEventInit = {}): void => {
+    el().dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, ...mods }));
   };
 
   beforeEach(() => {
@@ -195,6 +195,143 @@ describe("ContextMenu", () => {
 
       expect(document.activeElement).toBe(field);
       field.remove();
+    });
+  });
+
+  // The hint column advertises each row's shortcut, but the menu takes focus
+  // when it opens and the global keydown guard swallows every key while a modal
+  // is registered — so the menu has to honour its own hints. Right-click a
+  // message, press `E`, get the editor.
+  describe("hint accelerators", () => {
+    it("fires the row whose hint is the pressed key, shift included", () => {
+      const onEdit = vi.fn();
+      menu.show(0, 0, [
+        { label: "React", hint: "e", action: vi.fn() },
+        { label: "Edit", hint: "E", action: onEdit },
+      ]);
+
+      key("E", { shiftKey: true });
+
+      expect(onEdit).toHaveBeenCalledTimes(1);
+      expect(menu.isVisible()).toBe(false);
+    });
+
+    it("distinguishes the unshifted hint from the shifted one", () => {
+      const onReact = vi.fn();
+      const onEdit = vi.fn();
+      menu.show(0, 0, [
+        { label: "React", hint: "e", action: onReact },
+        { label: "Edit", hint: "E", action: onEdit },
+      ]);
+
+      key("e");
+
+      expect(onReact).toHaveBeenCalledTimes(1);
+      expect(onEdit).not.toHaveBeenCalled();
+    });
+
+    it("fires modifier chords, either separator", () => {
+      const onCut = vi.fn();
+      const onEmoji = vi.fn();
+      menu.show(0, 0, [
+        { label: "Cut", hint: "Ctrl+X", action: onCut },
+        { label: "Emoji…", hint: "Ctrl-e", action: onEmoji },
+      ]);
+      key("x", { ctrlKey: true });
+      expect(onCut).toHaveBeenCalledTimes(1);
+
+      menu.show(0, 0, [
+        { label: "Cut", hint: "Ctrl+X", action: onCut },
+        { label: "Emoji…", hint: "Ctrl-e", action: onEmoji },
+      ]);
+      key("e", { ctrlKey: true });
+      expect(onEmoji).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps ⇧Ctrl+V distinct from Ctrl+V", () => {
+      const onPaste = vi.fn();
+      const onPastePlain = vi.fn();
+      const entries: ContextMenuEntry[] = [
+        { label: "Paste", hint: "Ctrl+V", action: onPaste },
+        { label: "Paste as plain text", hint: "⇧Ctrl+V", action: onPastePlain },
+      ];
+
+      menu.show(0, 0, entries);
+      key("v", { ctrlKey: true });
+      expect(onPaste).toHaveBeenCalledTimes(1);
+      expect(onPastePlain).not.toHaveBeenCalled();
+
+      menu.show(0, 0, entries);
+      key("V", { ctrlKey: true, shiftKey: true });
+      expect(onPastePlain).toHaveBeenCalledTimes(1);
+      expect(onPaste).toHaveBeenCalledTimes(1);
+    });
+
+    it("waits for the whole of a multi-key hint", () => {
+      const onDelete = vi.fn();
+      menu.show(0, 0, [{ label: "Delete", hint: "dd", action: onDelete }]);
+
+      key("d");
+      expect(onDelete).not.toHaveBeenCalled();
+      expect(menu.isVisible()).toBe(true);
+
+      key("d");
+      expect(onDelete).toHaveBeenCalledTimes(1);
+    });
+
+    it("abandons a half-typed sequence when the user navigates instead", () => {
+      const onDelete = vi.fn();
+      menu.show(0, 0, [{ label: "Delete", hint: "dd", action: onDelete }]);
+
+      key("d");
+      key("ArrowDown");
+      key("d");
+
+      expect(onDelete).not.toHaveBeenCalled();
+    });
+
+    it("claims a disabled row's key rather than leaking it", () => {
+      const global = vi.fn();
+      const onEdit = vi.fn();
+      document.addEventListener("keydown", global);
+      menu.show(0, 0, [{ label: "Edit", hint: "E", disabled: true, action: onEdit }]);
+
+      key("E", { shiftKey: true });
+
+      expect(onEdit).not.toHaveBeenCalled();
+      expect(menu.isVisible()).toBe(true);
+      expect(global).not.toHaveBeenCalled();
+      document.removeEventListener("keydown", global);
+    });
+
+    it("leaves keys no hint claims to the global handler", () => {
+      const global = vi.fn();
+      document.addEventListener("keydown", global);
+      menu.show(0, 0, [{ label: "Reply", hint: "r", action: vi.fn() }]);
+
+      key("z");
+
+      expect(global).toHaveBeenCalledTimes(1);
+      document.removeEventListener("keydown", global);
+    });
+
+    describe("parseAccel", () => {
+      it("reads the live forms", () => {
+        expect(parseAccel("E")).toMatchObject({ key: "E", ctrl: false, shift: false });
+        expect(parseAccel(">")).toMatchObject({ key: ">" });
+        expect(parseAccel("Ctrl+X")).toMatchObject({ key: "X", ctrl: true, shift: false });
+        expect(parseAccel("Ctrl-e")).toMatchObject({ key: "e", ctrl: true });
+        expect(parseAccel("⇧Ctrl+V")).toMatchObject({ key: "V", ctrl: true, shift: true });
+        expect(parseAccel("dd")).toMatchObject({ key: null, seq: "dd" });
+      });
+
+      // A hint may point at a different affordance entirely — the `:` command
+      // line, or an arrow meaning "leaves the app". Those are documentation.
+      it("returns null for hints that name no keystroke", () => {
+        expect(parseAccel(":debug")).toBeNull();
+        expect(parseAccel("")).toBeNull();
+        expect(parseAccel("Ctrl")).toBeNull();
+      });
     });
   });
 
