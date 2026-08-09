@@ -582,6 +582,8 @@ Groups carry a **section header** rather than a bare separator. A row that doesn
 
 Keys: `j`/`k` (or ↑/↓) move between rows, `h`/`l` (or ←/→) move within the chip row, `Enter`/`Space` activates, `Esc` dismisses and returns the caret to wherever it was. Dismissing never runs anything.
 
+**The hint column is live.** An open menu holds focus and swallows the app's global keys, so a row's shortcut is honoured by the menu itself: right-click a message and press `E` and you get the editor, the same as pressing `E` with the menu closed. A hint fires when it names an actual keystroke — a single character (`E`, `r`, `>`, `@`, matched case-sensitively so a capital means the shifted key), a modifier chord (`Ctrl+X`, `Ctrl-e`, `⇧Ctrl+V`), or a vim-style run of letters (`dd`, which waits for the whole sequence and abandons a half-typed one if you navigate instead). A hint that points at some *other* affordance — `:debug` at the command line, `↗` at the system browser — stays documentation. A greyed row still claims its key, so `E` on someone else's message does nothing rather than leaking through.
+
 **Compose menu** — right-click inside the compose box. The only place formatting appears: you are editing text you own.
 
 | Group | Entries |
@@ -655,6 +657,7 @@ Shows the running app version, a "Quark on GitHub" link (opens in the system bro
 - [x] Reactions (m.annotation) — Unicode + custom emoji
 - [x] Message editing & redaction
 - [x] Read receipts (public m.read + private m.read.private) — displayed Element-style as shifting, overlapping avatars at the bottom-right of each other user's last-read message (seeded on room open via `get_room_receipts`, updated live). Settings toggles: "send my read receipts" (private-only when off) and "show others' read receipts".
+  - Placement is derived, not taken literally from the receipt: an avatar sits on the newest rendered message at or before the receipt's timestamp (receipts often point at reactions, edits or redactions, which aren't in the timeline), and then advances to the reader's **own** newest message when that is newer — posting implies having read up to what you posted, and homeservers do not bundle an `m.receipt` with the message. Every path that puts message DOM on screen re-derives placement, so a live message moves its sender's avatar down immediately.
 - [x] Typing indicators
 - [x] Presence (when homeserver enables it)
 - [x] Authenticated media (MSC3916)
