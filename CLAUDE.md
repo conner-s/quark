@@ -2,9 +2,29 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Fork layout
+
+This checkout is a **fork** of [MCPlummet/quark](https://github.com/MCPlummet/quark). Remotes: `origin` is `conner-s/quark`; `upstream` is `MCPlummet/quark`, fetch-only — its push URL is set to `DISABLED` so a stray push fails loudly.
+
+| Branch | Role |
+| --- | --- |
+| `main` | Read-only mirror of `upstream/main`, zero unique commits. **Never commit to it.** |
+| `fix/*`, `feat/*` | One upstreamable change each, branched off `upstream/main`. PRs come from these. |
+| `integration` | What you build and run. Every upstream-bound branch stacked in order, then the carried patches on top. |
+
+Rules that matter when making changes:
+
+- **Branch off `upstream/main`, never off `integration`** — `git fetch upstream && git switch -c fix/<topic> upstream/main`. A branch cut from `integration` silently inherits carried patches and can't be upstreamed.
+- **Never let a carried patch onto a `fix/*`/`feat/*` branch.** Carried means `design/`, `.design-sync/`, `scripts/{extract-ds-slice,validate-ds-bundle}.mjs`, the `0.18.0` version bump, `PATCHES.md`, `CONTRIBUTING-FORK.md`, and this section. Check with `git diff --stat upstream/main...HEAD` before opening a PR.
+- **Fold finished work into `integration` with `git cherry-pick -x`** (the `-x` provenance line is the only durable link back once branches get rebased), keeping upstream-bound commits *below* the carried patches.
+- **`--force-with-lease`, never bare `--force`.** `rerere` is on, so a conflict resolved once replays on later rebases.
+- Upstream squash-merges and has no CLA or DCO. It does ask each PR to bump the version — add that on the branch rather than cherry-picking the carried bump.
+
+[PATCHES.md](PATCHES.md) lists every carried patch with the reason it isn't upstreamable, plus the boundary SHA of each upstream-bound block. [CONTRIBUTING-FORK.md](CONTRIBUTING-FORK.md) has the sync loop, the pre-PR checks, the macOS build notes, and the recovery tags. Read both before rebasing or opening a PR.
+
 ## Instructions
 `DESIGN.md` is the spec/reference (architecture, UI, Matrix feature support, `quarkrc` + theming syntax, config files). Keep it current when behaviour or config changes. Track work — bugs, features, release QA — in GitHub issues, not in repo files.
-When starting on a feature, always create a new git branch if currently on main unless otherwise instructed.
+When starting on a feature, always create a new git branch — off `upstream/main`, per the fork layout above — unless otherwise instructed. Never commit to `main` or directly to `integration`.
 Commit changes as you go when on a feature branch.
 
 Do not assume that existing patterns should always be extended. If something is scaling up and needs more
@@ -22,6 +42,8 @@ Rules:
 - **Bug fix** (corrects existing behaviour without adding features) → bump **patch** version (e.g. `0.1.0` → `0.1.1`)
 - If a branch mixes features and fixes, bump to the highest level any commit warrants (one feature ⇒ minor).
 
+**On this fork:** `integration` carries its own `0.18.0` bump while upstream is on `0.17.x`, so the version files are *expected* to differ from `upstream/main`. That commit conflicts on nearly every sync — keep our number. A `fix/*`/`feat/*` branch that needs a bump gets its own, cut against upstream's line; never cherry-pick the carried one.
+
 ## Commands
 
 ```bash
@@ -35,7 +57,7 @@ pnpm tauri build  # Release build (.app / .msi / .deb)
 
 Run a single test file: `pnpm test src/ui/Input.test.ts`
 
-Rust backend: `cargo build` / `cargo test` from `src-tauri/`.
+Rust backend: `cargo build` / `cargo test` from `src-tauri/`. **On macOS run these inside `nix develop`** — a bare shell picks up nix's GCC instead of clang and the build fails on `-liconv` and the Objective-C crates. See [CONTRIBUTING-FORK.md](CONTRIBUTING-FORK.md#building-on-macos).
 
 **Android** needs a second dev shell — the SDK is a ~2 GB unfree download the
 desktop shell has no use for:
