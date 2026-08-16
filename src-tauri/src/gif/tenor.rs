@@ -21,7 +21,9 @@ impl TenorClient {
 #[derive(Debug, Deserialize)]
 struct TenorResponse {
     results: Vec<TenorGif>,
+    /// Pagination cursor — unread until the picker paginates; kept to document the shape.
     #[serde(default)]
+    #[allow(dead_code)]
     next: String,
 }
 
@@ -36,7 +38,9 @@ struct TenorGif {
 struct TenorMediaFormat {
     url: String,
     dims: Vec<u32>,
+    /// Byte size — unread; kept to document the shape.
     #[serde(default)]
+    #[allow(dead_code)]
     size: u64,
 }
 
@@ -47,21 +51,7 @@ impl GifProvider for TenorClient {
         limit: u32,
         rating: &str,
     ) -> Result<Vec<GifResult>, String> {
-        let content_filter = match rating {
-            "g" => "high",
-            "pg" => "medium",
-            "pg-13" => "low",
-            "r" => "off",
-            _ => "medium",
-        };
-
-        let url = format!(
-            "https://tenor.googleapis.com/v2/search?q={}&key={}&limit={}&contentfilter={}&media_filter=gif,tinygif",
-            gif::encode_query(query),
-            self.api_key,
-            limit,
-            content_filter,
-        );
+        let url = build_search_url(query, &self.api_key, limit, rating);
 
         let response = gif::fetch_response(&self.http, "Tenor", &url).await?;
 
