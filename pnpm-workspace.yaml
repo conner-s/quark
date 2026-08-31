@@ -1,0 +1,22 @@
+# pnpm settings. As of pnpm 10 these live here, NOT in the "pnpm" field of
+# package.json — that field is no longer read ("[WARN] The 'pnpm' field in
+# package.json is no longer read by pnpm"), so settings left there are silently
+# inert. See https://pnpm.io/settings.
+#
+# There is no `packages:` key on purpose: this is a single-package repo, and
+# the file exists solely to carry the settings below.
+#
+# NOTE: nix/package.nix narrows fetchPnpmDeps' src to the manifest + lockfile +
+# THIS file. If you add a setting here that affects resolution, it takes effect
+# in the sandboxed `nix build` too — and changes pnpmDeps.hash.
+
+# esbuild ships a platform binary via a postinstall script. pnpm 10 blocks
+# lifecycle scripts by default, so it has to be allowlisted or vite/vitest get
+# an unusable esbuild.
+onlyBuiltDependencies:
+  - esbuild
+
+# Minimum age, IN MINUTES, before a freshly published version is installable —
+# 10080 = 7 days. A supply-chain guard: it keeps a compromised release that gets
+# yanked within the first week from ever entering the lockfile.
+minimumReleaseAge: 10080
