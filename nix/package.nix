@@ -60,6 +60,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
       ../index.html
       ../package.json
       ../pnpm-lock.yaml
+      ../pnpm-workspace.yaml
       ../tsconfig.json
       ../vite.config.ts
       ../src
@@ -73,13 +74,17 @@ rustPlatform.buildRustPackage (finalAttrs: {
 
   pnpmDeps = fetchPnpmDeps {
     inherit (finalAttrs) pname version;
-    # The fetcher only reads the manifest + lockfile; narrowing its src keeps
-    # unrelated source changes from re-running the (networked) fetch.
+    # The fetcher only reads the manifest + lockfile + settings; narrowing its
+    # src keeps unrelated source changes from re-running the (networked) fetch.
+    # pnpm-workspace.yaml is REQUIRED here: pnpm 10 reads onlyBuiltDependencies
+    # from it, and without it in the fileset the sandboxed install silently
+    # skips esbuild postinstall and vite/vitest get an unusable esbuild.
     src = lib.fileset.toSource {
       root = ../.;
       fileset = lib.fileset.unions [
         ../package.json
         ../pnpm-lock.yaml
+        ../pnpm-workspace.yaml
       ];
     };
     pnpm = pnpm_10;
