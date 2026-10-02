@@ -5,6 +5,13 @@ import { keymapManager, eventChord } from "../vim/keybindings.js";
 import { registerDefaultBindings } from "./registry.js";
 import { currentAvailability } from "./availability.js";
 import { buildMenu } from "./context_menus.js";
+import {
+  FORMAT_MARKERS,
+  asQuote,
+  composeMenuHandlers,
+  copyToClipboard,
+  searchWebRow,
+} from "./compose_menu.js";
 import { ComposeNormalEditor } from "../vim/compose_normal.js";
 import { modalManager } from "../ui/ModalManager.js";
 import type { AppComponents } from "../ui/App.js";
@@ -22,6 +29,7 @@ import {
   openSpaceSettings,
   openDebugViewer,
   openDebugViewerForEvent,
+  resolveDisplayName,
   openPinnedMessages,
   openSearch,
   openRoomDirectory,
@@ -299,20 +307,13 @@ export function dispatchAction(action: string, components: AppComponents): void 
 
     // Markdown wrappers. Previously a hardcoded chord ladder in
     // handleInsertKeydown; they are actions now so a quarkrc can move them.
+    // They toggle rather than always wrap, which keeps a chord in step with the
+    // compose menu's chips: those render lit when the marker is already on.
     case "format-bold":
-      input.wrapSelection("**");
-      break;
-
     case "format-italic":
-      input.wrapSelection("*");
-      break;
-
     case "format-underline":
-      input.wrapSelection("__");
-      break;
-
     case "format-strikethrough":
-      input.wrapSelection("~~");
+      input.toggleWrap(FORMAT_MARKERS[action].marker);
       break;
 
     case "open-room-info":
@@ -1049,7 +1050,7 @@ export function setupKeyboard(components: AppComponents): void {
   });
 
   // Right-click / long-press context menu for messages
-  timeline.onContextMenu((eventId, x, y) => {
+  timeline.onContextMenu((eventId, x, y, selection) => {
     const events = AppState.get("currentTimeline");
     const evt = events.find((ev) => ev.event_id === eventId);
     const ownUserId = AppState.get("ownUserId");
@@ -1063,6 +1064,7 @@ export function setupKeyboard(components: AppComponents): void {
       selectedMessageIsOwn: isOwn,
     });
 
+    const sender = evt ? resolveDisplayName(evt.sender) : "";
     contextMenu.show(x, y, buildMenu("message", ctx, {
       "reply": () => {
         if (!evt) return;
@@ -1071,9 +1073,8 @@ export function setupKeyboard(components: AppComponents): void {
       },
       "react": () => openQuickReactPicker(eventId),
       "open-thread": () => void openThread(eventId),
-      "copy-message": () => {
-        void navigator.clipboard.writeText(evt?.body ?? "");
-      },
+      "copy-message": () => copyToClipboard(evt?.body ?? "", "Copied message"),
+      "copy-as-quote": () => copyToClipboard(asQuote(evt?.body ?? ""), "Copied as quote"),
       // Mobile only. On desktop you select text by dragging, so the row would
       // be noise; withholding the handler is what keeps it out of the menu.
       "select-message-text": isMobile()
@@ -1081,6 +1082,11 @@ export function setupKeyboard(components: AppComponents): void {
             const bodyEl = timeline.getMessageBodyElementById(eventId);
             if (bodyEl) selectMessageTextForTouch(bodyEl);
           }
+        : undefined,
+      // Selection rows: only when text inside this message is highlighted.
+      "search-web": selection ? searchWebRow(selection) : undefined,
+      "copy-selection": selection
+        ? () => copyToClipboard(selection, "Copied selection")
         : undefined,
       "view-raw-event": () => void openDebugViewerForEvent(eventId),
       "edit": () => {
@@ -1092,7 +1098,16 @@ export function setupKeyboard(components: AppComponents): void {
         input.focus();
       },
       "redact": () => void redactMessage(eventId),
-    }));
+    }), { title: sender ? `message · ${sender}` : "message" });
+  });
+
+  // Right-click inside the compose box — formatting, clipboard, insert, draft.
+  input.onContextMenu((x, y) => {
+    contextMenu.show(
+      x, y,
+      buildMenu("compose", currentAvailability(), composeMenuHandlers(input)),
+      { title: "compose" },
+    );
   });
 
   // Right-click context menu for rooms in the room list
@@ -1119,14 +1134,14 @@ export function setupKeyboard(components: AppComponents): void {
       "mute-room": room?.muted ? undefined : () => toggleMute(roomId, true),
       "unmute-room": room?.muted ? () => toggleMute(roomId, false) : undefined,
       "leave-room-confirm": () => void selectRoom(roomId).then(() => confirmAndLeaveRoom()),
-    }));
+    }), { title: room?.name ? `room · ${room.name}` : "room" });
   });
 
   // Right-click context menu for subspace section labels in the room list
   roomList.onSectionContextMenu((spaceId, x, y) => {
     contextMenu.show(x, y, buildMenu("section", currentAvailability({ spaceId }), {
       "open-space-settings": () => void openSpaceSettings(spaceId),
-    }));
+    }), { title: "space" });
   });
 
   // Mobile top bar's ⋮ menu — the room-scoped chrome the hidden desktop header
@@ -1148,14 +1163,14 @@ export function setupKeyboard(components: AppComponents): void {
             ? { "mute-room": () => toggleMute(id, true) }
             : {};
       })(),
-    }));
+    }), { title: "room" });
   });
 
   // Right-click context menu for spaces in the space strip
   spaceStrip.onContextMenu((spaceId, x, y) => {
     contextMenu.show(x, y, buildMenu("space", currentAvailability({ spaceId }), {
       "open-space-settings": () => void openSpaceSettings(spaceId),
-    }));
+    }), { title: "space" });
   });
 
   // ── User keybindings ──────────────────────────────────────────────────────
