@@ -902,14 +902,27 @@ describe("Input", () => {
       input.onAttachFiles(onAttach);
       const pdf = new File(["%PDF"], "notes.pdf", { type: "application/pdf" });
       input.setClipboardFileReader(async () => ({ files: [pdf], listed: true }));
-      const readText = vi.fn(async () => "file:///home/ada/notes.pdf");
-      stubClipboard({ readText });
+      stubClipboard({ readText: async () => "file:///home/ada/notes.pdf" });
 
       await input.pasteFromClipboard();
 
       expect(onAttach).toHaveBeenCalledWith([pdf]);
-      expect(readText).not.toHaveBeenCalled();
       expect(input.getValue()).toBe("");
+    });
+
+    // WebKit allows a clipboard read only while the click that asked for it is
+    // still the gesture in progress. Waiting for the backend first got both
+    // reads refused, so the row pasted nothing.
+    it("reads the clipboard before waiting on the backend", () => {
+      input.setClipboardFileReader(() => new Promise(() => {}));
+      const read = vi.fn(async () => []);
+      const readText = vi.fn(async () => "");
+      stubClipboard({ read, readText });
+
+      void input.pasteFromClipboard();
+
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(readText).toHaveBeenCalledTimes(1);
     });
 
     it("attaches clipboard images", async () => {
