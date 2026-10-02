@@ -654,14 +654,17 @@ is asserted, not aspired to: `src/app/parity.ts` models how each registry action
 can be reached and `parity.test.ts` fails a build that leaves one unreachable.
 An action that genuinely cannot have a pointer or touch affordance carries a
 `parityExempt` reason on its registry entry — navigation, whose pointer
-equivalent is clicking the thing itself, and the markdown formatting chords,
-which are keyboard-only by the decision recorded in `Input.ts`.
+equivalent is clicking the thing itself; the markdown formatting toggles,
+which have keyboard chords and the desktop compose menu but no touch path by
+the decision recorded in `Input.ts`; and the compose menu's clipboard and draft
+rows, which restate what the text field already gives keyboard and touch users.
 
 The model deliberately distinguishes surfaces that exist in only one modality.
 The desktop room header is `display: none` on mobile and the timeline's hover
 action bar has no hover to respond to, so neither counts as touch reach; the
-mobile top bar and its `⋮` menu do not count as pointer reach. Those four
-asymmetries are what the v0.20.0 audit found features hiding behind.
+mobile top bar and its `⋮` menu do not count as pointer reach; the
+compose-box menu is desktop-only and does not count as touch reach. The first
+four asymmetries are what the v0.20.0 audit found features hiding behind.
 
 Reachability "via the command palette" is tracked separately, because the
 palette lists nearly everything and an assertion that accepted it everywhere
@@ -964,6 +967,55 @@ behind it (a raw room ID for a name, no topic, member count or encryption
 state) and its timeline is requested for a room the account is not in. The user
 asked to message this person and the invite is that same DM, so accepting it is
 what the action means.
+
+### Context Menus
+
+Right-click (desktop) or long-press (touch) opens Quark's own menu in place of the browser's. Every menu wears the same chrome, deliberately: a menu must read as **menu chrome**, not as the thing it was summoned from, so it stays squared off and keeps a plain `--border-color` edge rather than the compose box's accent-tinted one.
+
+```
+┌──────────────────────────────┐
+│ COMPOSE                  esc │  header bar    — --surface-subtle, accent title
+├──────────────────────────────┤
+│ FORMAT                       │  section strip — --surface-dim, hairline both sides
+│ [B][I][U][S][‖][`]           │  chip row      — formatting toggles
+│ CLIPBOARD                    │
+│ Cut                   Ctrl-x │  item row      — label + shortcut hint
+│ Copy                  Ctrl-c │
+└──────────────────────────────┘
+```
+
+**Contents come from the registry.** Each row is an entry's `menus` facet in `src/app/registry.ts`: label, group, order, and the presentation flags below. `buildMenu` (`src/app/context_menus.ts`) sorts rows by (group, order) and draws a **section header** above each group on surfaces that name their groups (`MENU_SECTIONS`: the message and compose menus), a plain rule between groups elsewhere. Callers pass only behaviour, keyed by action id; an id with no handler is dropped, which is how rows that depend on the target — "Mark as read", the selection rows — come and go. A row can be:
+
+- **greyed rather than omitted** (`whenUnavailable: "disable"`) when its absence would read as a missing feature — Edit and Delete on someone else's message. A caller can also grey a row for the moment (Cut with nothing selected).
+- **destructive** (`danger`), drawn in `--accent-error`.
+- **a chip** (`chip: "B"`): rows in the same group collect into one row of toggles, and the label becomes the tooltip. Chips leave the menu open — formatting is applied more than once per visit.
+
+Keys: `j`/`k` (or ↑/↓) move between rows, `h`/`l` (or ←/→) move within the chip row, `Enter`/`Space` activates, `Esc` dismisses and returns the caret to wherever it was. Dismissing never runs anything.
+
+**The hint column is the live keymap, and it is live in the menu too.** A row's hint is the action's current binding, so a quarkrc remap shows up in the menu. An open menu holds focus and the app's global keys are suspended while it does, so the menu honours its own hints: right-click a message and press `E` and you get the editor, the same as with the menu closed. Hints are read in keymap syntax — a single character (`E`, `@`, case-sensitive), a chord (`Ctrl-x`, `Ctrl-Shift-v`, folded the way the keymap folds them, Cmd included), or a run of letters (`dd`, which waits for the whole sequence and is abandoned if you navigate instead). Actions the keymap doesn't own — the text field's clipboard keys — carry a fixed `hint` in the registry instead. A hint that names no keystroke (`↗`, the system browser) is documentation. A greyed row still claims its key, so `E` on someone else's message does nothing rather than leaking through.
+
+**Compose menu** — right-click inside the compose box. The only place formatting appears: you are editing text you own.
+
+| Group | Entries |
+|-------|---------|
+| `format` | B / I / U / S / ‖ / ` — one toggle per markdown marker, shown only with a selection. A toggle renders lit when its marker is already applied and strips it on the next press; the `format-*` bindings (`Ctrl-b`/`i`/`u`, `Ctrl-Shift-x`) route through the same toggle. |
+| `clipboard` | Cut, Copy (greyed without a selection), Paste, Paste as plain text. **Paste** does what `Ctrl+V` does — files a file manager copied, then a clipboard image, each staged in the attachment tray, then text. **Paste as plain text** always inserts the text flavour, with markdown metacharacters escaped so it arrives literally. |
+| `selection` | Search web for "…" (system browser, DuckDuckGo), Copy as quote (`> `-prefixed, to the clipboard). Shown only with a selection. |
+| `insert` | Emoji…, GIF…, Attach file…, Mention… (types `@` and opens the member autocomplete). |
+| `draft` | Undo — steps back through compose history; typed runs coalesce into one step, and the history is dropped on room switch so it can't resurrect another room's draft. Discard draft — clears the text, staged attachments, and a pending edit or reply; one Undo brings the text back. |
+
+**Message menu** — right-click, long-press, or the hover bar's ⋯. Same shell, no formatting: you are not editing text here.
+
+| Group | Entries |
+|-------|---------|
+| `respond` | Reply, React, Thread |
+| `clipboard` | Copy message text, Copy as quote, Select text (mobile only) |
+| `selection` | Search web for "…", Copy selected text — shown only when text is highlighted **inside that message** |
+| `event` | View raw event, Edit, Delete — Edit and Delete are greyed on someone else's message |
+
+The room-list, space-strip, section and overflow menus use the same shell with a header and plain separators.
+
+On touch the menu redocks as a **bottom sheet**: full-width, docked to the viewport edge, 44px rows, sticky header, shortcut hints hidden. Inside the compose field, touch keeps the platform's native selection callout instead — the OS long-press UI is what users expect there — which is why the compose surface counts as pointer reach but not touch reach in the parity model.
 
 ### Room Dialog
 
