@@ -71,9 +71,10 @@ describe("dispatchAction — command palette", () => {
 });
 
 describe("dispatchAction — chord-bound actions", () => {
-  it("wraps the compose selection for each formatting action", () => {
-    const wrapSelection = vi.fn();
-    const components = { input: { wrapSelection } } as unknown as AppComponents;
+  // Toggles rather than wraps, so a chord agrees with the compose menu's chips.
+  it("toggles the compose selection's markers for each formatting action", () => {
+    const toggleWrap = vi.fn();
+    const components = { input: { toggleWrap } } as unknown as AppComponents;
     for (const [action, marker] of [
       ["format-bold", "**"],
       ["format-italic", "*"],
@@ -81,7 +82,7 @@ describe("dispatchAction — chord-bound actions", () => {
       ["format-strikethrough", "~~"],
     ] as const) {
       dispatchAction(action, components);
-      expect(wrapSelection).toHaveBeenLastCalledWith(marker);
+      expect(toggleWrap).toHaveBeenLastCalledWith(marker);
     }
   });
 });
