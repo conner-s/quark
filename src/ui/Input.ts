@@ -792,6 +792,17 @@ export class Input {
    * then text — so the two routes cannot disagree about what a clipboard holds.
    */
   async pasteFromClipboard(): Promise<void> {
+    // Both clipboard reads start before the first `await`, though the copied
+    // files outrank them. WebKit grants a page's clipboard read only while the
+    // menu click is still the user gesture in progress; issued after the
+    // backend round trip, they are refused.
+    const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
+    const items = clipboard?.read ? clipboard.read() : Promise.resolve([]);
+    const plain = clipboard?.readText ? clipboard.readText() : Promise.resolve("");
+    // Only one of these gets awaited, so neither may reject unobserved.
+    items.catch(() => {});
+    plain.catch(() => {});
+
     if (this._readClipboardFiles) {
       const { files } = await this._readClipboardFiles().catch(() => NO_COPIED_FILES);
       if (files.length > 0) {
@@ -799,25 +810,22 @@ export class Input {
         return;
       }
     }
-    const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
-    if (clipboard?.read) {
-      try {
-        const images: File[] = [];
-        for (const item of await clipboard.read()) {
-          const type = item.types.find((t) => t.startsWith("image/"));
-          if (!type) continue;
-          const blob = await item.getType(type);
-          images.push(new File([blob], "", { type: blob.type || type }));
-        }
-        if (images.length > 0) {
-          this._onAttachFiles?.(images);
-          return;
-        }
-      } catch {
-        // No image flavour, or the read was refused — fall through to text.
+    try {
+      const images: File[] = [];
+      for (const item of await items) {
+        const type = item.types.find((t) => t.startsWith("image/"));
+        if (!type) continue;
+        const blob = await item.getType(type);
+        images.push(new File([blob], "", { type: blob.type || type }));
       }
+      if (images.length > 0) {
+        this._onAttachFiles?.(images);
+        return;
+      }
+    } catch {
+      // No image flavour, or the read was refused — fall through to text.
     }
-    const text = await clipboard?.readText().catch(() => "") ?? "";
+    const text = await plain.catch(() => "");
     if (text) this.replaceSelection(text);
   }
 
