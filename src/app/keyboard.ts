@@ -6,6 +6,13 @@ import { registerDefaultBindings, liveSequences } from "./registry.js";
 import { currentAvailability } from "./availability.js";
 import { buildMenu } from "./context_menus.js";
 import { initSaveTargets, savableMediaForEvent, saveMedia, saveMenuHandlers, type SavableMedia } from "./media_save.js";
+import {
+  FORMAT_MARKERS,
+  asQuote,
+  composeMenuHandlers,
+  copyToClipboard,
+  searchWebRow,
+} from "./compose_menu.js";
 import { ComposeNormalEditor } from "../vim/compose_normal.js";
 import { modalManager } from "../ui/ModalManager.js";
 import type { AppComponents } from "../ui/App.js";
@@ -23,6 +30,7 @@ import {
   openSpaceSettings,
   openDebugViewer,
   openDebugViewerForEvent,
+  resolveDisplayName,
   openPinnedMessages,
   openSearch,
   openRoomDirectory,
@@ -342,20 +350,13 @@ export function dispatchAction(action: string, components: AppComponents): void 
 
     // Markdown wrappers. Previously a hardcoded chord ladder in
     // handleInsertKeydown; they are actions now so a quarkrc can move them.
+    // They toggle rather than always wrap, which keeps a chord in step with the
+    // compose menu's chips: those render lit when the marker is already on.
     case "format-bold":
-      input.wrapSelection("**");
-      break;
-
     case "format-italic":
-      input.wrapSelection("*");
-      break;
-
     case "format-underline":
-      input.wrapSelection("__");
-      break;
-
     case "format-strikethrough":
-      input.wrapSelection("~~");
+      input.toggleWrap(FORMAT_MARKERS[action].marker);
       break;
 
     case "open-room-info":
@@ -1124,11 +1125,14 @@ export function setupKeyboard(components: AppComponents): void {
    * core — reply, react, copy, view source, save, delete — and only the
    * entries in `surfaceOnly` differ; buildMenu leaves out any entry without a
    * handler. Two copies of the core used to sit side by side, free to drift.
+   * `selection` is any text highlighted inside that message, which is what
+   * offers the selection rows.
    */
   const showMessageMenu = (
     eventId: string,
     x: number,
     y: number,
+    selection: string,
     surfaceOnly: { "open-thread"?: () => void; "edit"?: () => void; "select-message-text"?: () => void },
   ): void => {
     const evt = findLoadedEvent(eventId);
@@ -1138,6 +1142,7 @@ export function setupKeyboard(components: AppComponents): void {
     // through here, so this is the single place that gives finger-input users
     // a way to edit or delete.
     const ctx = currentAvailability({ selectedMessageId: eventId, selectedMessageIsOwn: isOwn });
+    const sender = evt ? resolveDisplayName(evt.sender) : "";
     contextMenu.show(x, y, buildMenu("message", ctx, {
       "reply": () => {
         if (!evt) return;
@@ -1145,25 +1150,29 @@ export function setupKeyboard(components: AppComponents): void {
         input.focus();
       },
       "react": () => openQuickReactPicker(eventId),
-      "copy-message": () => {
-        void navigator.clipboard.writeText(evt?.body ?? "");
-      },
+      "copy-message": () => copyToClipboard(evt?.body ?? "", "Copied message"),
+      "copy-as-quote": () => copyToClipboard(asQuote(evt?.body ?? ""), "Copied as quote"),
+      // Selection rows: only when text inside this message is highlighted.
+      "search-web": selection ? searchWebRow(selection) : undefined,
+      "copy-selection": selection
+        ? () => copyToClipboard(selection, "Copied selection")
+        : undefined,
       "view-raw-event": () => void openDebugViewerForEvent(eventId),
       // Image messages only, and Photos only where there is a photo library —
       // which is why these are withheld rather than registry requirements.
       ...saveMenuHandlers(evt),
       "redact": () => void redactMessage(eventId),
       ...surfaceOnly,
-    }));
+    }), { title: sender ? `message · ${sender}` : "message" });
   };
 
   // In the thread panel, minus what doesn't apply there: opening a thread (it
   // is one), editing (not supported in threads) and the touch text-selection
   // row (it targets the timeline's DOM).
-  threadView.onContextMenu((eventId, x, y) => showMessageMenu(eventId, x, y, {}));
+  threadView.onContextMenu((eventId, x, y) => showMessageMenu(eventId, x, y, "", {}));
 
   // Right-click / long-press context menu for messages
-  timeline.onContextMenu((eventId, x, y) => showMessageMenu(eventId, x, y, {
+  timeline.onContextMenu((eventId, x, y, selection) => showMessageMenu(eventId, x, y, selection, {
     "open-thread": () => void openThread(eventId),
     // Mobile only. On desktop you select text by dragging, so the row would
     // be noise; withholding the handler is what keeps it out of the menu.
@@ -1183,6 +1192,15 @@ export function setupKeyboard(components: AppComponents): void {
       input.focus();
     },
   }));
+
+  // Right-click inside the compose box — formatting, clipboard, insert, draft.
+  input.onContextMenu((x, y) => {
+    contextMenu.show(
+      x, y,
+      buildMenu("compose", currentAvailability(), composeMenuHandlers(input)),
+      { title: "compose" },
+    );
+  });
 
   // Right-click context menu for rooms in the room list
   roomList.onContextMenu((roomId, x, y) => {
@@ -1211,7 +1229,7 @@ export function setupKeyboard(components: AppComponents): void {
       // Only inside a space's list, and only where there's somewhere to go.
       "move-room-up": canMoveRoom(roomId, -1) ? () => void moveRoomInSpace(roomId, -1) : undefined,
       "move-room-down": canMoveRoom(roomId, 1) ? () => void moveRoomInSpace(roomId, 1) : undefined,
-    }));
+    }), { title: room?.name ? `room · ${room.name}` : "room" });
   });
 
   // Right-click context menu for subspace section labels in the room list
@@ -1219,7 +1237,7 @@ export function setupKeyboard(components: AppComponents): void {
     contextMenu.show(x, y, buildMenu("section", currentAvailability({ spaceId }), {
       "open-space-settings": () => void openSpaceSettings(spaceId),
       "create-room": () => void openCreateRoom({ kind: "room", parentSpaceId: spaceId }),
-    }));
+    }), { title: "space" });
   });
 
   // Mobile top bar's ⋮ menu — the room-scoped chrome the hidden desktop header
@@ -1241,7 +1259,7 @@ export function setupKeyboard(components: AppComponents): void {
             ? { "mute-room": () => toggleMute(id, true) }
             : {};
       })(),
-    }));
+    }), { title: "room" });
   });
 
   // Right-click context menu for spaces in the space strip
@@ -1250,7 +1268,7 @@ export function setupKeyboard(components: AppComponents): void {
       "open-space-settings": () => void openSpaceSettings(spaceId),
       "create-room": () => void openCreateRoom({ kind: "room", parentSpaceId: spaceId }),
       "create-space": () => void openCreateRoom({ kind: "space", parentSpaceId: spaceId }),
-    }));
+    }), { title: "space" });
   });
 
   // The room list header's `+`: new room / new space / directory.
@@ -1259,7 +1277,7 @@ export function setupKeyboard(components: AppComponents): void {
       "create-room": () => void openCreateRoom({ kind: "room" }),
       "create-space": () => void openCreateRoom({ kind: "space", parentSpaceId: null }),
       "open-directory": () => openRoomDirectory(),
-    }));
+    }), { title: "create" });
   });
 
   // The `+` closing the space strip's list.
