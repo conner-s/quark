@@ -38,6 +38,19 @@ function revokeActiveBlobUrls(): void {
   _activeBlobUrls.length = 0;
 }
 
+/**
+ * The document selection, but only when it actually lies inside `el` — a
+ * highlight left over in some other message must not put a "selection" group
+ * in this message's context menu.
+ */
+function selectionWithin(el: HTMLElement | null): string {
+  if (!el) return "";
+  const sel = window.getSelection?.();
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return "";
+  if (!el.contains(sel.getRangeAt(0).commonAncestorContainer)) return "";
+  return sel.toString();
+}
+
 // ── URL linkification ─────────────────────────────────────────────────────────
 //
 // Both the plain-text linkifier (`appendLinkifiedText`) and the
@@ -932,8 +945,14 @@ export class Timeline {
   private _unreadCount = 0;
   /** Fired when an "(edited)" marker is clicked — passes (eventId, originalBody). */
   private _onShowRevisionHistoryCallback: ((eventId: string, originalBody: string) => void) | null = null;
-  /** Fired when the user right-clicks a message — passes (eventId, x, y). */
-  private _onContextMenuCallback: ((eventId: string, x: number, y: number) => void) | null = null;
+  /**
+   * Fired when the user right-clicks (or long-presses) a message — passes
+   * (eventId, x, y, selection), where `selection` is any text highlighted
+   * inside that message, so the menu can offer selection-scoped rows.
+   */
+  private _onContextMenuCallback:
+    | ((eventId: string, x: number, y: number, selection: string) => void)
+    | null = null;
 
   // ── Read receipts ──────────────────────────────────────────────────────────
   /** Each user's latest-read position: the receipted event ID and its timestamp
@@ -1133,7 +1152,9 @@ export class Timeline {
       const msgEl = target.closest<HTMLElement>("[data-message-id]");
       if (msgEl?.dataset.messageId) {
         e.preventDefault();
-        this._onContextMenuCallback?.(msgEl.dataset.messageId, e.clientX, e.clientY);
+        this._onContextMenuCallback?.(
+          msgEl.dataset.messageId, e.clientX, e.clientY, selectionWithin(msgEl),
+        );
       }
     });
 
@@ -1145,7 +1166,8 @@ export class Timeline {
       ignoreSelector: "a, button, img, .message__link, .message__edited-marker",
       resolve: (target) =>
         target.closest<HTMLElement>("[data-message-id]")?.dataset.messageId ?? null,
-      onLongPress: (eventId, x, y) => this._onContextMenuCallback?.(eventId, x, y),
+      onLongPress: (eventId, x, y) =>
+        this._onContextMenuCallback?.(eventId, x, y, this._selectionInMessage(eventId)),
     });
 
     this._scheduleDayRollover();
@@ -1242,8 +1264,11 @@ export class Timeline {
     this._onScrollBottomCallback = cb;
   }
 
-  /** Register a callback fired when the user right-clicks a message — passes (eventId, x, y). */
-  onContextMenu(cb: (eventId: string, x: number, y: number) => void): void {
+  /**
+   * Register a callback fired when the user right-clicks (or long-presses) a
+   * message — passes (eventId, x, y, selection).
+   */
+  onContextMenu(cb: (eventId: string, x: number, y: number, selection: string) => void): void {
     this._onContextMenuCallback = cb;
   }
 
@@ -1254,7 +1279,12 @@ export class Timeline {
    * long-press paths all raise one menu built from one place.
    */
   emitContextMenu(eventId: string, x: number, y: number): void {
-    this._onContextMenuCallback?.(eventId, x, y);
+    this._onContextMenuCallback?.(eventId, x, y, this._selectionInMessage(eventId));
+  }
+
+  /** Text highlighted inside a message, main timeline or inline thread alike. */
+  private _selectionInMessage(eventId: string): string {
+    return selectionWithin(this._el.querySelector<HTMLElement>(`[data-message-id="${eventId}"]`));
   }
 
   /**

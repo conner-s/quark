@@ -124,6 +124,18 @@ export function looksLikeFileListText(text: string): boolean {
   return lines.length > 0 && lines.every((l) => /^file:/i.test(l) || l.startsWith("/"));
 }
 
+/** One restorable compose-box state for the `draft → Undo` context-menu row. */
+interface ComposeSnapshot {
+  value: string;
+  start: number;
+  end: number;
+}
+
+/** Consecutive edits of the same kind within this window collapse into one undo step. */
+const UNDO_COALESCE_MS = 600;
+/** Bound on retained history — a compose box is not a document editor. */
+const UNDO_DEPTH = 100;
+
 export class Input {
   private _el: HTMLElement;
   private _modeEl: HTMLElement;
@@ -140,9 +152,13 @@ export class Input {
   private _onAttachFiles: ((files: File[]) => void) | null = null;
   private _readClipboardFiles: ClipboardFileReader | null = null;
   private _onFocusEnterInsert: (() => void) | null = null;
+  private _onContextMenu: ((x: number, y: number) => void) | null = null;
   private _fileInputEl: HTMLInputElement | null = null;
   private _attachProgress: AttachmentProgressList;
   private _vimMode: boolean = true;
+  private _undoStack: ComposeSnapshot[] = [];
+  private _undoCoalesceKind: string | null = null;
+  private _undoCoalesceAt = 0;
 
   constructor() {
     this._el = document.createElement("div");
@@ -208,6 +224,22 @@ export class Input {
     // Grow with content as the user adds lines (Shift+Enter); capped by the
     // CSS max-height, beyond which the textarea scrolls.
     this._fieldEl.addEventListener("input", () => this._autoGrow());
+
+    // `beforeinput` still carries the pre-edit value and caret, which is
+    // exactly the snapshot Undo needs. Runs of the same inputType coalesce so
+    // undoing a typed sentence doesn't take one press per character.
+    this._fieldEl.addEventListener("beforeinput", (e) => {
+      this._recordUndo((e as InputEvent).inputType || "insert");
+    });
+
+    // Right-click inside the compose box → Quark's own menu (formatting,
+    // clipboard, insert, draft). Left to the platform on touch, where the
+    // native long-press callout is the selection UI users expect.
+    this._fieldEl.addEventListener("contextmenu", (e) => {
+      if (isMobile() || !this._onContextMenu) return;
+      e.preventDefault();
+      this._onContextMenu(e.clientX, e.clientY);
+    });
 
     // Attachment paste handler. clipboardData.items is standard; .files is an
     // alternative that some Linux clipboard managers populate instead.
@@ -334,6 +366,11 @@ export class Input {
   /** Register a callback invoked when the field is clicked to enter insert mode. */
   onFocusEnterInsert(handler: () => void): void {
     this._onFocusEnterInsert = handler;
+  }
+
+  /** Register a callback for a right-click inside the compose field (desktop only). */
+  onContextMenu(handler: (x: number, y: number) => void): void {
+    this._onContextMenu = handler;
   }
 
   /** Register a callback for the emoji picker button. */
@@ -647,6 +684,7 @@ export class Input {
     const selected = field.value.slice(start, end);
     const before = field.value.slice(0, start);
     const after = field.value.slice(end);
+    this.pushUndoSnapshot();
     field.value = before + marker + selected + closing + after;
 
     const innerStart = start + marker.length;
@@ -655,6 +693,189 @@ export class Input {
     field.setSelectionRange(innerStart, innerEnd);
     field.dispatchEvent(new Event("input", { bubbles: true }));
     this._autoGrow();
+  }
+
+  /** The current selection's [start, end) offsets into the compose text. */
+  getSelectionRange(): { start: number; end: number } {
+    const len = this._fieldEl.value.length;
+    return {
+      start: this._fieldEl.selectionStart ?? len,
+      end: this._fieldEl.selectionEnd ?? len,
+    };
+  }
+
+  /** The currently selected compose text (empty string when the caret is collapsed). */
+  getSelectedText(): string {
+    const { start, end } = this.getSelectionRange();
+    return this._fieldEl.value.slice(start, end);
+  }
+
+  /**
+   * Whether the selection already sits inside the given markdown markers, so
+   * the formatting toggle can render as applied and un-apply on the next press.
+   */
+  isSelectionWrapped(marker: string, closing: string = marker): boolean {
+    const { start, end } = this.getSelectionRange();
+    const value = this._fieldEl.value;
+    // Either the markers surround the selection, or they're inside it.
+    const outside =
+      start >= marker.length &&
+      value.slice(start - marker.length, start) === marker &&
+      value.slice(end, end + closing.length) === closing;
+    if (outside) return true;
+    const selected = value.slice(start, end);
+    return (
+      selected.length >= marker.length + closing.length &&
+      selected.startsWith(marker) &&
+      selected.endsWith(closing)
+    );
+  }
+
+  /**
+   * Apply the markdown markers if they aren't there yet, strip them if they
+   * are. Backs the context menu's formatting chips and the format-* bindings,
+   * so pressing Ctrl+B twice leaves the text as it started.
+   */
+  toggleWrap(marker: string, closing: string = marker): void {
+    if (!this.isSelectionWrapped(marker, closing)) {
+      this.wrapSelection(marker, closing);
+      return;
+    }
+
+    const field = this._fieldEl;
+    const value = field.value;
+    let { start, end } = this.getSelectionRange();
+
+    // Normalise "markers inside the selection" to "markers around it" so both
+    // shapes unwrap through one code path.
+    if (
+      value.slice(start, end).startsWith(marker) &&
+      value.slice(start, end).endsWith(closing)
+    ) {
+      start += marker.length;
+      end -= closing.length;
+    }
+
+    const inner = value.slice(start, end);
+    this.pushUndoSnapshot();
+    field.value =
+      value.slice(0, start - marker.length) + inner + value.slice(end + closing.length);
+
+    const innerStart = start - marker.length;
+    field.focus();
+    field.setSelectionRange(innerStart, innerStart + inner.length);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    this._autoGrow();
+  }
+
+  /**
+   * Replace the selection (or insert at the caret) with `text`, leaving the
+   * caret after the inserted run. Used by the context menu's cut, paste and
+   * mention rows so they land where the user right-clicked.
+   */
+  replaceSelection(text: string): void {
+    const field = this._fieldEl;
+    const { start, end } = this.getSelectionRange();
+    this.pushUndoSnapshot();
+    field.value = field.value.slice(0, start) + text + field.value.slice(end);
+    const caret = start + text.length;
+    field.focus();
+    field.setSelectionRange(caret, caret);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    this._autoGrow();
+  }
+
+  /**
+   * The context menu's Paste: what Ctrl+V would have done, minus the `paste`
+   * event a menu cannot synthesise. Same order of preference as
+   * {@link _handlePaste} — files a file manager copied, then clipboard images,
+   * then text — so the two routes cannot disagree about what a clipboard holds.
+   */
+  async pasteFromClipboard(): Promise<void> {
+    if (this._readClipboardFiles) {
+      const { files } = await this._readClipboardFiles().catch(() => NO_COPIED_FILES);
+      if (files.length > 0) {
+        this._onAttachFiles?.(files);
+        return;
+      }
+    }
+    const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
+    if (clipboard?.read) {
+      try {
+        const images: File[] = [];
+        for (const item of await clipboard.read()) {
+          const type = item.types.find((t) => t.startsWith("image/"));
+          if (!type) continue;
+          const blob = await item.getType(type);
+          images.push(new File([blob], "", { type: blob.type || type }));
+        }
+        if (images.length > 0) {
+          this._onAttachFiles?.(images);
+          return;
+        }
+      } catch {
+        // No image flavour, or the read was refused — fall through to text.
+      }
+    }
+    const text = await clipboard?.readText().catch(() => "") ?? "";
+    if (text) this.replaceSelection(text);
+  }
+
+  // ── Undo history ───────────────────────────────────────────────────────────
+
+  /**
+   * Stash the current text and caret so the next {@link undo} restores them.
+   * Programmatic mutations call this themselves; typed input is captured from
+   * `beforeinput`.
+   */
+  pushUndoSnapshot(): void {
+    const { start, end } = this.getSelectionRange();
+    this._undoStack.push({ value: this._fieldEl.value, start, end });
+    if (this._undoStack.length > UNDO_DEPTH) this._undoStack.shift();
+    // A deliberate snapshot ends any typing run.
+    this._undoCoalesceKind = null;
+  }
+
+  /** Whether there is a compose state to step back to. */
+  canUndo(): boolean {
+    return this._undoStack.length > 0;
+  }
+
+  /** Restore the previous compose state. Returns false when history is empty. */
+  undo(): boolean {
+    const snap = this._undoStack.pop();
+    if (!snap) return false;
+    const field = this._fieldEl;
+    field.value = snap.value;
+    field.focus();
+    field.setSelectionRange(snap.start, snap.end);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    this._autoGrow();
+    this._undoCoalesceKind = null;
+    return true;
+  }
+
+  /**
+   * Drop the history. Called when the box's contents stop belonging to the
+   * same composition — switching rooms swaps in another room's draft, and
+   * undoing across that boundary would resurrect text from elsewhere.
+   */
+  resetUndoHistory(): void {
+    this._undoStack = [];
+    this._undoCoalesceKind = null;
+  }
+
+  /** Snapshot before a native edit, collapsing runs of the same input kind. */
+  private _recordUndo(kind: string): void {
+    const now = Date.now();
+    const coalesce =
+      this._undoCoalesceKind === kind && now - this._undoCoalesceAt < UNDO_COALESCE_MS;
+    this._undoCoalesceAt = now;
+    if (coalesce) return;
+    const { start, end } = this.getSelectionRange();
+    this._undoStack.push({ value: this._fieldEl.value, start, end });
+    if (this._undoStack.length > UNDO_DEPTH) this._undoStack.shift();
+    this._undoCoalesceKind = kind;
   }
 
   /** Resize the textarea to fit its content, up to the CSS max-height. */
