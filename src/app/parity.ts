@@ -32,6 +32,8 @@ const MENU_TOUCH: Readonly<Record<MenuSurface, boolean>> = {
   space: true,     // long press on a space icon
   overflow: true,  // the mobile top bar's ⋮ — mobile-only by definition
   create: true,    // the room list header's + (in the drawer on mobile)
+  // Desktop only: on touch the compose box keeps the native selection callout.
+  compose: false,
 };
 
 /** Whether a menu surface can be opened with a pointer. */
@@ -44,6 +46,7 @@ const MENU_POINTER: Readonly<Record<MenuSurface, boolean>> = {
   // and cannot be what makes an action pointer-reachable.
   overflow: false,
   create: true,
+  compose: true,
 };
 
 /**
