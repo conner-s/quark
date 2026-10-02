@@ -15,6 +15,7 @@ const input = {
   setValue: vi.fn((text: string) => {
     fieldValue = text;
   }),
+  resetUndoHistory: vi.fn(),
 };
 const replyPreview = { hide: vi.fn(), isThreadMode: () => false };
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { keymapManager } from "../vim/keybindings";
 import { registerDefaultBindings, type AvailabilityContext } from "./registry";
 import { buildMenu, type MenuHandlers } from "./context_menus";
+import type { ContextMenuItem } from "../ui/ContextMenu";
 
 const ctx = (over: Partial<AvailabilityContext> = {}): AvailabilityContext => ({
   loggedIn: true,
@@ -25,9 +26,20 @@ const MESSAGE_HANDLERS: MenuHandlers = {
   "redact": noop,
 };
 
-/** Labels in order, with "──" standing in for a separator. */
+/**
+ * Labels in order: "──" for a separator, "[title]" for a section header, and
+ * "chips(BIU)" for a chip row by glyph.
+ */
 const shape = (entries: ReturnType<typeof buildMenu>): string[] =>
-  entries.map((e) => ("separator" in e && e.separator ? "──" : e.label));
+  entries.map((e) => {
+    if ("section" in e) return `[${e.section}]`;
+    if ("chips" in e) return `chips(${e.chips.map((c) => c.label).join("")})`;
+    return e.separator ? "──" : e.label;
+  });
+
+/** The item row with this label, or undefined. */
+const item = (entries: ReturnType<typeof buildMenu>, label: string): ContextMenuItem | undefined =>
+  entries.find((e): e is ContextMenuItem => "label" in e && e.label === label);
 
 beforeEach(() => {
   for (const entry of keymapManager.getEntries()) {
@@ -37,44 +49,48 @@ beforeEach(() => {
 });
 
 describe("buildMenu", () => {
-  it("reproduces the message menu's grouping", () => {
+  it("heads each message-menu group with its section title", () => {
     expect(shape(buildMenu("message", ctx(), MESSAGE_HANDLERS))).toEqual([
-      "Reply", "React", "Thread",
-      "──",
-      "Copy message text", "View raw event",
-      "──",
-      "Edit", "Delete",
+      "[respond]", "Reply", "React", "Thread",
+      "[clipboard]", "Copy message text",
+      "[event]", "View raw event", "Edit", "Delete",
     ]);
   });
 
-  it("drops own-message rows on someone else's message", () => {
+  // A row that silently isn't there reads as a missing feature, so the
+  // registry marks these two as greyed rather than hidden.
+  it("greys own-message rows on someone else's message instead of dropping them", () => {
     const entries = buildMenu("message", ctx({ selectedMessageIsOwn: false }), MESSAGE_HANDLERS);
-    expect(shape(entries)).toEqual([
-      "Reply", "React", "Thread",
-      "──",
-      "Copy message text", "View raw event",
-    ]);
+    expect(shape(entries)).toContain("Edit");
+    expect(item(entries, "Edit")?.disabled).toBe(true);
+    expect(item(entries, "Delete")?.disabled).toBe(true);
+    expect(item(entries, "Reply")?.disabled).toBeUndefined();
   });
 
   it("drops rows the caller supplies no handler for", () => {
     const entries = buildMenu("message", ctx(), { "reply": noop, "redact": noop });
-    expect(shape(entries)).toEqual(["Reply", "──", "Delete"]);
+    expect(shape(entries)).toEqual(["[respond]", "Reply", "[event]", "Delete"]);
   });
 
-  // A group emptied by filtering must not leave its rule behind.
-  it("never emits a leading, trailing or doubled separator", () => {
-    for (const handlers of [
-      MESSAGE_HANDLERS,
-      { "reply": noop } as MenuHandlers,
-      { "redact": noop } as MenuHandlers,
-      { "reply": noop, "edit": noop } as MenuHandlers,
-      {} as MenuHandlers,
-    ]) {
-      const s = shape(buildMenu("message", ctx(), handlers));
+  it("marks destructive rows", () => {
+    expect(item(buildMenu("message", ctx(), MESSAGE_HANDLERS), "Delete")?.danger).toBe(true);
+  });
+
+  // A group emptied by filtering must not leave its heading or rule behind.
+  it("never emits an empty section, or a leading, trailing or doubled separator", () => {
+    for (const [surface, handlers] of [
+      ["message", MESSAGE_HANDLERS],
+      ["message", { "reply": noop }],
+      ["message", { "redact": noop }],
+      ["room", { "open-room": noop, "mark-room-read": noop }],
+      ["room", { "mark-room-read": noop }],
+      ["message", {}],
+    ] as const) {
+      const s = shape(buildMenu(surface, ctx(), handlers as MenuHandlers));
       expect(s[0]).not.toBe("──");
-      expect(s[s.length - 1]).not.toBe("──");
+      expect(s[s.length - 1] ?? "").not.toMatch(/^(──|\[)/);
       for (let i = 1; i < s.length; i++) {
-        expect(s[i] === "──" && s[i - 1] === "──").toBe(false);
+        expect(/^(──|\[)/.test(s[i]) && /^(──|\[)/.test(s[i - 1])).toBe(false);
       }
     }
   });
@@ -84,11 +100,7 @@ describe("buildMenu", () => {
   });
 
   it("labels rows with the live keybinding, not the registry default", () => {
-    const hintFor = (label: string) => {
-      const row = buildMenu("message", ctx(), MESSAGE_HANDLERS)
-        .find((e) => !("separator" in e && e.separator) && e.label === label);
-      return row && !("separator" in row && row.separator) ? row.hint : undefined;
-    };
+    const hintFor = (label: string) => item(buildMenu("message", ctx(), MESSAGE_HANDLERS), label)?.hint;
     expect(hintFor("Delete")).toBe("dd");
 
     keymapManager.unmap("global", "dd");
@@ -97,10 +109,69 @@ describe("buildMenu", () => {
   });
 
   it("omits the hint for an action with no binding", () => {
-    const raw = buildMenu("message", ctx(), MESSAGE_HANDLERS)
-      .find((e) => !("separator" in e && e.separator) && e.label === "View raw event");
-    expect(raw && !("separator" in raw && raw.separator) ? raw.hint : "unset").toBeUndefined();
+    const raw = item(buildMenu("message", ctx(), MESSAGE_HANDLERS), "View raw event");
+    expect(raw).toBeDefined();
+    expect(raw?.hint).toBeUndefined();
   });
+
+  it("falls back to the registry's fixed hint for a platform-owned key", () => {
+    const entries = buildMenu("message", ctx(), { "copy-selection": noop });
+    expect(item(entries, "Copy selected text")?.hint).toBe("Ctrl-c");
+  });
+
+  it("lets a caller relabel a row that echoes its target", () => {
+    const entries = buildMenu("message", ctx(), {
+      "search-web": { label: "Search web for “quark”", action: noop },
+    });
+    expect(shape(entries)).toEqual(["[selection]", "Search web for “quark”"]);
+  });
+});
+
+describe("compose menu", () => {
+  const ALL: MenuHandlers = {
+    "format-bold": noop, "format-italic": noop, "format-underline": noop,
+    "format-strikethrough": noop, "format-spoiler": noop, "format-code": noop,
+    "cut": noop, "copy-selection": noop, "paste": noop, "paste-plain": noop,
+    "search-web": noop, "copy-as-quote": noop,
+    "open-emoji-picker": noop, "open-gif-picker": noop, "attach-file": noop, "insert-mention": noop,
+    "compose-undo": noop, "discard-draft": noop,
+  };
+  const composeCtx = () => ctx({ selectedMessageId: null, selectedMessageIsOwn: false });
+
+  it("lays out the converged design", () => {
+    expect(shape(buildMenu("compose", composeCtx(), ALL))).toEqual([
+      "[format]", "chips(BIUS‖`)",
+      "[clipboard]", "Cut", "Copy", "Paste", "Paste as plain text",
+      "[selection]", "Search web", "Copy as quote",
+      "[insert]", "Emoji…", "GIF…", "Attach file…", "Mention…",
+      "[draft]", "Undo", "Discard draft",
+    ]);
+  });
+
+  it("titles each chip with its markdown and live binding", () => {
+    const entries = buildMenu("compose", composeCtx(), { "format-bold": noop, "format-code": noop });
+    const row = entries.find((e) => "chips" in e);
+    expect(row && "chips" in row ? row.chips.map((c) => c.title) : []).toEqual([
+      "Bold — **text**  Ctrl-b",
+      "Inline code — `text`",
+    ]);
+    expect(row && "chips" in row ? row.chips[1].accent : false).toBe(true);
+  });
+
+  it("passes a chip's active predicate through", () => {
+    const active = () => true;
+    const entries = buildMenu("compose", composeCtx(), { "format-bold": { action: noop, active } });
+    const row = entries.find((e) => "chips" in e);
+    expect(row && "chips" in row ? row.chips[0].active : undefined).toBe(active);
+  });
+
+  it("greys a row its caller marks disabled", () => {
+    const entries = buildMenu("compose", composeCtx(), { "cut": { action: noop, disabled: true } });
+    expect(item(entries, "Cut")).toMatchObject({ disabled: true, hint: "Ctrl-x" });
+  });
+});
+
+describe("other surfaces", () => {
 
   it("offers Mark as read only when the caller passes its handler", () => {
     const base: MenuHandlers = {

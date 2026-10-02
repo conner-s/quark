@@ -1,5 +1,22 @@
 // Floating context menu — replaces the browser's native right-click menu
-// for app-relevant elements (messages, room icons, etc.)
+// for app-relevant elements (messages, the compose box, room icons, …).
+//
+// Shell (design: "Context Menu — converged"):
+//
+//   ┌──────────────────────────────┐
+//   │ COMPOSE                  esc │  header bar   — --surface-subtle
+//   ├──────────────────────────────┤
+//   │ FORMAT                       │  section head — --surface-dim
+//   │ [B][I][U][S][‖][`]           │  chip row     — formatting toggles
+//   │ CLIPBOARD                    │
+//   │ Cut                   Ctrl+X │  item rows
+//   └──────────────────────────────┘
+//
+// Squared off deliberately: the menu must read as *menu chrome*, not as a chat
+// item, so it keeps a plain `--border-color` edge rather than the compose
+// box's accent-tinted one and never borrows the styling of whatever it was
+// summoned from. Sections replace bare separators — every group carries a
+// header strip, which is the same shape the settings dialog already uses.
 //
 // On mobile (long-press), the menu morphs into a bottom sheet: full-width,
 // docked to the bottom of the viewport, with large-tap rows. The trigger
@@ -9,10 +26,21 @@
 import { isMobile } from "../app/mobile.js";
 import { modalManager, type Modal } from "./ModalManager.js";
 import { mountOverlay } from "./overlay.js";
+import { canonicalChord, eventChord, isChordSequence } from "../vim/keybindings.js";
 
 export interface ContextMenuItem {
   label: string;
-  hint?: string;        // optional keyboard shortcut hint shown on the right
+  /**
+   * Keyboard shortcut shown in the right-hand column — and, when it names an
+   * actual keystroke, the accelerator that fires this row while the menu is
+   * open. Written in keymap syntax — `E`, `>`, `Ctrl-x`, `Ctrl-Shift-v`, `dd`;
+   * see {@link parseAccel}. Prose hints (`↗`) stay documentation.
+   */
+  hint?: string;
+  /** Rendered greyed out and inert (e.g. Edit/Delete on someone else's message). */
+  disabled?: boolean;
+  /** Destructive action — rendered in `--accent-error` (e.g. Discard draft). */
+  danger?: boolean;
   separator?: false;
   action: () => void;
 }
@@ -21,13 +49,112 @@ export interface ContextMenuSeparator {
   separator: true;
 }
 
-export type ContextMenuEntry = ContextMenuItem | ContextMenuSeparator;
+/** A section header strip — the grouped replacement for a bare separator. */
+export interface ContextMenuSection {
+  section: string;
+}
+
+/** One toggle inside a {@link ContextMenuChipRow}. */
+export interface ContextMenuChip {
+  label: string;
+  /** Tooltip / accessible name — e.g. `Bold — **text**`. */
+  title?: string;
+  /**
+   * Whether the toggle currently applies. A predicate is re-evaluated after
+   * every chip activation so the row stays truthful while the menu is open.
+   */
+  active?: boolean | (() => boolean);
+  /** Render the glyph in `--accent-secondary` (used by the inline-code chip). */
+  accent?: boolean;
+  action: () => void;
+}
+
+/**
+ * A row of squared toggles filling the menu width. Unlike item rows, chips do
+ * not dismiss the menu — formatting is something you apply more than once.
+ */
+export interface ContextMenuChipRow {
+  chips: ContextMenuChip[];
+}
+
+export type ContextMenuEntry =
+  | ContextMenuItem
+  | ContextMenuSeparator
+  | ContextMenuSection
+  | ContextMenuChipRow;
+
+export interface ContextMenuOptions {
+  /** Header-bar caption, e.g. `compose` or `message · ada`. Omit for no header. */
+  title?: string;
+}
+
+/** A keyboard-navigable row: either one item, or the whole chip row. */
+type NavRow =
+  | { kind: "item"; el: HTMLElement; item: ContextMenuItem; accel: Accel | null }
+  | { kind: "chips"; els: HTMLButtonElement[]; chips: ContextMenuChip[] };
+
+function chipIsActive(chip: ContextMenuChip): boolean {
+  return typeof chip.active === "function" ? chip.active() : !!chip.active;
+}
+
+// ── Accelerators ──────────────────────────────────────────────────────────────
+//
+// The hint column advertises the global shortcut for each row. But the menu
+// takes focus when it opens and the global keydown guard swallows every key
+// while a modal is registered, so those hints used to be inert the moment you
+// could read them — right-click a message, press `E`, nothing happens. The menu
+// therefore honours its own hints: whatever the right-hand column claims is
+// what the keystroke does while the menu is up.
+
+/**
+ * One hint read as the keystroke it names. Hints are keymap sequences — the
+ * registry prints the live binding — so they are read in the keymap's own
+ * grammar rather than a second one that could drift from it.
+ */
+type Accel =
+  /** A single character, matched exactly: `E` is the shifted key, `>` is `>`. */
+  | { kind: "key"; key: string }
+  /** A modifier chord (`Ctrl-x`, `Ctrl-Shift-v`), in {@link canonicalChord} form. */
+  | { kind: "chord"; chord: string }
+  /** A vim-style literal run (`dd`), fired once the whole run is typed. */
+  | { kind: "seq"; seq: string };
+
+/**
+ * Parse a hint into the keystroke it names, or null when it names none.
+ *
+ * Anything that is not a single character, a chord or a run of lowercase
+ * letters — a `:command`, a glyph like `↗` — points at some other affordance
+ * and gets no accelerator.
+ */
+export function parseAccel(hint: string): Accel | null {
+  const h = hint.trim();
+  if (isChordSequence(h)) return { kind: "chord", chord: canonicalChord(h) };
+  if ([...h].length === 1) return { kind: "key", key: h };
+  if (/^[a-z]{2,}$/.test(h)) return { kind: "seq", seq: h };
+  return null;
+}
+
+/** Whether a keydown is the single key or chord this accelerator names. */
+function matchesKeystroke(accel: Accel, e: KeyboardEvent): boolean {
+  if (accel.kind === "chord") {
+    const chord = eventChord(e);
+    return chord !== null && canonicalChord(chord) === accel.chord;
+  }
+  // `event.key` already carries the shift state (`E`, `>`), so a bare key is
+  // compared as-is — `>` needs Shift on a US layout but not everywhere.
+  return accel.kind === "key" && !e.ctrlKey && !e.altKey && !e.metaKey && e.key === accel.key;
+}
 
 export class ContextMenu implements Modal {
   private _el: HTMLElement;
   private _visible = false;
-  private _activeIndex = -1;
-  private _items: ContextMenuItem[] = [];
+  private _rows: NavRow[] = [];
+  private _activeRow = -1;
+  private _activeChip = 0;
+  /** Characters typed so far towards a multi-key hint (`d` of `dd`). */
+  private _pendingSeq = "";
+  /** Element focused when the menu opened, refocused on dismiss. */
+  private _restoreFocusEl: HTMLElement | null = null;
 
   // Close when the user clicks/taps anywhere outside the menu. Listens to both
   // mousedown (desktop) and touchstart (mobile) since taps don't reliably
@@ -37,23 +164,41 @@ export class ContextMenu implements Modal {
     if (!this._el.contains(e.target as Node)) this.hide();
   };
 
-  // Close on scroll (menu position would be stale)
-  private _scrollHandler = () => this.hide();
+  // Close on scroll (menu position would be stale). Scrolling *inside* the
+  // menu is exempt — a long compose menu scrolls within its own max-height.
+  private _scrollHandler = (e: Event) => {
+    if (this._el.contains(e.target as Node)) return;
+    this.hide();
+  };
 
   constructor() {
     this._el = document.createElement("div");
     this._el.className = "context-menu";
     this._el.setAttribute("role", "menu");
+    // Focusable so the menu owns arrow/j/k keys the moment it opens. Without
+    // this the div silently refuses focus and every keystroke fell through to
+    // the global handler, which swallows keys while a modal is open.
+    this._el.setAttribute("tabindex", "-1");
     this._el.style.display = "none";
     mountOverlay(this._el);
 
     this._el.addEventListener("keydown", (e) => this._handleKey(e));
   }
 
-  show(x: number, y: number, entries: ContextMenuEntry[]): void {
+  show(x: number, y: number, entries: ContextMenuEntry[], opts: ContextMenuOptions = {}): void {
     this._el.innerHTML = "";
-    this._items = [];
-    this._activeIndex = -1;
+    this._rows = [];
+    this._activeRow = -1;
+    this._activeChip = 0;
+    this._pendingSeq = "";
+    // Re-showing while already open (right-clicking a second message) would
+    // otherwise record the menu itself as the thing to focus on dismiss.
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && !this._el.contains(active)) {
+      this._restoreFocusEl = active;
+    }
+
+    if (opts.title) this._el.appendChild(this._buildHeader(opts.title));
 
     for (const entry of entries) {
       if ("separator" in entry && entry.separator) {
@@ -64,34 +209,22 @@ export class ContextMenu implements Modal {
         continue;
       }
 
-      const item = entry as ContextMenuItem;
-      const idx = this._items.length;
-      this._items.push(item);
-
-      const row = document.createElement("div");
-      row.className = "context-menu__item";
-      row.setAttribute("role", "menuitem");
-      row.setAttribute("tabindex", "-1");
-
-      const labelEl = document.createElement("span");
-      labelEl.className = "context-menu__item-label";
-      labelEl.textContent = item.label;
-      row.appendChild(labelEl);
-
-      if (item.hint) {
-        const hintEl = document.createElement("span");
-        hintEl.className = "context-menu__item-hint";
-        hintEl.textContent = item.hint;
-        row.appendChild(hintEl);
+      if ("section" in entry) {
+        const head = document.createElement("div");
+        head.className = "context-menu__section";
+        head.setAttribute("role", "presentation");
+        head.textContent = entry.section;
+        this._el.appendChild(head);
+        continue;
       }
 
-      row.addEventListener("mouseenter", () => this._setActive(idx));
-      row.addEventListener("click", () => {
-        this.hide();
-        item.action();
-      });
+      if ("chips" in entry) {
+        if (entry.chips.length === 0) continue;
+        this._el.appendChild(this._buildChipRow(entry.chips));
+        continue;
+      }
 
-      this._el.appendChild(row);
+      this._el.appendChild(this._buildItem(entry as ContextMenuItem));
     }
 
     this._el.classList.toggle("context-menu--mobile", isMobile());
@@ -135,11 +268,22 @@ export class ContextMenu implements Modal {
     this._el.style.display = "none";
     this._el.classList.remove("context-menu--mobile");
     this._visible = false;
-    this._activeIndex = -1;
+    this._rows = [];
+    this._activeRow = -1;
+    this._activeChip = 0;
+    this._pendingSeq = "";
     modalManager.remove(this);
     document.removeEventListener("mousedown", this._outsideHandler, { capture: true });
     document.removeEventListener("touchstart", this._outsideHandler, { capture: true });
     document.removeEventListener("scroll", this._scrollHandler, { capture: true });
+
+    // Hand focus back to whatever summoned the menu (usually the compose
+    // field) so dismissing it leaves the caret where the user left it. Item
+    // activation calls hide() *before* the action runs, so an action that
+    // opens a picker still wins the focus race.
+    const restore = this._restoreFocusEl;
+    this._restoreFocusEl = null;
+    if (restore && restore.isConnected) restore.focus();
   }
 
   isVisible(): boolean {
@@ -150,35 +294,292 @@ export class ContextMenu implements Modal {
     return this._el;
   }
 
-  private _setActive(idx: number): void {
-    const rows = this._el.querySelectorAll<HTMLElement>(".context-menu__item");
-    rows[this._activeIndex]?.classList.remove("context-menu__item--active");
-    this._activeIndex = idx;
-    rows[idx]?.classList.add("context-menu__item--active");
-    rows[idx]?.focus();
+  // ── Building ────────────────────────────────────────────────────────────────
+
+  private _buildHeader(title: string): HTMLElement {
+    const header = document.createElement("div");
+    header.className = "context-menu__header";
+    header.setAttribute("role", "presentation");
+
+    const titleEl = document.createElement("span");
+    titleEl.className = "context-menu__title";
+    titleEl.textContent = title;
+    header.appendChild(titleEl);
+
+    const escEl = document.createElement("span");
+    escEl.className = "context-menu__esc";
+    escEl.textContent = "esc";
+    header.appendChild(escEl);
+
+    return header;
+  }
+
+  private _buildItem(item: ContextMenuItem): HTMLElement {
+    const rowIdx = this._rows.length;
+
+    const row = document.createElement("div");
+    row.className = "context-menu__item";
+    if (item.disabled) row.classList.add("context-menu__item--disabled");
+    if (item.danger) row.classList.add("context-menu__item--danger");
+    row.setAttribute("role", "menuitem");
+    row.setAttribute("tabindex", "-1");
+    if (item.disabled) row.setAttribute("aria-disabled", "true");
+
+    const labelEl = document.createElement("span");
+    labelEl.className = "context-menu__item-label";
+    labelEl.textContent = item.label;
+    row.appendChild(labelEl);
+
+    if (item.hint) {
+      const hintEl = document.createElement("span");
+      hintEl.className = "context-menu__item-hint";
+      hintEl.textContent = item.hint;
+      row.appendChild(hintEl);
+    }
+
+    if (!item.disabled) {
+      row.addEventListener("mouseenter", () => this._setActive(rowIdx));
+      row.addEventListener("click", () => {
+        this.hide();
+        item.action();
+      });
+    }
+
+    this._rows.push({ kind: "item", el: row, item, accel: item.hint ? parseAccel(item.hint) : null });
+    return row;
+  }
+
+  private _buildChipRow(chips: ContextMenuChip[]): HTMLElement {
+    const rowIdx = this._rows.length;
+
+    // Equal-width flex children, so the row fills the menu width however many
+    // toggles a caller passes.
+    const wrap = document.createElement("div");
+    wrap.className = "context-menu__chips";
+    wrap.setAttribute("role", "group");
+
+    const els: HTMLButtonElement[] = [];
+    chips.forEach((chip, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "context-menu__chip";
+      if (chip.accent) btn.classList.add("context-menu__chip--accent");
+      btn.setAttribute("role", "menuitemcheckbox");
+      btn.setAttribute("tabindex", "-1");
+      btn.textContent = chip.label;
+      if (chip.title) {
+        btn.title = chip.title;
+        btn.setAttribute("aria-label", chip.title);
+      }
+      btn.addEventListener("mouseenter", () => this._setActive(rowIdx, i));
+      // Don't let the press blur/steal focus before the action reads the
+      // compose field's live selection range.
+      btn.addEventListener("mousedown", (e) => e.preventDefault());
+      btn.addEventListener("click", () => this._activateChip(rowIdx, i));
+      els.push(btn);
+      wrap.appendChild(btn);
+    });
+
+    this._rows.push({ kind: "chips", els, chips });
+    this._syncChipStates(this._rows.length - 1);
+    return wrap;
+  }
+
+  /** Re-read every chip's `active` predicate and repaint the row. */
+  private _syncChipStates(rowIdx: number): void {
+    const row = this._rows[rowIdx];
+    if (!row || row.kind !== "chips") return;
+    row.chips.forEach((chip, i) => {
+      const on = chipIsActive(chip);
+      row.els[i].classList.toggle("context-menu__chip--active", on);
+      row.els[i].setAttribute("aria-checked", on ? "true" : "false");
+    });
+  }
+
+  // ── Navigation ──────────────────────────────────────────────────────────────
+
+  private _isFocusable(idx: number): boolean {
+    const row = this._rows[idx];
+    if (!row) return false;
+    return row.kind === "chips" ? row.els.length > 0 : !row.item.disabled;
+  }
+
+  private _setActive(rowIdx: number, chipIdx = 0): void {
+    const prev = this._rows[this._activeRow];
+    if (prev?.kind === "item") prev.el.classList.remove("context-menu__item--active");
+    if (prev?.kind === "chips") prev.els.forEach((el) => el.classList.remove("context-menu__chip--focus"));
+
+    const next = this._rows[rowIdx];
+    if (!next) return;
+    this._activeRow = rowIdx;
+
+    if (next.kind === "item") {
+      next.el.classList.add("context-menu__item--active");
+      next.el.focus();
+      return;
+    }
+
+    this._activeChip = Math.max(0, Math.min(chipIdx, next.els.length - 1));
+    next.els[this._activeChip]?.classList.add("context-menu__chip--focus");
+    next.els[this._activeChip]?.focus();
+  }
+
+  /** Step to the next focusable row, clamping at both ends. */
+  private _moveRow(delta: number): void {
+    if (this._rows.length === 0) return;
+    let idx = this._activeRow;
+    if (idx < 0) idx = delta > 0 ? -1 : this._rows.length;
+    for (let i = 0; i < this._rows.length; i++) {
+      idx += delta;
+      if (idx < 0 || idx >= this._rows.length) return;
+      if (this._isFocusable(idx)) {
+        this._setActive(idx);
+        return;
+      }
+    }
+  }
+
+  /** Step within the active chip row. No-op elsewhere. */
+  private _moveChip(delta: number): boolean {
+    const row = this._rows[this._activeRow];
+    if (row?.kind !== "chips") return false;
+    const next = Math.max(0, Math.min(this._activeChip + delta, row.els.length - 1));
+    this._setActive(this._activeRow, next);
+    return true;
+  }
+
+  private _activateChip(rowIdx: number, chipIdx: number): void {
+    const row = this._rows[rowIdx];
+    if (row?.kind !== "chips") return;
+    // Chips stay open: formatting is applied more than once per visit.
+    row.chips[chipIdx]?.action();
+    this._syncChipStates(rowIdx);
+    this._setActive(rowIdx, chipIdx);
+  }
+
+  private _activate(): void {
+    const row = this._rows[this._activeRow];
+    if (!row) return;
+    if (row.kind === "chips") {
+      this._activateChip(this._activeRow, this._activeChip);
+      return;
+    }
+    this._activateItem(this._activeRow);
+  }
+
+  /** Run one item row's action and dismiss. Disabled rows are inert — the same
+   *  no-op a click on a greyed row gets. */
+  private _activateItem(rowIdx: number): void {
+    const row = this._rows[rowIdx];
+    if (row?.kind !== "item" || row.item.disabled) return;
+    this.hide();
+    row.item.action();
+  }
+
+  // ── Accelerators ────────────────────────────────────────────────────────────
+
+  /** First item row whose parsed hint satisfies `pred`, or -1. Disabled rows are
+   *  included so their key is still claimed rather than falling through to be
+   *  swallowed by the global guard. */
+  private _findAccelRow(pred: (accel: Accel) => boolean): number {
+    return this._rows.findIndex((r) => r.kind === "item" && r.accel !== null && pred(r.accel));
+  }
+
+  /**
+   * Honour the hint column. Returns true when a hint claimed the keystroke —
+   * including a bare prefix of a multi-key hint, which is claimed while the menu
+   * waits for the rest of the sequence.
+   */
+  private _tryAccel(e: KeyboardEvent): boolean {
+    const ch =
+      e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey ? e.key : null;
+    const seqStarting = (prefix: string) =>
+      this._findAccelRow((a) => a.kind === "seq" && a.seq.startsWith(prefix));
+
+    // A sequence already under way owns the next character.
+    if (this._pendingSeq && ch) {
+      const candidate = this._pendingSeq + ch;
+      const exact = this._findAccelRow((a) => a.kind === "seq" && a.seq === candidate);
+      if (exact >= 0) {
+        this._pendingSeq = "";
+        this._activateItem(exact);
+        return true;
+      }
+      if (seqStarting(candidate) >= 0) {
+        this._pendingSeq = candidate;
+        return true;
+      }
+      this._pendingSeq = "";
+    }
+
+    const direct = this._findAccelRow((a) => matchesKeystroke(a, e));
+    if (direct >= 0) {
+      this._pendingSeq = "";
+      this._activateItem(direct);
+      return true;
+    }
+
+    if (ch && seqStarting(ch) >= 0) {
+      this._pendingSeq = ch;
+      return true;
+    }
+
+    this._pendingSeq = "";
+    return false;
+  }
+
+  /**
+   * Keys the menu owns are stopped here, never re-dispatched.
+   *
+   * The global keydown handler swallows everything while a modal is open, but
+   * hide() deregisters this menu *before* the event finishes bubbling — so an
+   * un-stopped Escape would dismiss the menu and then run the app's Escape
+   * (leave Insert, close the panel) on the way out.
+   */
+  private _consume(e: KeyboardEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   private _handleKey(e: KeyboardEvent): void {
     if (e.key === "Escape" || (e.ctrlKey && e.key === "[")) {
-      e.preventDefault();
+      this._consume(e);
       this.hide();
       return;
     }
+    // Navigation outranks the hint column: `j`/`k`/`h`/`l` move, and a half-typed
+    // sequence is abandoned the moment the user navigates instead.
     if (e.key === "ArrowDown" || (e.key === "j" && !e.ctrlKey)) {
-      e.preventDefault();
-      this._setActive(Math.min(this._activeIndex + 1, this._items.length - 1));
+      this._consume(e);
+      this._pendingSeq = "";
+      this._moveRow(1);
       return;
     }
     if (e.key === "ArrowUp" || (e.key === "k" && !e.ctrlKey)) {
-      e.preventDefault();
-      this._setActive(Math.max(this._activeIndex - 1, 0));
+      this._consume(e);
+      this._pendingSeq = "";
+      this._moveRow(-1);
       return;
     }
-    if (e.key === "Enter" && this._activeIndex >= 0) {
-      e.preventDefault();
-      const item = this._items[this._activeIndex];
-      this.hide();
-      item.action();
+    if (e.key === "ArrowRight" || (e.key === "l" && !e.ctrlKey)) {
+      this._pendingSeq = "";
+      if (this._moveChip(1)) this._consume(e);
+      return;
     }
+    if (e.key === "ArrowLeft" || (e.key === "h" && !e.ctrlKey)) {
+      this._pendingSeq = "";
+      if (this._moveChip(-1)) this._consume(e);
+      return;
+    }
+    if (e.key === "Enter" || e.key === " ") {
+      if (this._activeRow < 0) return;
+      this._consume(e);
+      this._pendingSeq = "";
+      this._activate();
+      return;
+    }
+    // Last: whatever the hint column advertises. Unclaimed keys fall through to
+    // the global guard, which swallows them while any modal is open.
+    if (this._tryAccel(e)) this._consume(e);
   }
 }
