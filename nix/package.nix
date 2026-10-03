@@ -153,6 +153,12 @@ rustPlatform.buildRustPackage (finalAttrs: {
 
   env.OPENSSL_NO_VENDOR = 1;
 
+  # Fork-only: thin instead of Cargo.toml's fat LTO. Fat LTO spends ~5.5 min
+  # optimising the final binary on one core; thin cuts a full build from 531s
+  # to 177s (24 cores) for a binary 8 MB larger (63 vs 55 MB). Installers and
+  # the Android .so keep fat LTO.
+  env.CARGO_PROFILE_RELEASE_LTO = "thin";
+
   # CI gates `pnpm test` + `cargo test` already; the sandbox lacks the D-Bus
   # session some backend tests expect.
   doCheck = false;
