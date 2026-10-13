@@ -40,19 +40,29 @@ pub struct Paths {
     pub config_dir: std::path::PathBuf,
 }
 
+/// Whether any DRM device is bound to the NVIDIA driver.
+#[cfg(target_os = "linux")]
+fn has_nvidia_gpu() -> bool {
+    let Ok(entries) = std::fs::read_dir("/sys/class/drm") else { return false };
+    entries.flatten().any(|e| {
+        std::fs::read_to_string(e.path().join("device/uevent"))
+            .is_ok_and(|uevent| uevent.to_ascii_lowercase().contains("nvidia"))
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // WebKitGTK video-playback workarounds for Linux/Mesa. Must be set before
+    // WebKitGTK rendering and video-playback workarounds. Must be set before
     // WebKit/GTK initialises, while the process is still single-threaded — so
     // this is the first thing we do. Harmless on non-Linux targets (cfg guard).
     #[cfg(target_os = "linux")]
     {
-        // The DMA-BUF renderer presents <video> frames incorrectly on many
-        // setups (frames lag behind audio, then render solid green); disabling
-        // it makes WebKit fall back to a renderer that displays video correctly.
-        // That fallback rasterises in software, so an explicit value wins:
-        // `WEBKIT_DISABLE_DMABUF_RENDERER=0` keeps GPU rendering.
-        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        // WebKit's DMA-BUF renderer fails on the NVIDIA proprietary driver, so
+        // disable it there (same check as nix/package.nix and the flatpak
+        // launcher). Everywhere else keep it: the fallback rasterises every
+        // frame in software on the web process's main thread, which makes
+        // scrolling and typing lag. An explicit value always wins.
+        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() && has_nvidia_gpu() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
         // Hardware video decoders (VA-API / NVDEC) in WebKit's GStreamer pipeline
