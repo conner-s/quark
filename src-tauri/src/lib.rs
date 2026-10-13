@@ -50,7 +50,11 @@ pub fn run() {
         // The DMA-BUF renderer presents <video> frames incorrectly on many
         // setups (frames lag behind audio, then render solid green); disabling
         // it makes WebKit fall back to a renderer that displays video correctly.
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        // That fallback rasterises in software, so an explicit value wins:
+        // `WEBKIT_DISABLE_DMABUF_RENDERER=0` keeps GPU rendering.
+        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
         // Hardware video decoders (VA-API / NVDEC) in WebKit's GStreamer pipeline
         // corrupt frames on seek/replay; derank them to NONE so the reliable
         // software decoders (avdec_*, from gst-libav) handle playback instead.
