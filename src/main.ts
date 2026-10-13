@@ -222,6 +222,15 @@ window.addEventListener("focus", resumeGifs);
 // ── Global error handler ──────────────────────────────────────────────────────
 
 window.addEventListener("unhandledrejection", (e) => {
+  // WebKit's native <video> controls call play() without catching it, and a
+  // seek or pause that interrupts the pending play() rejects it with
+  // AbortError. That is routine media behaviour, not an app failure. The
+  // controls run in their own script world, so the DOMException fails
+  // `instanceof` against this page's constructors — match on the name.
+  if ((e.reason as { name?: unknown } | null)?.name === "AbortError") {
+    console.debug("Ignored AbortError:", e.reason);
+    return;
+  }
   const msg = e.reason instanceof Error ? e.reason.message : String(e.reason);
   showError(`Unhandled error: ${msg}`);
   console.error("Unhandled promise rejection:", e.reason);
