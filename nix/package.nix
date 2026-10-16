@@ -23,6 +23,8 @@
   fetchPnpmDeps,
   nodejs_22,
   pnpm_10,
+  # Absent on older nixpkgs; see `pnpm` below.
+  pnpm_10_latest ? null,
   pnpmConfigHook,
   pkg-config,
   wrapGAppsHook3,
@@ -42,6 +44,11 @@
 }:
 
 let
+  # Newer nixpkgs keeps `pnpm_10` at 10.34.0 as a compatibility pin and marks
+  # it insecure (CVE-2026-55487 and others), which fails evaluation;
+  # `pnpm_10_latest` carries the fixed 10.x. Older nixpkgs only has `pnpm_10`.
+  pnpm = if pnpm_10_latest != null then pnpm_10_latest else pnpm_10;
+
   manifest = lib.importJSON ../package.json;
   # productName decides the .app bundle and its main binary name on darwin.
   tauriConf = lib.importJSON ../src-tauri/tauri.conf.json;
@@ -97,7 +104,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
         ../pnpm-workspace.yaml
       ];
     };
-    pnpm = pnpm_10;
+    inherit pnpm;
     fetcherVersion = 3;
     # Must be regenerated whenever pnpm-lock.yaml changes, or the flake breaks
     # for everyone installing it. .github/workflows/nix.yml gates exactly that
@@ -110,7 +117,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
   nativeBuildInputs = [
     cargo-tauri.hook
     nodejs_22
-    pnpm_10
+    pnpm
     pnpmConfigHook
     pkg-config
     jq
