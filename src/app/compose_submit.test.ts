@@ -20,6 +20,15 @@ describe("resolveComposeSubmit", () => {
     ).toEqual({ kind: "text", body: "hello" });
   });
 
+  // The opener's indent is what markdown.ts strips from the block's lines, so
+  // trimming it alone would send the rest of the block indented.
+  it("keeps the indent of a code fence that opens the message", () => {
+    const rawValue = "\n   ```py\n   def f():\n       return 1\n   ```\n";
+    expect(
+      resolveComposeSubmit({ rawValue, editingEventId: null, hasStagedAttachments: false }),
+    ).toEqual({ kind: "text", body: "   ```py\n   def f():\n       return 1\n   ```" });
+  });
+
   describe("staged attachments", () => {
     it("sends the attachments with no caption when the field is empty", () => {
       expect(
