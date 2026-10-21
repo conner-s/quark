@@ -119,6 +119,10 @@ Upstream notes, verified 2026-08-10:
 
 ## The sync loop
 
+The `fork-sync` Claude Code skill (`.claude/skills/fork-sync/`) runs this loop end to end.
+Before rewriting anything, it reports what upstream's new commits do to each patch.
+Run its `preview.sh` on its own for a read-only replay of the stack onto the new upstream.
+
 ```bash
 # Recovery point that survives gc
 git tag sync/$(date +%Y-%m-%d) integration
