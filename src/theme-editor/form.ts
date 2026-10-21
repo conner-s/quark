@@ -177,13 +177,17 @@ export class ThemeForm {
     const hex = el("input", { type: "text", id, class: "tf-hex", spellcheck: false, maxLength: 9 });
     row.append(el("div", { class: "tf-input" }, swatch, hex));
 
+    // An optional colour may be left out ("" — derived from the palette, see
+    // [colors.syntax]); the picker keeps its last value, the chip goes blank.
+    if (field.optional) hex.placeholder = "(from palette)";
     const paint = (value: string): void => {
       chip.style.background = value;
-      picker.value = pickerValue(value);
+      if (value) picker.value = pickerValue(value);
     };
     // Accept "ff8800" as well as "#ff8800" — people paste both.
     const parse = (raw: string): string => {
       const s = raw.trim();
+      if (!s && field.optional) return "";
       return (s.startsWith("#") ? s : `#${s}`).toLowerCase();
     };
     const state = this.committing(hex, path, field, parse, fail, (v) => paint(v as string));

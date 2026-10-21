@@ -16,7 +16,7 @@
 // text field (font_family, room_list_width) would end the rule and let a
 // shared link inject arbitrary CSS into the preview.
 
-import { themeToCssVars, type Theme } from "../theme/loader.js";
+import { THEME_APPLIED_ATTR, themeToCssVars, type Theme } from "../theme/loader.js";
 
 const STYLE_ID = "quark-theme-editor";
 
@@ -97,6 +97,9 @@ export class Preview {
     // Moving a <style> rebuilds its sheet from its (empty) text, dropping the
     // rule; applyThemeVars re-creates it.
     if (style !== doc.head.lastElementChild) doc.head.append(style);
+    // A theme is applied, as far as vars.css is concerned: syntax colours the
+    // theme leaves out derive from its palette, not from Phosphor's own table.
+    doc.documentElement.setAttribute(THEME_APPLIED_ATTR, "");
     if (style.sheet) applyThemeVars(style.sheet, this.vars);
   }
 
