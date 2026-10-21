@@ -1573,6 +1573,208 @@ body.quark-mobile .room-list__header-btn {
   opacity: 0.85;
 }
 
+/* ── Code: inline `code` and fenced blocks ───────────────────────────────── */
+
+/* `.message-html` is added by renderFormattedBody to every body it renders,
+   on every surface, so these rules don't need the list of body classes the
+   rules above repeat. Message text is set in the sans --font-family-messages;
+   without this, <code> falls back to the browser's monospace rather than the
+   theme's. Colours come from --code-* and --syntax-* (a theme's
+   [colors.syntax] table, defaults in vars.css) and never from the white-alpha
+   --surface-* tints, which disappear on the light themes. */
+.message-html code,
+.message-html pre {
+  font-family: var(--font-family);
+  /* A monospace face at the message size reads larger than the sans around it. */
+  font-size: 0.92em;
+  color: var(--code-fg);
+  background-color: var(--code-bg);
+}
+
+.message-html code {
+  padding: 0 0.3em;
+  border-radius: 2px;
+}
+
+/* Blocks wrap instead of scrolling sideways. .timeline clips anything wider
+   (overflow-x: hidden), and a scrolling <pre> would be one more native
+   scrollbar for WebKitGTK to paint over open dialogs (#32), a sideways swipe
+   that on mobile opens the room drawer instead, and a scroller no key can
+   reach. The UA's `white-space: pre` would otherwise beat the bodies' pre-wrap. */
+.message-html pre {
+  display: block;
+  max-width: 100%;
+  margin: 4px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--code-border);
+  border-radius: 3px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  tab-size: 4;
+}
+
+/* The block draws the box; its <code> is just the text (and mustn't shrink a
+   second time: 0.92em of 0.92em). */
+.message-html pre code {
+  font-size: inherit;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  background: none;
+}
+
+/* A link labelled with code (`[`foo()`](…)`) keeps the link colour: being
+   clickable matters more than being code, and the box still says code. */
+.message-html a code {
+  color: inherit;
+}
+
+/* Token colours, applied by ui/code_highlight.ts. highlight.js puts a scope's
+   sub-scopes on the same span (`hljs-title function_`), so the compound
+   selectors below outrank the bare ones by specificity, not by source order.
+   Colour only: a block is highlighted after its body has laid out (once its
+   grammar's chunk loads), so a token must not change size and shift the
+   timeline. Markdown's emphasis and strong are the one exception — the style
+   is their meaning. */
+.message-html code.hljs .hljs-comment,
+.message-html code.hljs .hljs-quote {
+  color: var(--syntax-comment);
+}
+
+.message-html code.hljs .hljs-keyword,
+.message-html code.hljs .hljs-meta .hljs-keyword,
+.message-html code.hljs .hljs-template-tag {
+  color: var(--syntax-keyword);
+}
+
+.message-html code.hljs .hljs-string,
+.message-html code.hljs .hljs-meta .hljs-string,
+.message-html code.hljs .hljs-code {
+  color: var(--syntax-string);
+}
+
+.message-html code.hljs .hljs-number {
+  color: var(--syntax-number);
+}
+
+.message-html code.hljs .hljs-literal,
+.message-html code.hljs .hljs-symbol,
+.message-html code.hljs .hljs-variable.constant_,
+.message-html code.hljs .hljs-formula {
+  color: var(--syntax-constant);
+}
+
+.message-html code.hljs .hljs-built_in,
+.message-html code.hljs .hljs-variable.language_ {
+  color: var(--syntax-builtin);
+}
+
+.message-html code.hljs .hljs-type,
+.message-html code.hljs .hljs-title.class_,
+.message-html code.hljs .hljs-title.class_.inherited__ {
+  color: var(--syntax-type);
+}
+
+.message-html code.hljs .hljs-title,
+.message-html code.hljs .hljs-title.function_,
+.message-html code.hljs .hljs-title.function_.invoke__ {
+  color: var(--syntax-function);
+}
+
+.message-html code.hljs .hljs-variable,
+.message-html code.hljs .hljs-template-variable,
+.message-html code.hljs .hljs-params {
+  color: var(--syntax-variable);
+}
+
+.message-html code.hljs .hljs-attr,
+.message-html code.hljs .hljs-attribute,
+.message-html code.hljs .hljs-property,
+.message-html code.hljs .hljs-selector-attr,
+.message-html code.hljs .hljs-selector-pseudo {
+  color: var(--syntax-attribute);
+}
+
+.message-html code.hljs .hljs-name,
+.message-html code.hljs .hljs-selector-tag,
+.message-html code.hljs .hljs-selector-id,
+.message-html code.hljs .hljs-selector-class {
+  color: var(--syntax-tag);
+}
+
+/* `hljs-tag` is the whole `<a href="…">`; its name and attributes carry their
+   own colours, which leaves this one on the brackets. */
+.message-html code.hljs .hljs-punctuation,
+.message-html code.hljs .hljs-tag {
+  color: var(--syntax-punctuation);
+}
+
+.message-html code.hljs .hljs-operator {
+  color: var(--syntax-operator);
+}
+
+.message-html code.hljs .hljs-char.escape_ {
+  color: var(--syntax-escape);
+}
+
+/* An interpolation (`${…}`) sits inside its string's span; give it the plain
+   code colour back so it reads as code, not as more string. */
+.message-html code.hljs .hljs-subst {
+  color: var(--code-fg);
+}
+
+.message-html code.hljs .hljs-meta,
+.message-html code.hljs .hljs-meta.prompt_,
+.message-html code.hljs .hljs-doctag {
+  color: var(--syntax-meta);
+}
+
+.message-html code.hljs .hljs-regexp,
+.message-html code.hljs .hljs-link {
+  color: var(--syntax-regexp);
+}
+
+.message-html code.hljs .hljs-section,
+.message-html code.hljs .hljs-bullet {
+  color: var(--syntax-section);
+}
+
+.message-html code.hljs .hljs-addition {
+  color: var(--syntax-addition);
+}
+
+.message-html code.hljs .hljs-deletion {
+  color: var(--syntax-deletion);
+}
+
+.message-html code.hljs .hljs-emphasis {
+  font-style: italic;
+}
+
+.message-html code.hljs .hljs-strong {
+  font-weight: bold;
+}
+
+/* An unrevealed spoiler hides its text by painting it transparent on a solid
+   bar (.message__spoiler, below). Code's own colours would punch a hole in
+   that bar the shape of the hidden text — and the composer puts <code> right
+   inside a spoiler: ||`hunter2`|| — so code takes the spoiler's colours until
+   it's revealed. The bar is painted on the code itself rather than left to
+   show through, because the inline spoiler's bar doesn't reach behind a
+   block: a <pre> would otherwise be an empty space with nothing to say it can
+   be revealed. Token colours outrank this, so tokens are hidden outright
+   instead, as the spoiler's custom emoji are. */
+.message-html .message__spoiler:not(.message__spoiler--revealed) :is(code, pre) {
+  color: transparent;
+  background: var(--fg);
+  border-color: transparent;
+}
+
+.message-html .message__spoiler:not(.message__spoiler--revealed) code.hljs * {
+  visibility: hidden;
+}
+
 /* Text-select mode: caret is placed inside this message body via `o`. */
 .message__body--text-select {
   outline: 1px dashed color-mix(in srgb, var(--cursor) 60%, transparent);

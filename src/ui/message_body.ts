@@ -8,6 +8,10 @@
 // rather than on whichever one the author had open.
 
 import { decorateMessageLinks } from "../app/links.js";
+import { highlightCodeBlocks } from "./code_highlight.js";
+
+/** HTML whitespace (not `\s`, which would also take a deliberate U+00A0). */
+const WHITESPACE_ONLY = /^[ \t\n\f\r]*$/;
 
 /**
  * Activate Matrix spoilers (MSC2010 / `data-mx-spoiler`) inside a freshly
@@ -56,6 +60,12 @@ export function setupSpoilers(container: HTMLElement): void {
  * to call it: the thread panel renders into the list and still went without,
  * which left its custom emoji blank until an unrelated sync event in the room
  * happened to resolve them.
+ *
+ * `el` gains the `message-html` class, which is what the stylesheet scopes
+ * code-block rules to — every caller passes its own body class, and this keeps
+ * that list out of the CSS. Code blocks are syntax-highlighted here too, so
+ * every surface gets it: synchronously when the same text was highlighted
+ * before, otherwise a moment later, off the main thread (code_highlight.ts).
  */
 export function renderFormattedBody(el: HTMLElement, html: string): void {
   // In production this must be sanitized server-side or with DOMPurify; for the
@@ -68,12 +78,28 @@ export function renderFormattedBody(el: HTMLElement, html: string): void {
       img.removeAttribute("src");
     }
   }
+  el.classList.add("message-html");
+  // Bodies are `white-space: pre-wrap`, so the newline other clients put
+  // between block tags renders as a blank line. Element sends
+  // `<p>…</p>\n<pre>…</pre>\n`, which framed every code block in empty lines.
+  // Only around <pre>: elsewhere the same whitespace may be all that separates
+  // two inline runs (`<b>a</b> <i>b</i>`).
+  for (const pre of el.querySelectorAll("pre")) {
+    for (const sibling of [pre.previousSibling, pre.nextSibling]) {
+      if (sibling?.nodeType === Node.TEXT_NODE && WHITESPACE_ONLY.test(sibling.textContent ?? "")) {
+        sibling.remove();
+      }
+    }
+  }
   // Give anchors from formatted_body the same class, rel and tooltip the
   // linkifier gives bare URLs (#51), and strip non-http hrefs so nothing can
   // navigate the WebView. Activation goes through the global link guard in
   // app/links.ts, so no per-anchor listener is attached here.
   decorateMessageLinks(el);
   setupSpoilers(el);
+  // Not awaited: the body reads fine as plain text, and a result that arrives
+  // later applies itself.
+  void highlightCodeBlocks(el);
 }
 
 /**

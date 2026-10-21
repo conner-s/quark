@@ -20,6 +20,8 @@ export default defineConfig({
   base: "./",
   resolve: { alias: { "@": resolve(__dirname, "src") } },
   build: { outDir: "docs/demo", emptyOutDir: true },
+  // As in vite.config.ts: the highlighting worker code-splits, which iife can't.
+  worker: { format: "es" },
   plugins: [
     {
       name: "quark-demo-force-debug",
