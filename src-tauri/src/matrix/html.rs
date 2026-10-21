@@ -13,6 +13,7 @@
 //! covered at the source rather than one `innerHTML` at a time.
 
 use ammonia::Builder;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
@@ -32,9 +33,47 @@ const ALLOWED_TAGS: &[&str] = &[
 const ALLOWED_SCHEMES: &[&str] =
     &["http", "https", "ftp", "mailto", "magnet", "matrix", "mxc"];
 
+/// Whether `token` is a `language-*` class whose language name stays within the
+/// charset the composer accepts for a fence info word (`[A-Za-z0-9_+#.-]+`,
+/// covering `c++`, `c#`, `objective-c`, `vue.js`).
+fn is_language_class(token: &str) -> bool {
+    token.strip_prefix("language-").is_some_and(|lang| {
+        !lang.is_empty()
+            && lang
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"_+#.-".contains(&b))
+    })
+}
+
+/// Narrow `class` on `<code>` to its `language-*` tokens, dropping the
+/// attribute when none are left; every other attribute passes through as is.
+///
+/// The spec allows `class` on `<code>` only for `language-*`, the hint a sender
+/// attaches to a fenced code block, and that hint is all the frontend reads (to
+/// pick a highlight.js grammar). Anything else in the attribute is a remote
+/// sender reaching for the app's own classes: `hljs-*` to fake highlighting,
+/// or a UI class the stylesheet already styles. The charset keeps the language
+/// name to what a fence can express, so nothing odd reaches the grammar lookup.
+fn filter_attribute<'u>(element: &str, attribute: &str, value: &'u str) -> Option<Cow<'u, str>> {
+    if element != "code" || attribute != "class" {
+        return Some(Cow::Borrowed(value));
+    }
+    // ASCII whitespace is what HTML itself splits a class list on.
+    let kept: Vec<&str> = value
+        .split_ascii_whitespace()
+        .filter(|token| is_language_class(token))
+        .collect();
+    if kept.is_empty() {
+        None
+    } else {
+        Some(Cow::Owned(kept.join(" ")))
+    }
+}
+
 /// The configured sanitizer, built once and shared. `ammonia::Builder` is
-/// `Send + Sync` (it holds only `'static` allowlists and no filter closures), so
-/// a single instance can clean from any thread.
+/// `Send + Sync`: its allowlists are `'static`, and ammonia requires the
+/// attribute filter to be `Send + Sync` as well (here a plain fn), so a single
+/// instance can clean from any thread.
 fn cleaner() -> &'static Builder<'static> {
     static CLEANER: OnceLock<Builder<'static>> = OnceLock::new();
     CLEANER.get_or_init(|| {
@@ -64,9 +103,14 @@ fn cleaner() -> &'static Builder<'static> {
         );
 
         let mut b = Builder::default();
+        // `allowed_classes` can't narrow `<code class>`: ammonia refuses it while
+        // `class` is also in `tag_attributes`, and it matches whole class names
+        // rather than a `language-*` pattern. The filter runs after the
+        // allowlists, so it only ever sees attributes they kept.
         b.tags(ALLOWED_TAGS.iter().copied().collect())
             .url_schemes(ALLOWED_SCHEMES.iter().copied().collect())
-            .tag_attributes(tag_attributes);
+            .tag_attributes(tag_attributes)
+            .attribute_filter(filter_attribute);
         b
     })
 }
@@ -136,5 +180,65 @@ mod tests {
         let out = sanitize(html);
         assert!(out.starts_with("<mx-reply>"), "mx-reply wrapper dropped: {out}");
         assert!(out.contains("actual reply"));
+    }
+
+    // --- <code class>: only `language-*` survives ---
+
+    #[test]
+    fn keeps_code_language_class() {
+        let out = sanitize(r#"<pre><code class="language-nix">inputs = { };</code></pre>"#);
+        assert_eq!(out, r#"<pre><code class="language-nix">inputs = { };</code></pre>"#);
+    }
+
+    #[test]
+    fn keeps_language_names_using_the_whole_fence_charset() {
+        for lang in ["c++", "C#", "objective-c", "vue.js", "x86_64"] {
+            let out = sanitize(&format!(r#"<code class="language-{lang}">x</code>"#));
+            assert!(
+                out.contains(&format!(r#"class="language-{lang}""#)),
+                "language-{lang} dropped: {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn strips_non_language_tokens_from_code_class() {
+        let out = sanitize(r#"<code class="language-nix hljs foo">x</code>"#);
+        assert_eq!(out, r#"<code class="language-nix">x</code>"#);
+    }
+
+    #[test]
+    fn drops_code_class_with_no_language_token() {
+        let out = sanitize(r#"<code class="hljs-keyword">let</code>"#);
+        assert_eq!(out, "<code>let</code>");
+    }
+
+    #[test]
+    fn drops_language_class_outside_the_charset() {
+        for class in ["language-<bad>", "language-", "language-a/b", "language-ñ"] {
+            let out = sanitize(&format!(r#"<code class="{class}">x</code>"#));
+            assert_eq!(out, "<code>x</code>", "class=\"{class}\" survived");
+        }
+        // A quote can't end the attribute early, but its fragments must not
+        // survive as tokens either.
+        let out = sanitize(r#"<code class='language-x" onclick="y'>x</code>"#);
+        assert_eq!(out, "<code>x</code>");
+    }
+
+    #[test]
+    fn filter_leaves_other_attributes_alone() {
+        let out = sanitize(r#"<span data-mx-spoiler="reason">secret</span>"#);
+        assert!(out.contains(r#"data-mx-spoiler="reason""#), "spoiler reason dropped: {out}");
+
+        let out = sanitize(r#"<a href="https://example.org/a?b=c">link</a>"#);
+        assert!(out.contains(r#"href="https://example.org/a?b=c""#), "href changed: {out}");
+        assert!(out.contains(r#"rel="noopener noreferrer""#), "injected rel dropped: {out}");
+    }
+
+    // The filter only narrows; `class` stays disallowed everywhere but <code>.
+    #[test]
+    fn language_class_is_not_allowed_off_code() {
+        let out = sanitize(r#"<span class="language-nix">x</span>"#);
+        assert_eq!(out, "<span>x</span>");
     }
 }
