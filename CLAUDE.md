@@ -15,7 +15,7 @@ This checkout is a **fork** of [MCPlummet/quark](https://github.com/MCPlummet/qu
 Rules that matter when making changes:
 
 - **Branch off `upstream/main`, never off `integration`** — `git fetch upstream && git switch -c fix/<topic> upstream/main`. A branch cut from `integration` silently inherits carried patches and can't be upstreamed.
-- **Never let a carried patch onto a `fix/*`/`feat/*` branch.** Carried means `design/`, `.design-sync/`, `scripts/{extract-ds-slice,validate-ds-bundle}.mjs`, `src-tauri/deny.toml`, the `CARGO_PROFILE_RELEASE_LTO` line in `nix/package.nix`, `PATCHES.md`, `CONTRIBUTING-FORK.md`, and this section. Check with `git diff --stat upstream/main...HEAD` before opening a PR.
+- **Never let a carried patch onto a `fix/*`/`feat/*` branch.** Carried means `design/`, `.design-sync/`, `.claude/skills/fork-sync/`, `scripts/{extract-ds-slice,validate-ds-bundle}.mjs`, `src-tauri/deny.toml`, the `CARGO_PROFILE_RELEASE_LTO` line in `nix/package.nix`, `PATCHES.md`, `CONTRIBUTING-FORK.md`, and this section. Check with `git diff --stat upstream/main...HEAD` before opening a PR.
 - **Fold finished work into `integration` with `git cherry-pick -x`** (the `-x` provenance line is the only durable link back once branches get rebased), keeping upstream-bound commits *below* the carried patches.
 - **`--force-with-lease`, never bare `--force`.** `rerere` is on, so a conflict resolved once replays on later rebases.
 - Upstream merge-commits PRs (it used to squash) and has no CLA or DCO. It does ask each PR to bump the version — add that on the branch with the `version-bump` skill.
