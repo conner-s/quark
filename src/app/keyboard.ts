@@ -80,7 +80,7 @@ import type { KeyContext } from "../vim/keybindings.js";
 import { BUILTIN_EMOJI } from "../data/unicode-emoji.js";
 import { _shortcodeToMxc } from "./actions/context.js";
 import { onMobileChange, isMobile } from "./mobile.js";
-import { effectiveSendOnEnter, shouldShowSendButton } from "./send_behavior.js";
+import { autocompleteAllowed, enterSends, shouldShowSendButton } from "./send_behavior.js";
 import { showToast, showError } from "../ui/NotificationToast.js";
 import { runUpdateCheck } from "./update_check.js";
 import { filterShortcodes, type ShortcodeEntry } from "../ui/ShortcodePreview.js";
@@ -481,6 +481,15 @@ async function refreshRoomMembers(): Promise<void> {
 
 // extractMentionQuery lives in ./autocomplete_query.ts (pure, unit-tested).
 
+/**
+ * Whether the autocompletes may open for the compose field as it stands — not
+ * with the caret, or the end of the text, in an open ``` fence
+ * (send_behavior.autocompleteAllowed).
+ */
+function autocompleteAllowedIn(field: HTMLTextAreaElement): boolean {
+  return autocompleteAllowed(field.value, field.selectionStart ?? field.value.length);
+}
+
 // ── Text-select submode keyboard handler ──────────────────────────────────────
 
 /**
@@ -777,6 +786,15 @@ function submitComposeBox(components: AppComponents): void {
 
 function handleInsertKeydown(e: KeyboardEvent, components: AppComponents): void {
   const { input, shortcodePreview, mentionPreview } = components;
+  const field = input.getFieldElement();
+
+  // A popup opened outside a fence stays open if the caret is then clicked
+  // into one (no input event to close it), and would turn the Enter meant as a
+  // newline into a completion. Close it first.
+  if ((mentionPreview.isVisible() || shortcodePreview.isVisible()) && !autocompleteAllowedIn(field)) {
+    mentionPreview.hide();
+    shortcodePreview.hide();
+  }
 
   // Mention autocomplete intercepts first
   if (mentionPreview.isVisible()) {
@@ -810,15 +828,16 @@ function handleInsertKeydown(e: KeyboardEvent, components: AppComponents): void 
 
   // Enter → send message, reply, or commit an inline edit. Ctrl/Cmd+Enter always
   // sends (a send affordance when Enter inserts a newline). A bare Enter sends
-  // only when the send-key behavior says so (see app/send_behavior.ts); otherwise
-  // it falls through so the textarea inserts a newline.
+  // only when the send-key behavior says so and the caret isn't inside an open
+  // ``` fence (see app/send_behavior.ts); otherwise it falls through so the
+  // textarea inserts a newline.
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     submitComposeBox(components);
     return;
   }
   if (e.key === "Enter" && !e.shiftKey) {
-    if (effectiveSendOnEnter()) {
+    if (enterSends(field.value, field.selectionStart ?? field.value.length)) {
       e.preventDefault();
       submitComposeBox(components);
     }
@@ -836,7 +855,6 @@ function handleInsertKeydown(e: KeyboardEvent, components: AppComponents): void 
 
   // If focus escaped the compose box (e.g. user clicked elsewhere), redirect
   // printable characters back to it so typing always works in Insert mode.
-  const field = input.getFieldElement();
   if (document.activeElement !== field && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
     e.preventDefault();
     input.focus();
@@ -1375,6 +1393,13 @@ export function setupKeyboard(components: AppComponents): void {
 
   input.onInput((value) => {
     if (modeManager.current !== Mode.Insert) return;
+
+    // No autocomplete in a ``` fence (see autocompleteAllowedIn).
+    if (!autocompleteAllowedIn(input.getFieldElement())) {
+      mentionPreview.hide();
+      shortcodePreview.hide();
+      return;
+    }
 
     // Mention autocomplete (@name) — takes precedence over shortcodes if active
     const mentionQuery = extractMentionQuery(value);

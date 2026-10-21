@@ -93,6 +93,10 @@ export async function sendThreadReply(body: string, threadRootId: string, roomId
   const prepared = prepareOutgoingBody(body);
   body = prepared.body;
 
+  // The sync echo of our own reply is suppressed (`_ownSentEventIds`), so this
+  // optimistic message is what stays on screen until the thread is reopened. It
+  // carries the formatted body for that reason: without it a code block or a
+  // custom emoji showed as the raw markdown / `:shortcode:` it was typed as.
   const optimisticId = `local-thread-${Date.now()}`;
   const optimisticMsg = {
     id: optimisticId,
@@ -100,10 +104,14 @@ export async function sendThreadReply(body: string, threadRootId: string, roomId
     isOwn: true,
     timestamp: new Date().toISOString(),
     body,
+    htmlBody: prepared.formattedBody,
   };
 
   // Append hidden to thread panel so we can measure its position.
   timeline.appendInlineReply(optimisticMsg);
+  // renderFormattedBody parks a custom emoji's mxc:// src on data-mxc; resolve
+  // it now that the reply is in the DOM, as sendMessage does.
+  if (prepared.formattedBody) _downloadInlineEmoji(timeline);
   // Optimistically update the reply count indicator on the thread root.
   timeline.incrementThreadReplyCount(threadRootId);
 

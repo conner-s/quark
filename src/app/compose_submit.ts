@@ -23,7 +23,7 @@ export function resolveComposeSubmit(opts: {
   editingEventId: string | null;
   hasStagedAttachments: boolean;
 }): ComposeSubmitPlan {
-  const trimmed = opts.rawValue.trim();
+  const trimmed = trimForSend(opts.rawValue);
   if (opts.editingEventId) {
     return trimmed ? { kind: "edit", body: trimmed } : { kind: "none" };
   }
@@ -34,4 +34,16 @@ export function resolveComposeSubmit(opts: {
     return { kind: "text", body: trimmed };
   }
   return { kind: "none" };
+}
+
+/**
+ * The field text, trimmed — except that when it opens with an indented code
+ * fence, the fence keeps its indent. A fence indented N spaces strips up to N
+ * from each of its lines (markdown.ts); trimming only the opener's left the
+ * rest of the block indented by N when it went out.
+ */
+function trimForSend(raw: string): string {
+  const trimmed = raw.trim();
+  const fenceIndent = /^(?:[ \t]*\r?\n)*( {1,3})(?=```|~~~)/.exec(raw);
+  return trimmed && fenceIndent ? fenceIndent[1] + trimmed : trimmed;
 }

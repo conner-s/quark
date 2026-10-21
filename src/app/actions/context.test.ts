@@ -278,6 +278,28 @@ describe("prepareOutgoingBody", () => {
     expect(body).toBe("**bold** 😀");
     expect(formattedBody).toBe("<strong>bold</strong> 😀");
   });
+
+  // `:b:` and `:100:` are built-in shortcodes, so a Nix lambda `a:b:c` used to go
+  // out as `a🅱️c` — in the plain body and the formatted one alike.
+  it("leaves shortcodes in a fenced code block literal in both bodies", () => {
+    const raw = "```nix\nf = a:b:c; # :100:\n```\n:100:";
+    const { body, formattedBody } = prepareOutgoingBody(raw);
+    expect(body).toBe("```nix\nf = a:b:c; # :100:\n```\n💯");
+    expect(formattedBody).toBe('<pre><code class="language-nix">f = a:b:c; # :100:</code></pre>💯');
+  });
+
+  it("leaves shortcodes in a code span literal in both bodies", () => {
+    const { body, formattedBody } = prepareOutgoingBody("`a:b:c` :100:");
+    expect(body).toBe("`a:b:c` 💯");
+    expect(formattedBody).toBe("<code>a:b:c</code> 💯");
+  });
+
+  it("leaves a custom shortcode inside code as text, not an image", () => {
+    _shortcodeToMxc.set("party", "mxc://emoji/party");
+    const { body, formattedBody } = prepareOutgoingBody("```\n:party:\n```");
+    expect(body).toBe("```\n:party:\n```");
+    expect(formattedBody).toBe("<pre><code>:party:</code></pre>");
+  });
 });
 
 describe("consumeOwnSentEvent", () => {
