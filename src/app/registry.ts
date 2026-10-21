@@ -132,7 +132,7 @@ export interface MenuSpec {
  * groups with a plain rule.
  */
 export const MENU_SECTIONS: Readonly<Partial<Record<MenuSurface, Readonly<Record<number, string>>>>> = {
-  message: { 1: "respond", 2: "clipboard", 3: "selection", 4: "event" },
+  message: { 1: "respond", 2: "clipboard", 3: "selection", 4: "save", 5: "event" },
   compose: { 1: "format", 2: "clipboard", 3: "selection", 4: "insert", 5: "draft" },
 };
 
@@ -399,22 +399,13 @@ const ACTION_LITERALS = [
     parityExempt: EDITING_EXEMPT,
   },
   {
-    id: "view-raw-event",
-    description: "View the selected message's source event",
-    requires: ["message"],
-    menus: [{ surface: "message", label: "View raw event", group: 4, order: 1 }],
-    palette: false,
-    parityExempt:
-      "`:debug $eventId` is the keyboard form, and `:debug` covers the room's state; this row is the pointer shortcut to the same viewer.",
-  },
-  {
     // Image messages only, and Photos only on a platform with a photo library
     // (#124) — both expressed by the caller withholding the handler, since
     // neither is something `requires` can say.
     id: "save-image-photos",
     description: "Save the selected image to Photos",
     requires: ["message"],
-    menus: [{ surface: "message", label: "Save to Photos", group: 2, order: 4 }],
+    menus: [{ surface: "message", label: "Save to Photos", group: 4, order: 1 }],
     palette: false,
     parityExempt:
       "Only exists on iOS and Android, which have no keyboard path to a message at all; the image viewer's photos button is the other way there.",
@@ -423,10 +414,19 @@ const ACTION_LITERALS = [
     id: "save-image-file",
     description: "Save the selected image as a file",
     requires: ["message"],
-    menus: [{ surface: "message", label: "Save as file", group: 2, order: 5 }],
+    menus: [{ surface: "message", label: "Save as file", group: 4, order: 2 }],
     palette: false,
     parityExempt:
       "Keyboard users open the image with Enter or `o` and press `s` in the viewer, which saves through the same dialog.",
+  },
+  {
+    id: "view-raw-event",
+    description: "View the selected message's source event",
+    requires: ["message"],
+    menus: [{ surface: "message", label: "View raw event", group: 5, order: 1 }],
+    palette: false,
+    parityExempt:
+      "`:debug $eventId` is the keyboard form, and `:debug` covers the room's state; this row is the pointer shortcut to the same viewer.",
   },
   {
     id: "edit",
@@ -436,7 +436,7 @@ const ACTION_LITERALS = [
       { sequence: "E", context: "global" },
       { sequence: "c", context: "global" },
     ],
-    menus: [{ surface: "message", label: "Edit", group: 4, order: 2, whenUnavailable: "disable" }],
+    menus: [{ surface: "message", label: "Edit", group: 5, order: 2, whenUnavailable: "disable" }],
     palette: false,
   },
   {
@@ -444,7 +444,7 @@ const ACTION_LITERALS = [
     description: "Delete the selected message",
     requires: ["own-message"],
     bindings: [{ sequence: "dd", context: "global" }],
-    menus: [{ surface: "message", label: "Delete", group: 4, order: 3, danger: true, whenUnavailable: "disable" }],
+    menus: [{ surface: "message", label: "Delete", group: 5, order: 3, danger: true, whenUnavailable: "disable" }],
     palette: false,
   },
   {
