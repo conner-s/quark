@@ -8,6 +8,7 @@ import { appendCaption, buildFileAffordance, renderMessageText } from "./message
 import { isAnimatedUrl } from "../app/animated_urls.js";
 import { hashColor } from "./avatarColors.js";
 import { isMobile, viewportPan } from "../app/mobile.js";
+import { withoutCode } from "../app/markdown.js";
 import { mountOverlay } from "./overlay.js";
 import { ReceiptIndex, readersSignature, type Reader } from "./receipt_placement.js";
 
@@ -61,6 +62,9 @@ export function selectionWithin(el: HTMLElement | null): string {
 
 /** In-memory cache: url → preview data (null = fetched but no preview available) */
 const _urlPreviewCache = new Map<string, { title: string | null; description: string | null; imageUrl: string | null; siteName: string | null } | null>();
+
+/** Longest body whose code is skipped when finding its preview URL (see buildMessageElement). */
+const PREVIEW_PARSE_MAX = 8192;
 
 /**
  * Extracts the first http/https URL from a text string.
@@ -671,7 +675,15 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     row.appendChild(body);
 
     // ── URL preview card ─────────────────────────────────────────────────
-    const previewUrl = extractFirstUrl(msg.body);
+    // Only a URL in the prose earns a card — not one in a pasted config or a
+    // `code span`, which is there to be read as code. Finding the code means
+    // parsing the body, which this does for every message rendered, so only
+    // when there is a URL to place, and only up to PREVIEW_PARSE_MAX: past
+    // that, a body of 64 KB of newlines cost ~25 ms of parsing, 250 times a
+    // render. A longer body is placed as before, code or not.
+    const firstUrl = extractFirstUrl(msg.body);
+    const previewUrl =
+      firstUrl && msg.body.length <= PREVIEW_PARSE_MAX ? extractFirstUrl(withoutCode(msg.body)) : firstUrl;
     if (previewUrl) {
       attachUrlPreview(previewUrl, row);
     }

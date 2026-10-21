@@ -40,7 +40,7 @@ vi.mock("../mobile.js", async (importActual) => ({
 
 import { openThread, closeThread, isInOpenThread, THREAD_FOCUS_CLASS } from "./threads.js";
 import { sendMessage, startReply, startEdit, dismissComposeBanner } from "./messages.js";
-import { setComponents, _ownSentEventIds } from "./context.js";
+import { setComponents, _ownSentEventIds, _shortcodeToMxc } from "./context.js";
 import { renderLiveEvent } from "./live.js";
 import { openQuickReactPicker } from "./reactions.js";
 import { AppState } from "../state.js";
@@ -385,6 +385,28 @@ it("resolves inline custom emoji in the replies it loads", async () => {
   ]);
   await openThread("$root");
   expect(getThumbnail).toHaveBeenCalledWith("mxc://e/1", expect.any(Number), expect.any(Number));
+});
+
+// Our own reply's sync echo is suppressed, so its optimistic row is what stays
+// on screen: drawn from the formatted body that goes out (a fence is a code
+// block, not raw ```), with its custom emoji resolved as soon as it is drawn.
+it("draws our thread reply from the body it sends, custom emoji and all", async () => {
+  getThumbnail.mockResolvedValue({ mime_type: "image/png", data_base64: "AAAA" });
+  _shortcodeToMxc.set("sent_party", "mxc://e/sent");
+  try {
+    await openThread("$root");
+    const send = deferredSend();
+    const sent = sendMessage("```nix\nx = 1;\n```\n:sent_party:");
+    await new Promise((r) => setTimeout(r, 0));
+
+    const row = threadView.getMessageEl(threadRowIds().find((id) => id?.startsWith("local-thread-"))!)!;
+    expect(row.querySelector("pre > code.language-nix")?.textContent).toBe("x = 1;");
+    expect(getThumbnail).toHaveBeenCalledWith("mxc://e/sent", expect.any(Number), expect.any(Number));
+    send.resolve("$sent");
+    await sent;
+  } finally {
+    _shortcodeToMxc.delete("sent_party");
+  }
 });
 
 // Counting replies, and replies still on their way. Typing past a homeserver

@@ -286,6 +286,9 @@ export async function sendThreadReply(
     pending: true,
   };
   threadView.appendReply(optimistic);
+  // renderFormattedBody parks a custom emoji's mxc:// src on data-mxc; resolve
+  // it now that the reply is in the sheet, as sendMessage does for the room.
+  if (prepared.formattedBody) _downloadInlineEmoji(threadView);
   _sendingReplies.set(optimisticId, { rootId: threadRootId, msg: optimistic });
   // The quoted message is consumed by this send, as a main-timeline reply is —
   // unless the send fails, when the quote goes back with the text.
