@@ -42,6 +42,34 @@ border = "#333333"
 own_bg = "#1a3a1a"
 count = "#888888"
 
+# Code block syntax highlighting. A key left out falls back to a colour
+# derived from the palette above.
+# Green phosphor tones varied by brightness, with the theme's own
+# blue and amber accents kept for a few rare tokens.
+[colors.syntax]
+background = "#0c130c"
+foreground = "#b0b0b0"
+border = "#1a3a1a"
+comment = "#4e8a5c"
+keyword = "#00ff41"
+string = "#a6ffbc"
+number = "#ffaa00"
+constant = "#ffaa00"
+builtin = "#00c435"
+type = "#6dff93"
+function = "#d4ffe0"
+variable = "#b0b0b0"
+attribute = "#6dff93"
+tag = "#00ff41"
+operator = "#86c693"
+punctuation = "#6f8f76"
+escape = "#ffaa00"
+meta = "#00aaff"
+regexp = "#a6ffbc"
+section = "#00ff41"
+addition = "#00ff41"
+deletion = "#ff3333"
+
 [typography]
 font_family = "JetBrains Mono, Fira Code, monospace"
 font_size = 14

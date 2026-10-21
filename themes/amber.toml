@@ -42,6 +42,33 @@ border = "#3d2800"
 own_bg = "#2e1f00"
 count = "#7a5500"
 
+# Code block syntax highlighting. A key left out falls back to a colour
+# derived from the palette above.
+# Amber tones varied by brightness rather than adding hues.
+[colors.syntax]
+background = "#160e00"
+foreground = "#c8820a"
+border = "#3d2800"
+comment = "#8a6418"
+keyword = "#ffb000"
+string = "#ffd040"
+number = "#ffe6a3"
+constant = "#ffe6a3"
+builtin = "#e88a10"
+type = "#ffc85a"
+function = "#ffdc8a"
+variable = "#c8820a"
+attribute = "#e8a032"
+tag = "#ffb000"
+operator = "#d69a3c"
+punctuation = "#a0701c"
+escape = "#ff9a2a"
+meta = "#e88a10"
+regexp = "#ffd040"
+section = "#ffb000"
+addition = "#c8a000"
+deletion = "#ff4422"
+
 [typography]
 font_family = "JetBrains Mono, Fira Code, monospace"
 font_size = 14

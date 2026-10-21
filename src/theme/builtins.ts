@@ -1,6 +1,7 @@
 // Built-in themes embedded at compile time.
 // These are converted from the TOML files in /themes/ so they work in both
-// dev (mock IPC) and production without needing file system access.
+// dev (mock IPC) and production without needing file system access. Edit both
+// copies together: builtins.parity.test.ts fails when they drift apart.
 
 import type { Theme } from "./loader.js";
 
@@ -14,6 +15,7 @@ export const BUILTIN_THEME_MAP: Record<string, Theme> = {
       messages: { own: "#00ff41", other: "#b0b0b0", system: "#555555", timestamp: "#444444", mention_bg: "#1a1a00", mention_fg: "#ffaa00", reply_border: "#555555", thread_indicator: "#00aaff" },
       roomlist: { active_bg: "#1a1a1a", active_fg: "#00ff41", unread: "#ffffff", mention_badge: "#ff3333", muted: "#444444" },
       reactions: { background: "#1a1a1a", border: "#333333", own_bg: "#1a3a1a", count: "#888888" },
+      syntax: { background: "#0c130c", foreground: "#b0b0b0", border: "#1a3a1a", comment: "#4e8a5c", keyword: "#00ff41", string: "#a6ffbc", number: "#ffaa00", constant: "#ffaa00", builtin: "#00c435", type: "#6dff93", function: "#d4ffe0", variable: "#b0b0b0", attribute: "#6dff93", tag: "#00ff41", operator: "#86c693", punctuation: "#6f8f76", escape: "#ffaa00", meta: "#00aaff", regexp: "#a6ffbc", section: "#00ff41", addition: "#00ff41", deletion: "#ff3333" },
     },
     typography: { font_family: "JetBrains Mono, Fira Code, monospace", font_size: 14, line_height: 1.5, message_spacing: 4 },
     borders: { style: "rounded", room_list_width: "25%" },
@@ -29,6 +31,7 @@ export const BUILTIN_THEME_MAP: Record<string, Theme> = {
       messages: { own: "#ffb000", other: "#c8820a", system: "#5a3d00", timestamp: "#4a3000", mention_bg: "#1f1200", mention_fg: "#ffd040", reply_border: "#5a3d00", thread_indicator: "#e07b00" },
       roomlist: { active_bg: "#1a1000", active_fg: "#ffb000", unread: "#ffd040", mention_badge: "#ff4422", muted: "#4a3000" },
       reactions: { background: "#1a1000", border: "#3d2800", own_bg: "#2e1f00", count: "#7a5500" },
+      syntax: { background: "#160e00", foreground: "#c8820a", border: "#3d2800", comment: "#8a6418", keyword: "#ffb000", string: "#ffd040", number: "#ffe6a3", constant: "#ffe6a3", builtin: "#e88a10", type: "#ffc85a", function: "#ffdc8a", variable: "#c8820a", attribute: "#e8a032", tag: "#ffb000", operator: "#d69a3c", punctuation: "#a0701c", escape: "#ff9a2a", meta: "#e88a10", regexp: "#ffd040", section: "#ffb000", addition: "#c8a000", deletion: "#ff4422" },
     },
     typography: { font_family: "JetBrains Mono, Fira Code, monospace", font_size: 14, line_height: 1.5, message_spacing: 4 },
     borders: { style: "single", room_list_width: "25%" },
@@ -44,6 +47,7 @@ export const BUILTIN_THEME_MAP: Record<string, Theme> = {
       messages: { own: "#50fa7b", other: "#f8f8f2", system: "#6272a4", timestamp: "#44475a", mention_bg: "#3a2e4a", mention_fg: "#ff79c6", reply_border: "#6272a4", thread_indicator: "#8be9fd" },
       roomlist: { active_bg: "#44475a", active_fg: "#bd93f9", unread: "#f8f8f2", mention_badge: "#ff5555", muted: "#6272a4" },
       reactions: { background: "#44475a", border: "#6272a4", own_bg: "#3a2e4a", count: "#6272a4" },
+      syntax: { background: "#21222c", foreground: "#f8f8f2", border: "#44475a", comment: "#6272a4", keyword: "#ff79c6", string: "#f1fa8c", number: "#bd93f9", constant: "#bd93f9", builtin: "#8be9fd", type: "#8be9fd", function: "#50fa7b", variable: "#f8f8f2", attribute: "#50fa7b", tag: "#ff79c6", operator: "#ff79c6", punctuation: "#f8f8f2", escape: "#ff79c6", meta: "#ffb86c", regexp: "#ff5555", section: "#bd93f9", addition: "#50fa7b", deletion: "#ff5555" },
     },
     typography: { font_family: "JetBrains Mono, Fira Code, monospace", font_size: 14, line_height: 1.5, message_spacing: 4 },
     borders: { style: "single", room_list_width: "25%" },
@@ -59,6 +63,7 @@ export const BUILTIN_THEME_MAP: Record<string, Theme> = {
       messages: { own: "#a3be8c", other: "#d8dee9", system: "#4c566a", timestamp: "#434c5e", mention_bg: "#3b3f4e", mention_fg: "#ebcb8b", reply_border: "#4c566a", thread_indicator: "#81a1c1" },
       roomlist: { active_bg: "#3b4252", active_fg: "#88c0d0", unread: "#eceff4", mention_badge: "#bf616a", muted: "#4c566a" },
       reactions: { background: "#3b4252", border: "#434c5e", own_bg: "#3a4a3a", count: "#4c566a" },
+      syntax: { background: "#242933", foreground: "#d8dee9", border: "#3b4252", comment: "#66738d", keyword: "#81a1c1", string: "#a3be8c", number: "#b48ead", constant: "#81a1c1", builtin: "#88c0d0", type: "#8fbcbb", function: "#88c0d0", variable: "#d8dee9", attribute: "#8fbcbb", tag: "#81a1c1", operator: "#81a1c1", punctuation: "#eceff4", escape: "#ebcb8b", meta: "#d08770", regexp: "#ebcb8b", section: "#88c0d0", addition: "#a3be8c", deletion: "#d4747c" },
     },
     typography: { font_family: "JetBrains Mono, Fira Code, monospace", font_size: 14, line_height: 1.5, message_spacing: 4 },
     borders: { style: "single", room_list_width: "25%" },
@@ -74,6 +79,7 @@ export const BUILTIN_THEME_MAP: Record<string, Theme> = {
       messages: { own: "#859900", other: "#839496", system: "#586e75", timestamp: "#073642", mention_bg: "#072832", mention_fg: "#b58900", reply_border: "#586e75", thread_indicator: "#2aa198" },
       roomlist: { active_bg: "#073642", active_fg: "#268bd2", unread: "#93a1a1", mention_badge: "#dc322f", muted: "#586e75" },
       reactions: { background: "#073642", border: "#586e75", own_bg: "#072e28", count: "#586e75" },
+      syntax: { background: "#00212b", foreground: "#839496", border: "#073642", comment: "#586e75", keyword: "#859900", string: "#2aa198", number: "#e64992", constant: "#e64992", builtin: "#de5d2c", type: "#b58900", function: "#268bd2", variable: "#268bd2", attribute: "#268bd2", tag: "#268bd2", operator: "#859900", punctuation: "#657b83", escape: "#f04740", meta: "#de5d2c", regexp: "#787ed2", section: "#b58900", addition: "#859900", deletion: "#f04740" },
     },
     typography: { font_family: "Fira Code, JetBrains Mono, monospace", font_size: 14, line_height: 1.5, message_spacing: 4 },
     borders: { style: "single", room_list_width: "25%" },
@@ -89,6 +95,7 @@ export const BUILTIN_THEME_MAP: Record<string, Theme> = {
       messages: { own: "#859900", other: "#657b83", system: "#93a1a1", timestamp: "#b9b2a0", mention_bg: "#f5f0da", mention_fg: "#b58900", reply_border: "#93a1a1", thread_indicator: "#2aa198" },
       roomlist: { active_bg: "#eee8d5", active_fg: "#268bd2", unread: "#073642", mention_badge: "#dc322f", muted: "#93a1a1" },
       reactions: { background: "#eee8d5", border: "#d3cdb5", own_bg: "#e8f0d8", count: "#93a1a1" },
+      syntax: { background: "#eee8d5", foreground: "#3a4f56", border: "#d3cdb5", comment: "#657b83", keyword: "#606f03", string: "#03756e", number: "#c22274", constant: "#c22274", builtin: "#ba3e02", type: "#846302", function: "#006cac", variable: "#006cac", attribute: "#006cac", tag: "#006cac", operator: "#606f03", punctuation: "#657b83", escape: "#cc1d20", meta: "#ba3e02", regexp: "#5d60b2", section: "#846302", addition: "#606f03", deletion: "#cc1d20" },
     },
     typography: { font_family: "Fira Code, JetBrains Mono, monospace", font_size: 14, line_height: 1.5, message_spacing: 4 },
     borders: { style: "single", room_list_width: "25%" },
@@ -104,6 +111,7 @@ export const BUILTIN_THEME_MAP: Record<string, Theme> = {
       messages: { own: "#a6e3a1", other: "#cdd6f4", system: "#585b70", timestamp: "#45475a", mention_bg: "#2a2040", mention_fg: "#f9e2af", reply_border: "#585b70", thread_indicator: "#89b4fa" },
       roomlist: { active_bg: "#313244", active_fg: "#cba6f7", unread: "#cdd6f4", mention_badge: "#f38ba8", muted: "#585b70" },
       reactions: { background: "#313244", border: "#45475a", own_bg: "#2a2e3a", count: "#585b70" },
+      syntax: { background: "#181825", foreground: "#cdd6f4", border: "#313244", comment: "#9399b2", keyword: "#cba6f7", string: "#a6e3a1", number: "#fab387", constant: "#fab387", builtin: "#f38ba8", type: "#f9e2af", function: "#89b4fa", variable: "#eba0ac", attribute: "#94e2d5", tag: "#cba6f7", operator: "#89dceb", punctuation: "#9399b2", escape: "#f5c2e7", meta: "#f5c2e7", regexp: "#f5c2e7", section: "#f38ba8", addition: "#a6e3a1", deletion: "#f38ba8" },
     },
     typography: { font_family: "JetBrains Mono, Fira Code, monospace", font_size: 14, line_height: 1.5, message_spacing: 4 },
     borders: { style: "rounded", room_list_width: "25%" },
@@ -119,6 +127,7 @@ export const BUILTIN_THEME_MAP: Record<string, Theme> = {
       messages: { own: "#40a02b", other: "#4c4f69", system: "#8c8fa1", timestamp: "#bcc0cc", mention_bg: "#e8e5f5", mention_fg: "#df8e1d", reply_border: "#8c8fa1", thread_indicator: "#1e66f5" },
       roomlist: { active_bg: "#dce0e8", active_fg: "#8839ef", unread: "#4c4f69", mention_badge: "#d20f39", muted: "#8c8fa1" },
       reactions: { background: "#dce0e8", border: "#bcc0cc", own_bg: "#e2eedd", count: "#8c8fa1" },
+      syntax: { background: "#e6e9ef", foreground: "#4c4f69", border: "#ccd0da", comment: "#7c7f93", keyword: "#8737ee", string: "#1f7902", number: "#b44404", constant: "#b44404", builtin: "#d00937", type: "#965b00", function: "#155dec", variable: "#c8243c", attribute: "#03747a", tag: "#8737ee", operator: "#04709d", punctuation: "#7c7f93", escape: "#ab3c91", meta: "#ab3c91", regexp: "#ab3c91", section: "#d00937", addition: "#1f7902", deletion: "#d00937" },
     },
     typography: { font_family: "JetBrains Mono, Fira Code, monospace", font_size: 14, line_height: 1.5, message_spacing: 4 },
     borders: { style: "rounded", room_list_width: "25%" },
@@ -134,6 +143,7 @@ export const BUILTIN_THEME_MAP: Record<string, Theme> = {
       messages: { own: "#b8bb26", other: "#ebdbb2", system: "#7c6f64", timestamp: "#504945", mention_bg: "#32302f", mention_fg: "#fabd2f", reply_border: "#7c6f64", thread_indicator: "#83a598" },
       roomlist: { active_bg: "#3c3836", active_fg: "#fabd2f", unread: "#fbf1c7", mention_badge: "#fb4934", muted: "#7c6f64" },
       reactions: { background: "#3c3836", border: "#504945", own_bg: "#32382a", count: "#7c6f64" },
+      syntax: { background: "#1d2021", foreground: "#ebdbb2", border: "#3c3836", comment: "#928374", keyword: "#fb4934", string: "#b8bb26", number: "#d3869b", constant: "#d3869b", builtin: "#fe8019", type: "#fabd2f", function: "#8ec07c", variable: "#83a598", attribute: "#83a598", tag: "#8ec07c", operator: "#ebdbb2", punctuation: "#a89984", escape: "#fe8019", meta: "#8ec07c", regexp: "#fe8019", section: "#fabd2f", addition: "#b8bb26", deletion: "#fb4934" },
     },
     typography: { font_family: "JetBrains Mono, Fira Code, monospace", font_size: 14, line_height: 1.5, message_spacing: 4 },
     borders: { style: "single", room_list_width: "25%" },
@@ -149,6 +159,7 @@ export const BUILTIN_THEME_MAP: Record<string, Theme> = {
       messages: { own: "#00ff00", other: "#ffffff", system: "#aaaaaa", timestamp: "#888888", mention_bg: "#330000", mention_fg: "#ff8800", reply_border: "#aaaaaa", thread_indicator: "#00ffff" },
       roomlist: { active_bg: "#0000aa", active_fg: "#ffff00", unread: "#ffffff", mention_badge: "#ff0000", muted: "#888888" },
       reactions: { background: "#111111", border: "#ffffff", own_bg: "#003300", count: "#cccccc" },
+      syntax: { background: "#111111", foreground: "#ffffff", border: "#ffffff", comment: "#bbbbbb", keyword: "#ffff00", string: "#00ff00", number: "#ff88ff", constant: "#ff88ff", builtin: "#ff9900", type: "#88bbff", function: "#00ffff", variable: "#ffffff", attribute: "#ffff00", tag: "#00ffff", operator: "#ffffff", punctuation: "#dddddd", escape: "#ff9900", meta: "#ff9900", regexp: "#ff88ff", section: "#ffff00", addition: "#00ff00", deletion: "#ff7777" },
     },
     typography: { font_family: "JetBrains Mono, Fira Code, monospace", font_size: 16, line_height: 1.6, message_spacing: 6 },
     borders: { style: "double", room_list_width: "25%" },

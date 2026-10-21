@@ -42,6 +42,33 @@ border = "#ffffff"
 own_bg = "#003300"
 count = "#cccccc"
 
+# Code block syntax highlighting. A key left out falls back to a colour
+# derived from the palette above.
+# Every token clears 7:1 on the code background.
+[colors.syntax]
+background = "#111111"
+foreground = "#ffffff"
+border = "#ffffff"
+comment = "#bbbbbb"
+keyword = "#ffff00"
+string = "#00ff00"
+number = "#ff88ff"
+constant = "#ff88ff"
+builtin = "#ff9900"
+type = "#88bbff"
+function = "#00ffff"
+variable = "#ffffff"
+attribute = "#ffff00"
+tag = "#00ffff"
+operator = "#ffffff"
+punctuation = "#dddddd"
+escape = "#ff9900"
+meta = "#ff9900"
+regexp = "#ff88ff"
+section = "#ffff00"
+addition = "#00ff00"
+deletion = "#ff7777"
+
 [typography]
 font_family = "JetBrains Mono, Fira Code, monospace"
 font_size = 16

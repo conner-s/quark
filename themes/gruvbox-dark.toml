@@ -42,6 +42,33 @@ border = "#504945"
 own_bg = "#32382a"
 count = "#7c6f64"
 
+# Code block syntax highlighting. A key left out falls back to a colour
+# derived from the palette above.
+# Gruvbox's syntax palette on its hard background (bg0_h).
+[colors.syntax]
+background = "#1d2021"
+foreground = "#ebdbb2"
+border = "#3c3836"
+comment = "#928374"
+keyword = "#fb4934"
+string = "#b8bb26"
+number = "#d3869b"
+constant = "#d3869b"
+builtin = "#fe8019"
+type = "#fabd2f"
+function = "#8ec07c"
+variable = "#83a598"
+attribute = "#83a598"
+tag = "#8ec07c"
+operator = "#ebdbb2"
+punctuation = "#a89984"
+escape = "#fe8019"
+meta = "#8ec07c"
+regexp = "#fe8019"
+section = "#fabd2f"
+addition = "#b8bb26"
+deletion = "#fb4934"
+
 [typography]
 font_family = "JetBrains Mono, Fira Code, monospace"
 font_size = 14

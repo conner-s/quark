@@ -42,6 +42,34 @@ border = "#586e75"
 own_bg = "#072e28"
 count = "#586e75"
 
+# Code block syntax highlighting. A key left out falls back to a colour
+# derived from the palette above.
+# Solarized's mid-contrast accents, a shade below base03. Magenta,
+# orange, red and violet are nudged lighter (hue kept) to clear 4.5:1.
+[colors.syntax]
+background = "#00212b"
+foreground = "#839496"
+border = "#073642"
+comment = "#586e75"
+keyword = "#859900"
+string = "#2aa198"
+number = "#e64992"
+constant = "#e64992"
+builtin = "#de5d2c"
+type = "#b58900"
+function = "#268bd2"
+variable = "#268bd2"
+attribute = "#268bd2"
+tag = "#268bd2"
+operator = "#859900"
+punctuation = "#657b83"
+escape = "#f04740"
+meta = "#de5d2c"
+regexp = "#787ed2"
+section = "#b58900"
+addition = "#859900"
+deletion = "#f04740"
+
 [typography]
 font_family = "Fira Code, JetBrains Mono, monospace"
 font_size = 14

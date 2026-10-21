@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { applyTheme, resetTheme, type Theme } from "./loader.js";
+import { applyTheme, resetTheme, THEME_APPLIED_ATTR, type Theme, type ThemeSyntax } from "./loader.js";
 
 describe("theme/loader", () => {
   let root: HTMLElement;
@@ -241,6 +241,132 @@ describe("theme/loader", () => {
 
       expect(root.style.getPropertyValue("--reaction-bg")).toBe("");
       expect(root.style.getPropertyValue("--reaction-own-bg")).toBe("");
+    });
+
+    it("removes syntax properties", () => {
+      applyTheme({ colors: { syntax: { background: "#111", keyword: "#f0f" } } }, root);
+
+      resetTheme(root);
+
+      expect(root.style.getPropertyValue("--code-bg")).toBe("");
+      expect(root.style.getPropertyValue("--syntax-keyword")).toBe("");
+    });
+
+    // Back to Phosphor's own syntax table in vars.css, not the derived one.
+    it("removes the theme-applied marker", () => {
+      applyTheme({ colors: { background: "#000" } }, root);
+
+      resetTheme(root);
+
+      expect(root.hasAttribute(THEME_APPLIED_ATTR)).toBe(false);
+    });
+  });
+
+  // [colors.syntax] — code block token colours. The CSS property names are the
+  // contract base.css styles against, so they're spelled out here rather than
+  // derived from the loader's own table.
+  describe("colors.syntax", () => {
+    const SYNTAX_PROPS: Record<keyof ThemeSyntax, string> = {
+      background: "--code-bg",
+      foreground: "--code-fg",
+      border: "--code-border",
+      comment: "--syntax-comment",
+      keyword: "--syntax-keyword",
+      string: "--syntax-string",
+      number: "--syntax-number",
+      constant: "--syntax-constant",
+      builtin: "--syntax-builtin",
+      type: "--syntax-type",
+      function: "--syntax-function",
+      variable: "--syntax-variable",
+      attribute: "--syntax-attribute",
+      tag: "--syntax-tag",
+      operator: "--syntax-operator",
+      punctuation: "--syntax-punctuation",
+      escape: "--syntax-escape",
+      meta: "--syntax-meta",
+      regexp: "--syntax-regexp",
+      section: "--syntax-section",
+      addition: "--syntax-addition",
+      deletion: "--syntax-deletion",
+    };
+    const keys = Object.keys(SYNTAX_PROPS) as (keyof ThemeSyntax)[];
+
+    /** A full table with a distinct colour per key, so a crossed wire shows. */
+    const fullSyntax = (): ThemeSyntax =>
+      Object.fromEntries(
+        keys.map((k, i) => [k, `#0000${i.toString(16).padStart(2, "0")}`]),
+      );
+
+    const syntaxValues = () =>
+      Object.fromEntries(keys.map((k) => [k, root.style.getPropertyValue(SYNTAX_PROPS[k])]));
+
+    // vars.css keys its palette-derived defaults to the marker, so a theme
+    // without a full table fills the gaps from its own palette, not Phosphor's.
+    it("marks the root as themed, even for a theme with no syntax table", () => {
+      applyTheme({ colors: { background: "#fff" } }, root);
+
+      expect(root.hasAttribute(THEME_APPLIED_ATTR)).toBe(true);
+    });
+
+    it("maps every syntax key onto its custom property", () => {
+      const syntax = fullSyntax();
+
+      applyTheme({ colors: { syntax } }, root);
+
+      expect(syntaxValues()).toEqual(syntax);
+    });
+
+    it("sets only the keys a partial table provides", () => {
+      applyTheme({ colors: { syntax: { keyword: "#ff79c6", comment: "#6272a4" } } }, root);
+
+      expect(root.style.getPropertyValue("--syntax-keyword")).toBe("#ff79c6");
+      expect(root.style.getPropertyValue("--syntax-comment")).toBe("#6272a4");
+      // Left to vars.css, which derives it from the palette.
+      expect(root.style.getPropertyValue("--syntax-string")).toBe("");
+      expect(root.style.getPropertyValue("--code-bg")).toBe("");
+    });
+
+    // The stale-leak hazard: without clearing, a custom theme that predates
+    // [colors.syntax] would inherit the previous theme's hand-tuned tokens,
+    // painted onto its own background.
+    it("clears every syntax property when the next theme has no syntax table", () => {
+      applyTheme({ colors: { background: "#000", syntax: fullSyntax() } }, root);
+
+      applyTheme({ colors: { background: "#fff" } }, root);
+
+      for (const k of keys) expect(root.style.getPropertyValue(SYNTAX_PROPS[k])).toBe("");
+      expect(root.style.getPropertyValue("--bg")).toBe("#fff");
+    });
+
+    it("clears the syntax keys a later partial table leaves out", () => {
+      applyTheme({ colors: { syntax: fullSyntax() } }, root);
+
+      applyTheme({ colors: { syntax: { number: "#bd93f9" } } }, root);
+
+      expect(root.style.getPropertyValue("--syntax-number")).toBe("#bd93f9");
+      // Cleared, so vars.css chains it to the new --syntax-number.
+      expect(root.style.getPropertyValue("--syntax-constant")).toBe("");
+      expect(root.style.getPropertyValue("--code-bg")).toBe("");
+    });
+
+    it("clears syntax properties even when the theme has no colors table", () => {
+      applyTheme({ colors: { syntax: fullSyntax() } }, root);
+
+      applyTheme({ typography: { font_size: 14 } }, root);
+
+      for (const k of keys) expect(root.style.getPropertyValue(SYNTAX_PROPS[k])).toBe("");
+    });
+
+    // Clearing is scoped to syntax: the palette keeps its merge behaviour, which
+    // "only sets provided values" above pins.
+    it("does not clear palette colours the syntax table never names", () => {
+      applyTheme({ colors: { foreground: "#fff", accent: { primary: "#0f0" } } }, root);
+
+      applyTheme({ colors: { syntax: { keyword: "#f00" } } }, root);
+
+      expect(root.style.getPropertyValue("--fg")).toBe("#fff");
+      expect(root.style.getPropertyValue("--accent-primary")).toBe("#0f0");
     });
   });
 });

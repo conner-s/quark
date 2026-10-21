@@ -31,6 +31,98 @@ pub struct ThemeColors {
     pub messages: ThemeMessageColors,
     pub roomlist: ThemeRoomlistColors,
     pub reactions: ThemeReactionColors,
+    /// `[colors.syntax]`: code block surface and token colours. Optional where
+    /// every other table is required, because it arrived after themes already
+    /// existed: one without it gets defaults derived from its palette (vars.css)
+    /// and must keep parsing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub syntax: Option<ThemeSyntaxColors>,
+}
+
+/// Code block colours. `background` / `foreground` / `border` style the block
+/// itself, every other key one highlight.js token class. Each is optional — a
+/// key left out falls back to its vars.css default — and the keys are flat, as
+/// `src/theme/loader.ts` reads them.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct ThemeSyntaxColors {
+    pub background: Option<String>,
+    pub foreground: Option<String>,
+    pub border: Option<String>,
+    pub comment: Option<String>,
+    pub keyword: Option<String>,
+    pub string: Option<String>,
+    pub number: Option<String>,
+    pub constant: Option<String>,
+    pub builtin: Option<String>,
+    pub r#type: Option<String>,
+    pub function: Option<String>,
+    pub variable: Option<String>,
+    pub attribute: Option<String>,
+    pub tag: Option<String>,
+    pub operator: Option<String>,
+    pub punctuation: Option<String>,
+    pub escape: Option<String>,
+    pub meta: Option<String>,
+    pub regexp: Option<String>,
+    pub section: Option<String>,
+    pub addition: Option<String>,
+    pub deletion: Option<String>,
+}
+
+impl ThemeSyntaxColors {
+    /// Every key with its value, in schema order. `self` is destructured
+    /// without `..`, so a field added without an entry here fails to compile
+    /// rather than slipping past validation.
+    pub fn entries(&self) -> [(&'static str, Option<&str>); 22] {
+        let Self {
+            background,
+            foreground,
+            border,
+            comment,
+            keyword,
+            string,
+            number,
+            constant,
+            builtin,
+            r#type,
+            function,
+            variable,
+            attribute,
+            tag,
+            operator,
+            punctuation,
+            escape,
+            meta,
+            regexp,
+            section,
+            addition,
+            deletion,
+        } = self;
+        [
+            ("background", background.as_deref()),
+            ("foreground", foreground.as_deref()),
+            ("border", border.as_deref()),
+            ("comment", comment.as_deref()),
+            ("keyword", keyword.as_deref()),
+            ("string", string.as_deref()),
+            ("number", number.as_deref()),
+            ("constant", constant.as_deref()),
+            ("builtin", builtin.as_deref()),
+            ("type", r#type.as_deref()),
+            ("function", function.as_deref()),
+            ("variable", variable.as_deref()),
+            ("attribute", attribute.as_deref()),
+            ("tag", tag.as_deref()),
+            ("operator", operator.as_deref()),
+            ("punctuation", punctuation.as_deref()),
+            ("escape", escape.as_deref()),
+            ("meta", meta.as_deref()),
+            ("regexp", regexp.as_deref()),
+            ("section", section.as_deref()),
+            ("addition", addition.as_deref()),
+            ("deletion", deletion.as_deref()),
+        ]
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -197,6 +289,15 @@ pub fn validate_theme(theme: &Theme) -> Vec<ThemeValidationError> {
     check_color!("colors.reactions.own_bg", &theme.colors.reactions.own_bg);
     check_color!("colors.reactions.count", &theme.colors.reactions.count);
 
+    // Syntax keys are optional, so only the ones a theme sets are checked.
+    if let Some(syntax) = &theme.colors.syntax {
+        for (key, value) in syntax.entries() {
+            if let Some(value) = value {
+                check_color!(format!("colors.syntax.{key}"), value);
+            }
+        }
+    }
+
     // Validate font size
     if theme.typography.font_size < 6 || theme.typography.font_size > 72 {
         errors.push(ThemeValidationError {
@@ -221,6 +322,7 @@ pub fn validate_theme(theme: &Theme) -> Vec<ThemeValidationError> {
 
 /// Return the default Phosphor theme.
 pub fn default_theme() -> Theme {
+    let hex = |s: &str| Some(s.to_string());
     Theme {
         meta: ThemeMeta {
             name: "Phosphor".to_string(),
@@ -265,6 +367,31 @@ pub fn default_theme() -> Theme {
                 own_bg: "#1a3a1a".to_string(),
                 count: "#888888".to_string(),
             },
+            // themes/phosphor.toml's table; a test pins the two together.
+            syntax: Some(ThemeSyntaxColors {
+                background: hex("#0c130c"),
+                foreground: hex("#b0b0b0"),
+                border: hex("#1a3a1a"),
+                comment: hex("#4e8a5c"),
+                keyword: hex("#00ff41"),
+                string: hex("#a6ffbc"),
+                number: hex("#ffaa00"),
+                constant: hex("#ffaa00"),
+                builtin: hex("#00c435"),
+                r#type: hex("#6dff93"),
+                function: hex("#d4ffe0"),
+                variable: hex("#b0b0b0"),
+                attribute: hex("#6dff93"),
+                tag: hex("#00ff41"),
+                operator: hex("#86c693"),
+                punctuation: hex("#6f8f76"),
+                escape: hex("#ffaa00"),
+                meta: hex("#00aaff"),
+                regexp: hex("#a6ffbc"),
+                section: hex("#00ff41"),
+                addition: hex("#00ff41"),
+                deletion: hex("#ff3333"),
+            }),
         },
         typography: ThemeTypography {
             font_family: "JetBrains Mono, Fira Code, monospace".to_string(),
@@ -648,5 +775,123 @@ name = "Test"
         let errors = validate_theme(&theme);
         let bg_error = errors.iter().find(|e| e.field == "colors.background").unwrap();
         assert!(bg_error.message.contains("notacolor"));
+    }
+
+    // --- [colors.syntax] ---
+
+    /// A partial table, appended to PHOSPHOR_TOML: TOML allows a sub-table
+    /// header after unrelated tables, and a partial table is the common case.
+    const SYNTAX_TABLE: &str = r##"
+[colors.syntax]
+background = "#0c130c"
+keyword = "#00ff41"
+type = "#6dff93"
+"##;
+
+    /// The theme files the app ships, as plain TOML values rather than through
+    /// `parse_theme`: pesterchum's `style = "square"` border is no BorderStyle
+    /// this struct knows, which is beside the point of what reads these.
+    fn bundled_themes() -> Vec<(String, toml::Value)> {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../themes");
+        let entries = std::fs::read_dir(&dir)
+            .unwrap_or_else(|e| panic!("reading {}: {e}", dir.display()));
+        let mut themes: Vec<(String, toml::Value)> = entries
+            .map(|entry| entry.expect("theme dir entry").path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "toml"))
+            .map(|path| {
+                let src = std::fs::read_to_string(&path).expect("theme file readable");
+                let value = toml::from_str(&src)
+                    .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                (path.file_name().unwrap().to_string_lossy().into_owned(), value)
+            })
+            .collect();
+        themes.sort_by(|a, b| a.0.cmp(&b.0));
+        themes
+    }
+
+    #[test]
+    fn test_theme_without_syntax_table_still_parses() {
+        let theme = parse_theme(PHOSPHOR_TOML).expect("a theme predating [colors.syntax] must parse");
+        assert_eq!(theme.colors.syntax, None);
+        assert!(validate_theme(&theme).is_empty());
+    }
+
+    #[test]
+    fn test_syntax_table_parses_and_round_trips() {
+        let theme = parse_theme(&format!("{PHOSPHOR_TOML}{SYNTAX_TABLE}")).unwrap();
+        let syntax = theme.colors.syntax.as_ref().expect("[colors.syntax] parsed");
+        assert_eq!(syntax.background.as_deref(), Some("#0c130c"));
+        assert_eq!(syntax.keyword.as_deref(), Some("#00ff41"));
+        assert_eq!(syntax.r#type.as_deref(), Some("#6dff93"));
+        assert_eq!(syntax.string, None, "a key left out stays unset");
+
+        let serialized = toml::to_string(&theme).expect("theme serializes");
+        assert_eq!(parse_theme(&serialized).unwrap(), theme);
+    }
+
+    #[test]
+    fn test_invalid_syntax_colour_is_reported() {
+        let mut theme = default_theme();
+        theme.colors.syntax.as_mut().unwrap().keyword = Some("purple".to_string());
+        let errors = validate_theme(&theme);
+        assert_eq!(errors.len(), 1, "only the bad key is flagged: {errors:?}");
+        assert_eq!(errors[0].field, "colors.syntax.keyword");
+        assert!(errors[0].message.contains("purple"));
+    }
+
+    // entries() spells each key by hand. One misspelt there would validate the
+    // field under a name no theme file uses, so feed its keys back through serde.
+    #[test]
+    fn test_syntax_entries_name_every_serde_key() {
+        let keys = ThemeSyntaxColors::default().entries().map(|(key, _)| key);
+        let table: toml::Table = keys
+            .iter()
+            .map(|key| (key.to_string(), toml::Value::String("#000".to_string())))
+            .collect();
+        let syntax: ThemeSyntaxColors = toml::Value::Table(table).try_into().unwrap();
+        for (key, value) in syntax.entries() {
+            assert!(value.is_some(), "entries() key '{key}' matches no serde field");
+        }
+    }
+
+    #[test]
+    fn test_bundled_syntax_tables_use_known_keys_and_hex_colours() {
+        let known = ThemeSyntaxColors::default().entries().map(|(key, _)| key);
+        let themes = bundled_themes();
+        assert!(
+            themes.iter().any(|(name, _)| name == "phosphor.toml"),
+            "theme files not found"
+        );
+        let mut with_table = 0;
+        for (name, theme) in &themes {
+            let Some(syntax) = theme.get("colors").and_then(|c| c.get("syntax")) else {
+                continue;
+            };
+            let table = syntax
+                .as_table()
+                .unwrap_or_else(|| panic!("{name}: [colors.syntax] is not a table"));
+            with_table += 1;
+            for (key, value) in table {
+                assert!(known.contains(&key.as_str()), "{name}: unknown [colors.syntax] key '{key}'");
+                let colour = value
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{name}: colors.syntax.{key} is not a string"));
+                assert!(
+                    is_valid_hex_color(colour),
+                    "{name}: colors.syntax.{key} = '{colour}' is not a hex colour"
+                );
+            }
+        }
+        assert!(with_table > 0, "no bundled theme has a [colors.syntax] table");
+    }
+
+    #[test]
+    fn test_default_theme_syntax_matches_phosphor_toml() {
+        let (_, phosphor) = bundled_themes()
+            .into_iter()
+            .find(|(name, _)| name == "phosphor.toml")
+            .expect("themes/phosphor.toml");
+        let syntax: ThemeSyntaxColors = phosphor["colors"]["syntax"].clone().try_into().unwrap();
+        assert_eq!(default_theme().colors.syntax, Some(syntax));
     }
 }
