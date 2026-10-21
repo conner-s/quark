@@ -7,8 +7,9 @@
 // *.toml files. See DESIGN.md → Theming → Theme Editor & Sharing.
 //
 // Everything here is driven by THEME_SCHEMA, which mirrors the Rust `Theme`
-// struct (src-tauri/src/config/theme.rs): every field is required there, so a
-// theme this module emits always carries all of them.
+// struct (src-tauri/src/config/theme.rs). Every field is required there but
+// `meta.author`, `meta.version` and the `[colors.syntax]` keys, which a theme
+// may leave out; a theme this module emits carries all the rest.
 
 import { deflateSync, inflateSync } from "fflate";
 
@@ -76,6 +77,7 @@ const text = (key: string, hint: string, extra: Partial<ThemeField> = {}): Theme
   hint,
   ...extra,
 });
+const syntaxColor = (key: string, hint: string): ThemeField => ({ ...color(key, hint), optional: true });
 
 /** Field order here is the order fields are written to TOML. */
 export const THEME_SCHEMA: readonly ThemeSection[] = [
@@ -145,6 +147,36 @@ export const THEME_SCHEMA: readonly ThemeSection[] = [
       color("border", "Reaction chip border"),
       color("own_bg", "Chips you reacted with"),
       color("count", "Reaction counts"),
+    ],
+  },
+  {
+    // Optional, key by key (`Option<ThemeSyntax>` in Rust): a key left out is
+    // derived from the palette in vars.css, so it is "" here, never the base's.
+    path: "colors.syntax",
+    title: "Code blocks",
+    fields: [
+      syntaxColor("background", "Code block background"),
+      syntaxColor("foreground", "Code block text"),
+      syntaxColor("border", "Code block border"),
+      syntaxColor("comment", "Comments"),
+      syntaxColor("keyword", "Keywords"),
+      syntaxColor("string", "Strings"),
+      syntaxColor("number", "Numbers"),
+      syntaxColor("constant", "Literals: true, null, nil"),
+      syntaxColor("builtin", "Built-in names"),
+      syntaxColor("type", "Types and classes"),
+      syntaxColor("function", "Function names"),
+      syntaxColor("variable", "Variables, template variables, parameters"),
+      syntaxColor("attribute", "Attributes and properties"),
+      syntaxColor("tag", "Tag names and CSS selectors"),
+      syntaxColor("operator", "Operators"),
+      syntaxColor("punctuation", "Punctuation, and the brackets of markup tags"),
+      syntaxColor("escape", "Escape sequences"),
+      syntaxColor("meta", "Preprocessor, shebangs, annotations"),
+      syntaxColor("regexp", "Regular expressions and links"),
+      syntaxColor("section", "Headings and list bullets"),
+      syntaxColor("addition", "Diff: added lines"),
+      syntaxColor("deletion", "Diff: removed lines"),
     ],
   },
   {
@@ -242,6 +274,7 @@ export function isHexColor(value: unknown): value is string {
  * as an empty button in Settings.
  */
 export function checkField(field: ThemeField, value: unknown): string | null {
+  if (field.optional && value === "") return null;
   const k = field.kind;
   switch (k.type) {
     case "color":
@@ -399,14 +432,16 @@ function tomlValue(field: ThemeField, value: unknown): string {
  * tables. Optional fields that are empty are left out.
  */
 export function themeToToml(theme: CompleteTheme): string {
-  return THEME_SCHEMA.map((section) => {
+  return THEME_SCHEMA.flatMap((section) => {
     const lines = [`[${section.path}]`];
     for (const field of section.fields) {
       const value = getField(theme, `${section.path}.${field.key}`);
       if (field.optional && (value === undefined || value === "")) continue;
       lines.push(`${field.key} = ${tomlValue(field, value)}`);
     }
-    return `${lines.join("\n")}\n`;
+    // A table whose fields are all optional and empty is left out whole.
+    if (lines.length === 1 && section.fields.every((f) => f.optional)) return [];
+    return [`${lines.join("\n")}\n`];
   }).join("\n");
 }
 
@@ -423,9 +458,10 @@ export function themeToToml(theme: CompleteTheme): string {
 // TOML can't begin with a byte below 0x09: a document opens with whitespace,
 // a newline, `#`, `[` or a key. So bytes 0x00–0x08 are free to mark versioned
 // payloads, and a version-0 string needs no marker. Every theme shares its
-// keys and layout with the dictionary (Phosphor), so a full theme comes to
-// ~250 characters instead of ~1,470 — short enough to paste into a chat or
-// fit in a small QR code.
+// keys and layout with the dictionary (Phosphor), so a full theme without a
+// [colors.syntax] table comes to ~250 characters instead of ~1,500 — short
+// enough to paste into a chat or fit in a small QR code. The dictionary
+// predates [colors.syntax], so a syntax table adds ~200–250 more.
 
 /** First payload byte of a version-1 share string. */
 const SHARE_V1 = 0x01;
@@ -435,7 +471,7 @@ const FIRST_TEXT_BYTE = 0x09;
 
 /**
  * Longest share string (base64 characters) worth decoding. A full theme is
- * ~250; even version 0 stays under 2,000. The cap bounds the work a crafted
+ * ~250–550; even version 0 stays under 2,200. The cap bounds the work a crafted
  * string can cause, since DEFLATE expands up to ~1,000×.
  */
 export const MAX_SHARE_LENGTH = 16 * 1024;
