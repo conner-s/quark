@@ -162,9 +162,9 @@ describe("menuEntries", () => {
       "select-message-text",
       "search-web",
       "copy-selection",
-      "view-raw-event",
       "save-image-photos",
       "save-image-file",
+      "view-raw-event",
       "edit",
       "redact",
     ]);

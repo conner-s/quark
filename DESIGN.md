@@ -1019,6 +1019,7 @@ Keys: `j`/`k` (or ↑/↓) move between rows, `h`/`l` (or ←/→) move within t
 | `respond` | Reply, React, Thread |
 | `clipboard` | Copy message text, Copy as quote, Select text (mobile only) |
 | `selection` | Search web for "…", Copy selected text — shown only when text is highlighted **inside that message** |
+| `save` | Save to Photos (mobile only), Save as file — image messages only |
 | `event` | View raw event, Edit, Delete — Edit and Delete are greyed on someone else's message |
 
 The room-list, space-strip, section and overflow menus use the same shell with a header and plain separators.
