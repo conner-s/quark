@@ -70,6 +70,38 @@ export interface ThemePrompt {
   visual_indicator?: string;
 }
 
+/**
+ * `[colors.syntax]` — code block surface and highlight.js token colours. Keys
+ * are flat on purpose: a dotted TOML key (`title.function = …`) would parse as a
+ * nested table this mapping never reads. `background`, `foreground` and
+ * `border` style the block itself; every other key colours one token class
+ * (base.css maps highlight.js's classes onto them).
+ */
+export interface ThemeSyntax {
+  background?: string;
+  foreground?: string;
+  border?: string;
+  comment?: string;
+  keyword?: string;
+  string?: string;
+  number?: string;
+  constant?: string;
+  builtin?: string;
+  type?: string;
+  function?: string;
+  variable?: string;
+  attribute?: string;
+  tag?: string;
+  operator?: string;
+  punctuation?: string;
+  escape?: string;
+  meta?: string;
+  regexp?: string;
+  section?: string;
+  addition?: string;
+  deletion?: string;
+}
+
 export interface ThemeColors {
   background?: string;
   foreground?: string;
@@ -81,6 +113,7 @@ export interface ThemeColors {
   messages?: ThemeMessages;
   roomlist?: ThemeRoomlist;
   reactions?: ThemeReactions;
+  syntax?: ThemeSyntax;
 }
 
 /** Matches the TOML structure from the Tauri backend */
@@ -109,7 +142,119 @@ export const FRAME_STYLES: Record<BorderStyle, { line: string; width: string; ra
   none: { line: "none", width: "0px", radius: "0px" },
 };
 
+// ── Colour tables ────────────────────────────────────────────────────────────
+//
+// Every colour key maps 1:1 onto a custom property with no transform, so the
+// mapping is data rather than an `if` per key — there are 51 of them now that
+// [colors.syntax] exists. Typing each table as a Record over the section's keys
+// makes tsc reject a key added to an interface without a property to write it
+// to, and resetTheme derives its list from the same tables, so the two can no
+// longer drift apart the way the hand-kept lists could. The non-colour sections
+// stay hand-mapped below: each of those transforms its value (px units, quoted
+// strings, frame styles).
+
+/** The keys of `T` whose values are strings — `ThemeColors` minus its sub-tables. */
+type StringKeys<T> = {
+  [K in keyof T]-?: NonNullable<T[K]> extends string ? K : never;
+}[keyof T];
+
+const COLOR_VARS: Record<StringKeys<ThemeColors>, string> = {
+  background: "--bg",
+  foreground: "--fg",
+  cursor: "--cursor",
+  selection_bg: "--selection-bg",
+  selection_fg: "--selection-fg",
+  border: "--border-color",
+};
+
+const ACCENT_VARS: Record<keyof ThemeAccent, string> = {
+  primary: "--accent-primary",
+  secondary: "--accent-secondary",
+  error: "--accent-error",
+  warning: "--accent-warning",
+  success: "--accent-success",
+  link: "--accent-link",
+};
+
+const MESSAGE_VARS: Record<keyof ThemeMessages, string> = {
+  own: "--msg-own",
+  other: "--msg-other",
+  system: "--msg-system",
+  timestamp: "--msg-timestamp",
+  mention_bg: "--msg-mention-bg",
+  mention_fg: "--msg-mention-fg",
+  reply_border: "--msg-reply-border",
+  thread_indicator: "--msg-thread-indicator",
+};
+
+const ROOMLIST_VARS: Record<keyof ThemeRoomlist, string> = {
+  active_bg: "--roomlist-active-bg",
+  active_fg: "--roomlist-active-fg",
+  unread: "--roomlist-unread",
+  mention_badge: "--roomlist-mention-badge",
+  muted: "--roomlist-muted",
+};
+
+const REACTION_VARS: Record<keyof ThemeReactions, string> = {
+  background: "--reaction-bg",
+  border: "--reaction-border",
+  own_bg: "--reaction-own-bg",
+  count: "--reaction-count",
+};
+
+/** The block's own surface keeps a `--code-` prefix; each token is `--syntax-<key>`. */
+const SYNTAX_VARS: Record<keyof ThemeSyntax, string> = {
+  background: "--code-bg",
+  foreground: "--code-fg",
+  border: "--code-border",
+  comment: "--syntax-comment",
+  keyword: "--syntax-keyword",
+  string: "--syntax-string",
+  number: "--syntax-number",
+  constant: "--syntax-constant",
+  builtin: "--syntax-builtin",
+  type: "--syntax-type",
+  function: "--syntax-function",
+  variable: "--syntax-variable",
+  attribute: "--syntax-attribute",
+  tag: "--syntax-tag",
+  operator: "--syntax-operator",
+  punctuation: "--syntax-punctuation",
+  escape: "--syntax-escape",
+  meta: "--syntax-meta",
+  regexp: "--syntax-regexp",
+  section: "--syntax-section",
+  addition: "--syntax-addition",
+  deletion: "--syntax-deletion",
+};
+
+/**
+ * Set on the root by applyTheme. vars.css keys its palette-derived syntax
+ * defaults to it; without it the root carries Phosphor's own table, which is
+ * what the default theme paints, since it is never applied (actions/theme.ts).
+ */
+export const THEME_APPLIED_ATTR = "data-theme-applied";
+
+const COLOR_TABLES: readonly Record<string, string>[] = [
+  COLOR_VARS, ACCENT_VARS, MESSAGE_VARS, ROOMLIST_VARS, REACTION_VARS, SYNTAX_VARS,
+];
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Copy each colour `values` sets onto the property `table` maps its key to.
+ * A key the theme leaves out produces no entry, like every other field.
+ */
+function colorVars<K extends string>(
+  out: Record<string, string>,
+  values: Partial<Record<K, string>> | undefined,
+  table: Record<K, string>,
+): void {
+  for (const key of Object.keys(table) as K[]) {
+    const value = values?.[key];
+    if (value) out[table[key]] = value;
+  }
+}
 
 function px(n: number): string {
   return `${n}px`;
@@ -170,53 +315,12 @@ export function themeToCssVars(theme: Theme): Record<string, string> {
   };
 
   const c = theme.colors;
-  if (c) {
-    if (c.background) set("--bg", c.background);
-    if (c.foreground) set("--fg", c.foreground);
-    if (c.cursor) set("--cursor", c.cursor);
-    if (c.selection_bg) set("--selection-bg", c.selection_bg);
-    if (c.selection_fg) set("--selection-fg", c.selection_fg);
-    if (c.border) set("--border-color", c.border);
-
-    const a = c.accent;
-    if (a) {
-      if (a.primary) set("--accent-primary", a.primary);
-      if (a.secondary) set("--accent-secondary", a.secondary);
-      if (a.error) set("--accent-error", a.error);
-      if (a.warning) set("--accent-warning", a.warning);
-      if (a.success) set("--accent-success", a.success);
-      if (a.link) set("--accent-link", a.link);
-    }
-
-    const m = c.messages;
-    if (m) {
-      if (m.own) set("--msg-own", m.own);
-      if (m.other) set("--msg-other", m.other);
-      if (m.system) set("--msg-system", m.system);
-      if (m.timestamp) set("--msg-timestamp", m.timestamp);
-      if (m.mention_bg) set("--msg-mention-bg", m.mention_bg);
-      if (m.mention_fg) set("--msg-mention-fg", m.mention_fg);
-      if (m.reply_border) set("--msg-reply-border", m.reply_border);
-      if (m.thread_indicator) set("--msg-thread-indicator", m.thread_indicator);
-    }
-
-    const rl = c.roomlist;
-    if (rl) {
-      if (rl.active_bg) set("--roomlist-active-bg", rl.active_bg);
-      if (rl.active_fg) set("--roomlist-active-fg", rl.active_fg);
-      if (rl.unread) set("--roomlist-unread", rl.unread);
-      if (rl.mention_badge) set("--roomlist-mention-badge", rl.mention_badge);
-      if (rl.muted) set("--roomlist-muted", rl.muted);
-    }
-
-    const rx = c.reactions;
-    if (rx) {
-      if (rx.background) set("--reaction-bg", rx.background);
-      if (rx.border) set("--reaction-border", rx.border);
-      if (rx.own_bg) set("--reaction-own-bg", rx.own_bg);
-      if (rx.count) set("--reaction-count", rx.count);
-    }
-  }
+  colorVars(vars, c, COLOR_VARS);
+  colorVars(vars, c?.accent, ACCENT_VARS);
+  colorVars(vars, c?.messages, MESSAGE_VARS);
+  colorVars(vars, c?.roomlist, ROOMLIST_VARS);
+  colorVars(vars, c?.reactions, REACTION_VARS);
+  colorVars(vars, c?.syntax, SYNTAX_VARS);
 
   const t = theme.typography;
   if (t) {
@@ -258,15 +362,33 @@ export function themeToCssVars(theme: Theme): Record<string, string> {
 /**
  * Apply a theme object (from the Tauri backend) as CSS custom properties on
  * the :root element.  Only properties that are explicitly present in the theme
- * object are written — the rest fall back to the defaults in vars.css.
+ * object are written — the rest fall back to the defaults in vars.css. The
+ * exception is `[colors.syntax]`, whose absent keys are actively cleared (see
+ * below).
  */
 export function applyTheme(theme: Theme, root: HTMLElement = document.documentElement): void {
   // Ease the colour change rather than snapping. Must run before the custom
   // properties are rewritten so the transition is armed when values change.
   beginThemeTween(root);
+  // Switches the syntax defaults from Phosphor's own table to ones derived
+  // from the palette (vars.css), since the theme now painting may not be
+  // Phosphor.
+  root.setAttribute(THEME_APPLIED_ATTR, "");
 
-  for (const [prop, value] of Object.entries(themeToCssVars(theme))) {
+  const vars = themeToCssVars(theme);
+  for (const [prop, value] of Object.entries(vars)) {
     root.style.setProperty(prop, value);
+  }
+
+  // Syntax keys a theme leaves out are removed, not kept the way the palette's
+  // are. Keeping them is harmless for the palette because every bundled theme
+  // sets every key, so a switch overwrites the lot. A syntax table is the
+  // opposite case: most custom themes have none, and one that has it may set a
+  // handful of tokens. Kept values would paint the previous theme's hand-tuned
+  // tokens onto this theme's background; cleared, the vars.css defaults derive
+  // them from this theme's palette instead.
+  for (const prop of Object.values(SYNTAX_VARS)) {
+    if (!(prop in vars)) root.style.removeProperty(prop);
   }
 }
 
@@ -276,15 +398,9 @@ export function applyTheme(theme: Theme, root: HTMLElement = document.documentEl
  */
 export function resetTheme(root: HTMLElement = document.documentElement): void {
   beginThemeTween(root);
+  root.removeAttribute(THEME_APPLIED_ATTR);
   const props = [
-    "--bg", "--fg", "--cursor", "--selection-bg", "--selection-fg", "--border-color",
-    "--accent-primary", "--accent-secondary", "--accent-error", "--accent-warning",
-    "--accent-success", "--accent-link",
-    "--msg-own", "--msg-other", "--msg-system", "--msg-timestamp",
-    "--msg-mention-bg", "--msg-mention-fg", "--msg-reply-border", "--msg-thread-indicator",
-    "--roomlist-active-bg", "--roomlist-active-fg", "--roomlist-unread",
-    "--roomlist-mention-badge", "--roomlist-muted",
-    "--reaction-bg", "--reaction-border", "--reaction-own-bg", "--reaction-count",
+    ...COLOR_TABLES.flatMap((table) => Object.values(table)),
     "--font-family", "--font-size", "--line-height", "--message-spacing",
     "--room-list-width", "--frame-line", "--frame-width", "--frame-radius",
     "--emoji-size", "--sticker-max-size", "--reaction-size",
