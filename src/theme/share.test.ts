@@ -52,8 +52,11 @@ describe("THEME_SCHEMA", () => {
 
   it("covers exactly the fields of every themes/*.toml file", () => {
     expect(Object.keys(THEME_FILES).length).toBeGreaterThan(0);
+    // [colors.syntax] is the one optional table; Pesterchum, not built in, has none.
+    const withoutSyntax = schemaPaths.filter((p) => !p.startsWith("colors.syntax."));
     for (const [file, text] of Object.entries(THEME_FILES)) {
-      expect(leafPaths(parse(text)).sort(), file).toEqual(schemaPaths);
+      const paths = leafPaths(parse(text)).sort();
+      expect(paths, file).toEqual(paths.some((p) => p.startsWith("colors.syntax.")) ? schemaPaths : withoutSyntax);
     }
   });
 
@@ -133,7 +136,11 @@ describe("share string", () => {
     // instead.
     const NORD_V1 =
       "Ae3Uyw3DIAwG4JUINshdogv0hI2z_wilUixMQWmlKrdeQ3j4x3yP0ZJ7q_YXR6ICYpgcqVRVb4MjRBJqWDgCjDHFhSMq2tp17KHj31NH-k7eEWoPQjbvCO95y2V0RFmYeHSkACuJcyRpW0xOHbE53RGLxDmCkvLrAG-OQPuukyPAsKNOjtiBJ0es3qUjNvjREQt8dMQSdo7YZc2OWMzOkaPuLxyx_nKFWT7OESjYJPGO9C3-jlziyBM";
-    expect(decodeThemeShare(NORD_V1)).toBe(themeToToml(BUILTIN_THEME_MAP.nord as CompleteTheme));
+    // Encoded before [colors.syntax] existed, so it holds Nord without one.
+    const nord = BUILTIN_THEME_MAP.nord as CompleteTheme;
+    const { syntax: _syntax, ...nordColors } = nord.colors;
+    const nordBeforeSyntax = completeTheme({ ...nord, colors: nordColors }, nord).theme;
+    expect(decodeThemeShare(NORD_V1)).toBe(themeToToml(nordBeforeSyntax));
     expect(decodeThemeShare("AYseLUtGy5LRsmS0LKFCWQIA")).toBe(SHARE_DICTIONARY_V1);
   });
 
@@ -146,9 +153,12 @@ describe("share string", () => {
     for (const [id, theme] of Object.entries(BUILTIN_THEME_MAP)) {
       const toml = themeToToml(theme as CompleteTheme);
       const encoded = encodeThemeShare(toml);
-      // ~250 today; uncompressed is ~1,470. A jump means the dictionary
-      // stopped applying.
-      expect(encoded.length, id).toBeLessThan(350);
+      // 447–535 today (Phosphor 274); uncompressed is ~1,560. The version-1
+      // dictionary is Phosphor as it was before [colors.syntax], so a syntax
+      // table compresses on its own and costs ~200–250 characters; without
+      // one a link is 226–288. A jump past this means the dictionary stopped
+      // applying.
+      expect(encoded.length, id).toBeLessThan(600);
       expect(decodeThemeShare(encoded), id).toBe(toml);
     }
   });
@@ -317,5 +327,33 @@ describe("themeSlug", () => {
     expect(themeSlug("Catppuccin Mocha")).toBe("catppuccin-mocha");
     expect(themeSlug("  Crème Brûlée!! v2 ")).toBe("creme-brulee-v2");
     expect(themeSlug("🐉")).toBe("theme");
+  });
+});
+
+describe("[colors.syntax]", () => {
+  const { syntax: _syntax, ...colors } = phosphor.colors;
+  const noSyntax = { ...phosphor, colors };
+
+  it("is left out of the TOML when a theme sets none of it, and stays unset", () => {
+    const { theme, issues } = completeTheme(noSyntax, phosphor);
+    expect(issues).toEqual([]);
+    expect(theme.colors.syntax.keyword).toBe("");
+    const toml = themeToToml(theme);
+    expect(toml).not.toContain("[colors.syntax]");
+    expect(validateTheme(parse(toml))).toEqual([]);
+  });
+
+  it("keeps a partial table as it is, never filled from the base", () => {
+    const { theme, issues } = completeTheme(setField(noSyntax, "colors.syntax", { keyword: "#ff0000" }), phosphor);
+    expect(issues).toEqual([]);
+    expect(theme.colors.syntax.keyword).toBe("#ff0000");
+    expect(theme.colors.syntax.string).toBe("");
+    expect(themeToToml(theme)).toContain('[colors.syntax]\nkeyword = "#ff0000"\n\n[typography]');
+  });
+
+  it("still rejects a key that is not a colour", () => {
+    expect(validateTheme(setField(phosphor, "colors.syntax.keyword", "red")).map((i) => i.path)).toEqual([
+      "colors.syntax.keyword",
+    ]);
   });
 });
