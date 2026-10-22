@@ -165,6 +165,22 @@ const MOCK_TIMELINE: TimelineEvent[] = [
     8.8,
     '<pre><code class="language-zig">const std = @import(&quot;std&quot;);</code></pre>',
   ),
+  // No formatted_body at all, as Quark sent code before it had fence support
+  // and as bots and bridges still do: the fence is found in the plain body.
+  mockEvent(
+    "@dave:matrix.org",
+    "build failed on nixos-unstable:\n```console\n$ nix build .#quark\nerror: hash mismatch in fixed-output derivation\n```",
+    8.7,
+  ),
+  // The other shape: code the old formatter took for markdown went out as
+  // HTML with the fence as text, `__init__` underlined and `*args` italic
+  // (byte for byte what it produced). The block's code comes from the plain body.
+  mockEvent(
+    "@you:matrix.org",
+    "fixed it:\n```py\nclass A:\n    def __init__(self, *args, **kwargs):\n        pass\n```",
+    8.6,
+    "fixed it:<br>```py<br>class A:<br>    def <u>init</u>(self, <em>args, </em>*kwargs):<br>        pass<br>```",
+  ),
   mockEvent(
     "@bob:matrix.org",
     "run `:theme catppuccin-latte` to check the light palette",

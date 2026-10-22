@@ -1,5 +1,5 @@
-// Rendering a message body: the `formatted_body` HTML path and the MSC2530
-// media caption that sits beneath an image.
+// Rendering a message body: the `formatted_body` HTML path, the plain-text
+// path, and the MSC2530 media caption that sits beneath an image.
 //
 // Neither belongs to Timeline or ThreadView — both surfaces render both, and
 // while these lived in Timeline the thread panels imported one of them across a
@@ -7,8 +7,9 @@
 // change to escaping, spoilers or emoji resolution land on every surface at once
 // rather than on whichever one the author had open.
 
-import { decorateMessageLinks } from "../app/links.js";
-import { highlightCodeBlocks } from "./code_highlight.js";
+import { appendLinkifiedText, decorateMessageLinks } from "../app/links.js";
+import { plainFences, splitFencedCode } from "../app/markdown.js";
+import { highlightCodeBlocks, MAX_BLOCKS_PER_BODY } from "./code_highlight.js";
 
 /** HTML whitespace (not `\s`, which would also take a deliberate U+00A0). */
 const WHITESPACE_ONLY = /^[ \t\n\f\r]*$/;
@@ -66,8 +67,11 @@ export function setupSpoilers(container: HTMLElement): void {
  * that list out of the CSS. Code blocks are syntax-highlighted here too, so
  * every surface gets it: synchronously when the same text was highlighted
  * before, otherwise a moment later, off the main thread (code_highlight.ts).
+ *
+ * `plainBody`, the event's plain `body`, lets fenced code the HTML shows as
+ * text become code blocks (repairTextFences).
  */
-export function renderFormattedBody(el: HTMLElement, html: string): void {
+export function renderFormattedBody(el: HTMLElement, html: string, plainBody?: string): void {
   // In production this must be sanitized server-side or with DOMPurify; for the
   // UI shell we accept pre-trusted HTML.
   el.innerHTML = html;
@@ -78,6 +82,7 @@ export function renderFormattedBody(el: HTMLElement, html: string): void {
       img.removeAttribute("src");
     }
   }
+  if (plainBody !== undefined) repairTextFences(el, html, plainBody);
   el.classList.add("message-html");
   // Bodies are `white-space: pre-wrap`, so the newline other clients put
   // between block tags renders as a blank line. Element sends
@@ -103,6 +108,266 @@ export function renderFormattedBody(el: HTMLElement, html: string): void {
 }
 
 /**
+ * Render a message with no `formatted_body`: its text, linkified, with any
+ * top-level ``` fences drawn as code blocks.
+ *
+ * The fences are for messages written as code but sent as plain text — every
+ * one Quark sent before it had fence support, and what bots and bridges still
+ * send. Nothing else in the text is read as markdown (see splitFencedCode):
+ * plain text isn't markdown, but a fence says what it is plainly enough. The
+ * blocks are built with the DOM, never HTML, as the same
+ * `<pre><code class="language-…">` the composer sends, so they look and
+ * highlight the same. A body with more fences than MAX_BLOCKS_PER_BODY is left
+ * as text, so one message can't turn into thousands of elements.
+ */
+export function renderPlainBody(el: HTMLElement, text: string): void {
+  el.replaceChildren();
+  const pieces = splitFencedCode(text);
+  const blocks = pieces.filter((p) => p.kind === "code").length;
+  if (blocks === 0 || blocks > MAX_BLOCKS_PER_BODY) {
+    el.classList.remove("message-html");
+    appendLinkifiedText(el, text);
+    return;
+  }
+  // The code-block styles are scoped to it, as for an HTML body.
+  el.classList.add("message-html");
+  for (const piece of pieces) {
+    if (piece.kind === "text") {
+      appendLinkifiedText(el, piece.text);
+      continue;
+    }
+    el.appendChild(codeBlock(piece.lang, piece.text));
+  }
+  void highlightCodeBlocks(el);
+}
+
+/**
+ * Render a message body into `el`, replacing what was there: the
+ * `formatted_body` when the event has one, else the plain body. Every surface
+ * that draws a text message — and an in-place edit — goes through here, so the
+ * two paths can't drift apart per caller.
+ */
+export function renderMessageBody(el: HTMLElement, body: string, htmlBody?: string): void {
+  if (htmlBody) renderFormattedBody(el, htmlBody, body);
+  else renderPlainBody(el, body);
+}
+
+// ── Fences sent as text in HTML ─────────────────────────────────────────────
+
+/**
+ * Elements whose edges break a line the way a <br> does. A fence line inside
+ * one isn't beside a <br>, but it still starts a line of its own.
+ */
+const BLOCK_TAGS = new Set([
+  "BLOCKQUOTE", "DETAILS", "DIV", "H1", "H2", "H3", "H4", "H5", "H6", "HR",
+  "LI", "OL", "P", "PRE", "SUMMARY", "TABLE", "TR", "UL",
+]);
+
+/**
+ * A rendered body's text as one string, with where each character came from:
+ * a position in a text node, a <br> or <img> (a "\n" or U+FFFC), or `null` for
+ * what no node holds and nothing can delete: the line break at a block
+ * element's edge, and the `>` that starts each line of a quote, as it does in
+ * the plain body.
+ */
+interface FlatText {
+  text: string;
+  at: Array<Spot | null>;
+}
+
+/** A character of a FlatText: one in a text node, or a <br> or <img>. */
+type Spot = { node: Text; offset: number } | Element;
+
+/**
+ * How deep a body's elements may nest for its fences to be repaired. Each
+ * block is lifted out level by level, so a crafted body 500 deep with 64
+ * fences took most of a second; a reply quoting a list item's bold spoiler is
+ * still under ten.
+ */
+const MAX_REPAIR_DEPTH = 32;
+
+/** `root`'s FlatText, or null when it nests deeper than MAX_REPAIR_DEPTH. */
+function flatten(root: Element): FlatText | null {
+  const chars: string[] = [];
+  const at: FlatText["at"] = [];
+  let quotes = 0;
+  const push = (ch: string, spot: Spot | null): void => {
+    if (quotes > 0 && ch !== "\n" && (chars.length === 0 || chars[chars.length - 1] === "\n")) {
+      chars.push(">");
+      at.push(null);
+    }
+    chars.push(ch);
+    at.push(spot);
+  };
+  const walk = (parent: Node, depth: number): boolean => {
+    if (depth > MAX_REPAIR_DEPTH) return false;
+    for (const child of parent.childNodes) {
+      if (child instanceof Text) {
+        for (let i = 0; i < child.data.length; i++) push(child.data[i], { node: child, offset: i });
+      } else if (child instanceof Element) {
+        if (child.tagName === "BR" || child.tagName === "IMG") {
+          push(child.tagName === "BR" ? "\n" : "\uFFFC", child);
+          continue;
+        }
+        const block = BLOCK_TAGS.has(child.tagName);
+        const quote = child.tagName === "BLOCKQUOTE";
+        if (block) push("\n", null);
+        if (quote) quotes++;
+        if (!walk(child, depth + 1)) return false;
+        if (quote) quotes--;
+        if (block) push("\n", null);
+      }
+    }
+    return true;
+  };
+  return walk(root, 0) ? { text: chars.join(""), at } : null;
+}
+
+/**
+ * Swap the fenced code a body's HTML shows as text for code blocks, taking
+ * the code from its plain body.
+ *
+ * Quark's formatter knew no fences until it did, and ran bold, italics,
+ * spoilers and code spans over code lines too, so fenced code holding
+ * `__init__`, `*args`, `a || b` or a backtick — most Python and shell — went
+ * out as HTML with the ``` lines as text between <br>s and the code
+ * underlined, italicised or spoilered. Other clients send fences as text in
+ * HTML too, from Element with markdown off to bridges. Their plain body still
+ * has the code as typed.
+ *
+ * Only the fences change. Each one plain text means as code (plainFences) is
+ * found twice — in the plain body, and as lines of the HTML's rendered text —
+ * and the stretch of the HTML from its opening line to its closing one is
+ * replaced with a code block holding the plain body's code. Everything else
+ * the sender's HTML says stays as sent: mentions, quotes, formatting from
+ * whatever client sent it. Nothing is parsed as markdown, and the work is one
+ * walk over the body. If the two don't find the same fences, in order, with
+ * the same languages, or the HTML shows one across a block's edge, nothing
+ * changes.
+ *
+ * No Range is used: WebKit keeps each one until it is collected and updates
+ * every one on every later removal, anywhere in the document, so a Range per
+ * block made a crafted body take minutes and slowed the timeline after it.
+ */
+function repairTextFences(el: HTMLElement, html: string, body: string): void {
+  if (/<pre[\s>]/i.test(html) || !html.includes("```")) return;
+  const wanted = plainFences(body);
+  if (wanted.length === 0 || wanted.length > MAX_BLOCKS_PER_BODY) return;
+  const flat = flatten(el);
+  if (!flat) return;
+  const found = plainFences(flat.text);
+  if (found.length !== wanted.length || found.some((f, k) => f.lang !== wanted[k].lang)) return;
+
+  const lineStarts = [0];
+  for (let i = 0; i < flat.text.length; i++) if (flat.text[i] === "\n") lineStarts.push(i + 1);
+  // Every stretch is checked before any is changed. `limit` is where the
+  // stretch after this one starts: two fences a line apart share the break
+  // between them, and only one of them can take it.
+  const stretches: Array<[Spot, Spot]> = [];
+  let limit = flat.text.length;
+  for (let k = found.length - 1; k >= 0; k--) {
+    const { open, close } = found[k];
+    // [from, to): the fence lines and what's between them, plus the line break
+    // each side and one blank line beside it — the block's own edges break the
+    // line, as when the composer sends a block.
+    let from = lineStarts[open];
+    let to = close + 1 < lineStarts.length ? lineStarts[close + 1] - 1 : flat.text.length;
+    for (let n = 0; n < 2 && from > 0 && flat.text[from - 1] === "\n" && flat.at[from - 1]; n++) from--;
+    for (let n = 0; n < 2 && to < limit && flat.text[to] === "\n" && flat.at[to]; n++) to++;
+    limit = from;
+    // A fence opened in a quote and closed after it is one the plain body
+    // doesn't have, since it reads `>` lines as text, even when the counts
+    // agree.
+    for (let i = from; i < to; i++) if (!flat.at[i]) return;
+    stretches[k] = [flat.at[from]!, flat.at[to - 1]!];
+  }
+  // Last first, so the positions of the ones before it still hold.
+  for (let k = stretches.length - 1; k >= 0; k--) {
+    const pre = codeBlock(wanted[k].lang, wanted[k].code);
+    replaceStretch(stretches[k][0], stretches[k][1], pre);
+    hoist(pre, el);
+  }
+}
+
+/**
+ * Put `block` where the characters from `from` to `to` (inclusive) are,
+ * splitting the text nodes they start and end in. The text before a split
+ * keeps its node, so positions earlier in the body stay valid.
+ */
+function replaceStretch(from: Spot, to: Spot, block: Element): void {
+  let last: ChildNode = to instanceof Element ? to : to.node;
+  if (!(to instanceof Element) && to.offset + 1 < to.node.length) to.node.splitText(to.offset + 1);
+  let first: ChildNode = from instanceof Element ? from : from.node;
+  if (!(from instanceof Element) && from.offset > 0) {
+    first = from.node.splitText(from.offset);
+    if (last === from.node) last = first;
+  }
+  first.before(block);
+  removeThrough(first, last);
+}
+
+/**
+ * Remove `first`, `last` and every node between them in document order. The
+ * elements `first` sits in keep what comes before it; those `last` sits in
+ * keep what comes after it, and go if that is nothing, so no empty spoiler or
+ * link is left behind.
+ */
+function removeThrough(first: ChildNode, last: ChildNode): void {
+  if (first === last) {
+    first.remove();
+    return;
+  }
+  const lastPath = new Set<Node>();
+  for (let n: Node | null = last; n; n = n.parentNode) lastPath.add(n);
+  // Up from each end to the child of their common ancestor, dropping what lies
+  // between them at each level.
+  let top = first;
+  for (; !lastPath.has(top.parentElement!); top = top.parentElement!) {
+    while (top.nextSibling) top.nextSibling.remove();
+  }
+  const common = top.parentElement!;
+  let bottom = last;
+  for (; bottom.parentElement !== common; bottom = bottom.parentElement!) {
+    while (bottom.previousSibling) bottom.previousSibling.remove();
+  }
+  while (top.nextSibling !== bottom) top.nextSibling!.remove();
+  first.remove();
+  for (let n = last; ; ) {
+    const parent = n.parentElement!;
+    n.remove();
+    if (n === bottom || parent.hasChildNodes()) break;
+    n = parent;
+  }
+}
+
+/**
+ * Lift a code block out of the inline elements it was put inside, splitting
+ * each one at it: a spoiler or emphasis the old formatter opened before a
+ * fence and closed inside the code would otherwise blur or slant the block.
+ */
+function hoist(block: Element, root: Element): void {
+  // Sibling moves, not a Range: every Range left alive is updated on every
+  // later mutation, and one per level made a deeply nested body take minutes.
+  for (let parent = block.parentElement; parent && parent !== root && !BLOCK_TAGS.has(parent.tagName); parent = block.parentElement) {
+    const copy = parent.cloneNode(false) as Element;
+    while (block.nextSibling) copy.appendChild(block.nextSibling);
+    parent.after(block);
+    if (copy.firstElementChild || copy.textContent) block.after(copy);
+    if (!parent.hasChildNodes()) parent.remove();
+  }
+}
+
+/** A `<pre><code>` holding `code`, built with the DOM, as the composer sends one. */
+function codeBlock(lang: string | undefined, code: string): HTMLPreElement {
+  const pre = document.createElement("pre");
+  const el = document.createElement("code");
+  if (lang) el.className = `language-${lang}`;
+  el.textContent = code;
+  pre.appendChild(el);
+  return pre;
+}
+
+/**
  * Render a media caption (MSC2530) beneath the media it belongs to.
  *
  * No-op when the event carried no caption — a bare-filename body is not one.
@@ -124,7 +389,7 @@ export function appendCaption(
   const el = document.createElement("div");
   el.className = `${bodyClass} message__image-caption`;
   if (captionHtml) {
-    renderFormattedBody(el, captionHtml);
+    renderFormattedBody(el, captionHtml, caption);
   } else {
     el.textContent = caption;
   }
