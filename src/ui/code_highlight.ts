@@ -339,8 +339,9 @@ function cachePut(key: string, html: string): void {
 
 /**
  * Blocks that stay plain for the session: their job ran past JOB_TIMEOUT_MS,
- * or their HTML came back past htmlLimit or would have needed more nodes than
- * nodeBudget allows (code_highlight_grammars.ts). A retry would only
+ * or their HTML came back past htmlLimit, failed the check before insertion,
+ * or would have needed more nodes than nodeBudget allows
+ * (code_highlight_grammars.ts). A retry would only
  * cost the worker the same again, and a timed-out one would hold the queue for
  * another deadline. Insertion order is age order.
  */
@@ -813,7 +814,12 @@ function settle({ key, text }: CodeBlock, html: string | undefined): string | un
     giveUp(key);
     return undefined;
   }
-  if (!isTokenSpans(html, text)) return undefined;
+  // The same text always comes back the same, so a result that fails the check
+  // would fail it on every render: give the block up rather than ask again.
+  if (!isTokenSpans(html, text)) {
+    giveUp(key);
+    return undefined;
+  }
   cachePut(key, html);
   return html;
 }
