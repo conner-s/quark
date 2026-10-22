@@ -42,6 +42,35 @@ border = "#d3cdb5"
 own_bg = "#e8f0d8"
 count = "#93a1a1"
 
+# Code block syntax highlighting. A key left out falls back to a colour
+# derived from the palette above.
+# Solarized on base2. Its accents sit near 3:1 on light backgrounds, so each
+# is darkened in lightness only (hue kept) to clear 4.5:1; comments use base00.
+# Code text is base01 darkened to 7:1, so comments stand apart from it.
+[colors.syntax]
+background = "#eee8d5"
+foreground = "#3a4f56"
+border = "#d3cdb5"
+comment = "#657b83"
+keyword = "#606f03"
+string = "#03756e"
+number = "#c22274"
+constant = "#c22274"
+builtin = "#ba3e02"
+type = "#846302"
+function = "#006cac"
+variable = "#006cac"
+attribute = "#006cac"
+tag = "#006cac"
+operator = "#606f03"
+punctuation = "#657b83"
+escape = "#cc1d20"
+meta = "#ba3e02"
+regexp = "#5d60b2"
+section = "#846302"
+addition = "#606f03"
+deletion = "#cc1d20"
+
 [typography]
 font_family = "Fira Code, JetBrains Mono, monospace"
 font_size = 14

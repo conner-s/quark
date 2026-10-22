@@ -9,6 +9,12 @@ export default defineConfig(async () => ({
       "@": resolve(__dirname, "src"),
     },
   },
+  // Workers build as ES modules: the default, iife, can't code-split, and the
+  // highlighting worker (src/ui/code_highlight.worker.ts) loads the
+  // highlight.js core and each grammar as chunks of their own.
+  worker: {
+    format: "es",
+  },
   clearScreen: false,
   server: {
     port: 1450,

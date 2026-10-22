@@ -14,6 +14,7 @@ Quark is a [Matrix](https://matrix.org) chat client that looks like a terminal b
 
 - **End-to-end encryption** — Megolm via Vodozemac, cross-signing, and device verification (SAS emoji + QR).
 - **Messaging** — rich replies, threads, reactions (Unicode *and* custom emoji), message editing & redaction, typing indicators, read receipts (public + private), and presence.
+- **Code blocks** — fenced ```` ```lang ```` blocks in the composer go out as Matrix `<pre><code class="language-…">` and render syntax-highlighted (highlight.js, ~60 lazily loaded grammars, Nix included), with token colours set per theme.
 - **Custom emoji & stickers** — MSC2545 (`im.ponies`) packs from rooms and your account data, compatible with Cinny, FluffyChat, Nheko, and SchildiChat. Type `:shortcode:` for inline autocomplete with image previews.
 - **GIF search** — integrated Giphy / Klipy search; selected GIFs are uploaded to your homeserver (not hot-linked) and sent as `m.image`.
 - **Media** — authenticated media (MSC3916), inline image and `m.video` playback, blurhash placeholders, disk-backed LRU cache.
@@ -197,7 +198,7 @@ Eleven built-in themes ship in [themes/](themes/):
 
 `phosphor` (green CRT) · `amber` (amber CRT) · `dracula` · `nord` · `solarized-dark` · `solarized-light` · `catppuccin-mocha` · `catppuccin-latte` · `gruvbox-dark` · `high-contrast` · `pesterchum`
 
-Switch with `:theme <name>` or via Settings. (Filesystem hot-reload on save is not yet wired up — switching applies immediately, but editing a theme file currently needs a `:theme` re-select.)
+Switch with `:theme <name>` or via Settings. A theme's optional `[colors.syntax]` table sets code-block token colours; see [DESIGN.md](DESIGN.md#syntax-colours). (Filesystem hot-reload on save is not yet wired up — switching applies immediately, but editing a theme file currently needs a `:theme` re-select.)
 
 ---
 

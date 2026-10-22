@@ -16,7 +16,7 @@
 
 import { AppState } from "../state.js";
 import { registerAnimatedUrl } from "../animated_urls.js";
-import { markdownToHtml } from "../markdown.js";
+import { markdownToHtml, mapProse } from "../markdown.js";
 import { BUILTIN_EMOJI } from "../../data/unicode-emoji.js";
 
 import {
@@ -572,10 +572,10 @@ export function roomMemberToEntry(m: RoomMember): MemberEntry {
 }
 
 /**
- * Build the HTML `formatted_body` for a compose-box message: inline markdown
- * (bold/italic/underline/strikethrough/spoiler/code, see {@link markdownToHtml})
- * plus custom-emoji shortcodes resolved to `<img data-mx-emoticon>` tags
- * (MSC2545).
+ * Build the HTML `formatted_body` for a compose-box message: markdown
+ * (bold/italic/underline/strikethrough/spoiler/code spans, quotes, fenced code
+ * blocks; see {@link markdownToHtml}) plus custom-emoji shortcodes outside code
+ * resolved to `<img data-mx-emoticon>` tags (MSC2545).
  *
  * Returns `undefined` if the body has no formatting and no resolvable custom
  * emoji, so the message is sent as plain text only.
@@ -616,11 +616,16 @@ export function replaceUnicodeEmojiShortcodes(text: string): string {
 /**
  * Prepare a compose-box string for sending: Unicode emoji shortcodes become
  * glyphs in the plain body, and the formatted body resolves custom-emoji
- * shortcodes to `<img data-mx-emoticon>` (plus inline markdown). `formattedBody`
+ * shortcodes to `<img data-mx-emoticon>` (plus markdown). `formattedBody`
  * is `undefined` when the result has no formatting and no custom emoji.
+ *
+ * Neither kind of shortcode is touched inside code: `a:b:a+b` is a Nix lambda,
+ * not `a` + 🅱️ + `a+b`. The plain body goes through {@link mapProse}, which
+ * splits prose from code exactly as markdownToHtml does, so the two bodies
+ * agree on what is code — and an edit doesn't bake a glyph into it.
  */
 export function prepareOutgoingBody(raw: string): { body: string; formattedBody: string | undefined } {
-  const body = replaceUnicodeEmojiShortcodes(raw);
+  const body = mapProse(raw, replaceUnicodeEmojiShortcodes);
   return { body, formattedBody: _buildFormattedBodyWithEmoji(body) };
 }
 

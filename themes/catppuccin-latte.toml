@@ -42,6 +42,34 @@ border = "#bcc0cc"
 own_bg = "#e2eedd"
 count = "#8c8fa1"
 
+# Code block syntax highlighting. A key left out falls back to a colour
+# derived from the palette above.
+# Catppuccin's official syntax style guide, on mantle. Latte's accents are
+# darkened in lightness only (hue kept) where needed to clear 4.5:1.
+[colors.syntax]
+background = "#e6e9ef"
+foreground = "#4c4f69"
+border = "#ccd0da"
+comment = "#7c7f93"
+keyword = "#8737ee"
+string = "#1f7902"
+number = "#b44404"
+constant = "#b44404"
+builtin = "#d00937"
+type = "#965b00"
+function = "#155dec"
+variable = "#c8243c"
+attribute = "#03747a"
+tag = "#8737ee"
+operator = "#04709d"
+punctuation = "#7c7f93"
+escape = "#ab3c91"
+meta = "#ab3c91"
+regexp = "#ab3c91"
+section = "#d00937"
+addition = "#1f7902"
+deletion = "#d00937"
+
 [typography]
 font_family = "JetBrains Mono, Fira Code, monospace"
 font_size = 14

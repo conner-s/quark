@@ -1205,10 +1205,12 @@ On the sending side, the compose box's inline markdown (`src/app/markdown.ts`)
 turns `[label](url)` into `<a href>` in the `formatted_body`, leaving the
 markdown source in `body` as the plain fallback. Only `http(s)`, `mailto` and
 `matrix` targets link; anything else stays literal text. Consecutive lines
-starting with `>` become a `<blockquote>` (inline markdown parsed inside, no
-`<br>` around the block, `>` lines inside a ``` fence left literal). Whenever a message has
-a `formatted_body`, its newlines go out as `<br>`, because other clients render
-that HTML normally and a bare newline would collapse to a space.
+starting with `>` become a `<blockquote>`, whose content is parsed like a
+message of its own, so `> > a` nests (32 levels at most) and a fence can sit in
+a quote; no `<br>` touches the block. Whenever a message has a
+`formatted_body`, its newlines go out as `<br>` — except inside a code block
+(see Code Blocks) — because other clients render that HTML normally and a bare
+newline would collapse to a space.
 
 Activation is a **single capture-phase guard on the document**, not a listener
 per anchor. Left click and middle click both open the URL in the system browser
@@ -1219,6 +1221,76 @@ single-window WebView, so every activation lands in the same place. Anchors with
 `download`, and any non-http(s) href, are left alone. Only the mobile WebView
 gets `target="_blank"` — on desktop it makes wry open the URL itself, which
 alongside `openExternalUrl` opened every link twice.
+
+### Code Blocks
+
+**Sending.** In the compose box, a line of three or more backticks or tildes
+opens a fenced code block, and a line of at least as many of the same
+character closes it, as in CommonMark (`src/app/markdown.ts`). The first word of
+the info string becomes `class="language-<word>"` when it fits
+`[A-Za-z0-9_+#.-]+`. The block goes out as
+`<pre><code class="language-nix">…</code></pre>` with its newlines kept literal,
+and `body` keeps the markdown source. Code, whether a fenced block or a
+`code span`, is never parsed: `**`, `||` and `:shortcode:` (Unicode or custom)
+stay as typed in both bodies, so a Nix lambda `a:b:a+b` doesn't become
+`a🅱️a+b`. A fence can sit in a `>` quote. An unclosed fence runs to the end of
+its container (the message, or the quote it sits in), except a lone opener
+with nothing after it, which stays text. A message that opens with an indented
+fence keeps that indent when the compose box trims it, since the indent is
+what gets stripped from the block's lines.
+
+With the caret inside an open top-level fence, a bare Enter inserts a newline
+instead of sending (Ctrl/Cmd+Enter still sends). While the caret or the end of
+the text is inside one, the shortcode and mention autocompletes stay shut:
+each one claims Enter while it is open, and a completion is written at the end
+of the text. A URL inside code gets no preview card (in bodies up to 8 KB; past
+that the code isn't parsed for it).
+
+**Rendering.** Every surface that renders a `formatted_body` goes through
+`renderFormattedBody`, so the timeline, inline threads, captions, edits and the
+local echo all highlight each `<pre><code class="language-…">` with
+highlight.js (`src/ui/code_highlight.ts`). Only a block that names its language
+is highlighted. There is no auto-detection (Element doesn't auto-detect by
+default either), because guessing paints prose as code. The grammars are a
+curated set of about sixty, and the core and each grammar are lazy chunks
+fetched on first use. Fence names resolve through a static alias table (`sh`,
+`js`, `toml`, `nixos`, `c++`, …). `shell` goes to bash, which is what GitHub
+means by it, rather than to highlight.js's shell-session grammar, which keeps
+`console`. highlight.js 11.12.0's nix grammar drops the first letter of an
+attribute at column 0 (`inputs = {` came out as a plain `i`), so the loader
+patches that rule until upstream fixes it.
+
+Code comes from any room member, and several grammars are quadratic or worse
+on adversarial input: 10 000 characters of `$` labelled `java` take ~750 ms, and
+csharp is cubic on text that looks like generics. So highlighting runs in a
+module Worker (`code_highlight.worker.ts`), one block at a time, against a
+1.5 s deadline. A block that misses it is abandoned, the worker is restarted,
+and the block stays plain for the session. Blocks still in the document are
+served first, and the search for one is bounded, so a backlog left in another
+room can't make every reply rescan it. At most 64 blocks in a body are
+highlighted. Text is capped at 10 000 characters. Output is capped at twice
+the text's length in token nodes (12 000 at most), because grammars that embed
+another one (shell-session, an HTML `<script>`) can build HTML that grows with
+the square of the text: tens of millions of characters, around a gigabyte of
+memory, inside the deadline. A flat cap alone let a message of short blocks
+each amplify just under it. HTML is likewise capped at 40× the text (400 000
+characters at most). Whatever the worker returns is checked on the main thread before
+insertion: token `<span>`s only, over exactly the original text. Where no
+worker can run (it fails to load, errors, or can't import its chunks), an
+in-thread fallback takes over for the session with tighter limits: 1024
+characters, no whitespace or non-whitespace run over 256, and 16 ms of
+highlighting per task. Results are cached by content, so a re-rendered body
+comes back coloured with no flash.
+
+Code blocks wrap rather than scroll sideways. A scrolling `<pre>` would be one
+more native scrollbar for WebKitGTK to paint over dialogs (#32), a sideways
+swipe that opens the room drawer on mobile, and a scroller no key reaches.
+Token colours come from the theme (see Syntax Colours). In an unrevealed
+spoiler, code takes the spoiler's bar instead of its own colours.
+
+The sanitizer (`src-tauri/src/matrix/html.rs`) narrows `<code class>` to its
+`language-*` tokens with the same charset, so a remote sender can't put
+`hljs-*` or UI classes on code. The spec allows nothing else there anyway.
 
 ### Media Handling
 - Authenticated media download via `/_matrix/client/v1/media/download/`
@@ -1490,6 +1562,30 @@ border = "#333333"
 own_bg = "#1a3a1a"
 count = "#888888"
 
+[colors.syntax]               # code blocks; optional, key by key (see Syntax Colours)
+background = "#0c130c"        # code surface, blocks and inline `code`
+foreground = "#b0b0b0"        # code text no token claims
+border = "#1a3a1a"            # around a block
+comment = "#4e8a5c"
+keyword = "#00ff41"
+string = "#a6ffbc"
+number = "#ffaa00"
+constant = "#ffaa00"          # true / null / symbols
+builtin = "#00c435"
+type = "#6dff93"
+function = "#d4ffe0"
+variable = "#b0b0b0"
+attribute = "#6dff93"         # attrs, properties, keys (Nix `inputs = …`)
+tag = "#00ff41"               # markup tag names, CSS selectors
+operator = "#86c693"
+punctuation = "#6f8f76"
+escape = "#ffaa00"            # `\n` and friends
+meta = "#00aaff"              # preprocessor, decorators, shell prompts
+regexp = "#a6ffbc"
+section = "#00ff41"           # headings, INI/TOML [tables]
+addition = "#00ff41"          # diff +
+deletion = "#ff3333"          # diff -
+
 [typography]
 font_family = "JetBrains Mono, Fira Code, monospace"
 font_size = 14
@@ -1512,6 +1608,62 @@ insert_indicator = "INS"
 command_indicator = "CMD"
 visual_indicator = "VIS"
 ```
+
+### Syntax Colours
+
+`[colors.syntax]` colours code blocks (see Code Blocks). Its keys are flat on
+purpose: highlight.js names scopes with dots (`title.function_`), and a dotted
+TOML key would build a nested table the loader never reads. Each key is one CSS
+custom property — `background`, `foreground` and `border` become `--code-bg`,
+`--code-fg` and `--code-border`, every other key `K` becomes `--syntax-K` — and
+`base.css` maps highlight.js scopes onto those:
+
+| Key | highlight.js scopes |
+| --- | --- |
+| `comment` | `comment`, `quote` |
+| `keyword` | `keyword`, `template-tag` |
+| `string` | `string`, `code` (markdown) |
+| `number` | `number` |
+| `constant` | `literal`, `symbol`, `variable.constant`, `formula` |
+| `builtin` | `built_in`, `variable.language` (`this`, `self`) |
+| `type` | `type`, `title.class` |
+| `function` | `title`, `title.function` |
+| `variable` | `variable`, `template-variable`, `params` |
+| `attribute` | `attr`, `attribute`, `property`, `selector-attr`, `selector-pseudo` |
+| `tag` | `name`, `selector-tag`, `selector-id`, `selector-class` |
+| `punctuation` | `punctuation`, `tag` (the brackets of a markup tag) |
+| `operator` | `operator` |
+| `escape` | `char.escape` |
+| `meta` | `meta`, `meta.prompt`, `doctag` |
+| `regexp` | `regexp`, `link` |
+| `section` | `section`, `bullet` |
+| `addition` / `deletion` | `addition` / `deletion` (diffs) |
+
+An interpolation (`${…}`, highlight.js `subst`) takes the code foreground, so it
+reads as code inside its string. Tokens change colour only, never size, because
+a block is coloured after its body has laid out. The one exception is
+markdown's emphasis and strong, which are italic and bold: there the style is
+the meaning.
+
+Every key is optional. One a theme leaves out falls back to a colour derived
+from that theme's own palette in `vars.css` (keyword from `accent.primary`,
+string from `accent.success` tinted toward the code foreground, comment a mix
+of foreground and code background, `constant` chained to `number`, and so on),
+so a theme written before code highlighting existed still gets readable tokens,
+light or dark. Unlike palette keys, which keep the previous theme's value when a
+theme omits them, omitted syntax keys are cleared on every switch, so one
+theme's tuned tokens never land on another theme's background. The default
+theme needs one more step: it is never applied at startup, only named, so
+`vars.css`'s bare `:root` carries Phosphor's own table, and the derived
+defaults apply only once `applyTheme` has run (it marks the root with
+`data-theme-applied`).
+
+Every built-in theme ships a full table taken from its scheme's own syntax
+palette and contrast-checked against its code background: at least 4.5:1 for
+every token, 3:1 for comments and punctuation, 7:1 throughout High Contrast. A
+few canonical hexes are shifted in lightness to get there, which each table's
+comment notes. `builtins.parity.test.ts` holds `src/theme/builtins.ts` and
+`vars.css` to the TOML files.
 
 ### Built-in Themes
 - **Phosphor** — green-on-black CRT terminal
@@ -1559,7 +1711,9 @@ send_key_behavior = "auto"    # auto | enter | newline — what the Enter key do
                               #   newline: always newline (send via button / Ctrl·Cmd+Enter)
                               # A dedicated send button appears on mobile, or whenever
                               # Enter won't send. Also: `:set send_key_behavior=…` and
-                              # Settings → General → Input.
+                              # Settings → General → Input. Whatever the setting, a
+                              # bare Enter inside an open ``` fence inserts a newline
+                              # (see Code Blocks).
 
 [sync]
 timeline_limit = 50           # initial messages to load per room

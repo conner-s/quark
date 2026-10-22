@@ -42,6 +42,35 @@ border = "#434c5e"
 own_bg = "#3a4a3a"
 count = "#4c566a"
 
+# Code block syntax highlighting. A key left out falls back to a colour
+# derived from the palette above.
+# Nord's syntax palette, a shade below nord0. Meta uses nord12 (Nord's
+# annotation colour) and comment/deletion are nudged lighter, so every token
+# clears 4.5:1 (comments 3:1).
+[colors.syntax]
+background = "#242933"
+foreground = "#d8dee9"
+border = "#3b4252"
+comment = "#66738d"
+keyword = "#81a1c1"
+string = "#a3be8c"
+number = "#b48ead"
+constant = "#81a1c1"
+builtin = "#88c0d0"
+type = "#8fbcbb"
+function = "#88c0d0"
+variable = "#d8dee9"
+attribute = "#8fbcbb"
+tag = "#81a1c1"
+operator = "#81a1c1"
+punctuation = "#eceff4"
+escape = "#ebcb8b"
+meta = "#d08770"
+regexp = "#ebcb8b"
+section = "#88c0d0"
+addition = "#a3be8c"
+deletion = "#d4747c"
+
 [typography]
 font_family = "JetBrains Mono, Fira Code, monospace"
 font_size = 14

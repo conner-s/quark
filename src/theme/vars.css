@@ -129,4 +129,73 @@
   --glow-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
   --glow-radius: 6px;
   --transition-speed: 150ms;
+
+  /* ── Code blocks & syntax highlighting ───────────────────────────────── */
+  /* Phosphor's [colors.syntax] table, as everything above is Phosphor's
+     palette. The default theme is never applied at startup — only its name is
+     recorded (actions/theme.ts) — so these are what a fresh install paints.
+     builtins.parity.test.ts holds them to themes/phosphor.toml. */
+  --code-bg: #0c130c;
+  --code-fg: #b0b0b0;
+  --code-border: #1a3a1a;
+  --syntax-comment: #4e8a5c;
+  --syntax-keyword: #00ff41;
+  --syntax-string: #a6ffbc;
+  --syntax-number: #ffaa00;
+  --syntax-constant: #ffaa00;
+  --syntax-builtin: #00c435;
+  --syntax-type: #6dff93;
+  --syntax-function: #d4ffe0;
+  --syntax-variable: #b0b0b0;
+  --syntax-attribute: #6dff93;
+  --syntax-tag: #00ff41;
+  --syntax-operator: #86c693;
+  --syntax-punctuation: #6f8f76;
+  --syntax-escape: #ffaa00;
+  --syntax-meta: #00aaff;
+  --syntax-regexp: #a6ffbc;
+  --syntax-section: #00ff41;
+  --syntax-addition: #00ff41;
+  --syntax-deletion: #ff3333;
+}
+
+/* Once applyTheme has run (it sets data-theme-applied), a syntax key the
+   theme leaves out falls back to a colour derived from that theme's palette
+   rather than to Phosphor's above: applyTheme removes the keys a theme omits,
+   and every custom theme written before code highlighting existed omits all
+   of them. They are declared on :root, where applyTheme writes the palette
+   inline, so they re-resolve on every theme switch.
+   Tokens that are a variant of another chain to it (constant → number,
+   regexp → string), so a theme that sets only a few keys stays coherent.
+   Palettes reuse accents: Phosphor's has primary equal to success, and most
+   bundled palettes repeat secondary or primary as link. Taken raw, strings
+   would then match keywords and function names would match types or
+   keywords, so both are tinted 40% toward --code-fg, which keeps the
+   accent's hue but separates the pair.
+   The comment and punctuation mixes are toward --code-bg, the surface
+   they're drawn on: 68% holds comments above 3:1 there on every bundled
+   palette whose body text reaches 6:1 on its own background. */
+:root[data-theme-applied] {
+  --code-bg: color-mix(in srgb, var(--fg) 7%, var(--bg));
+  --code-fg: var(--fg);
+  --code-border: var(--border-color);
+  --syntax-comment: color-mix(in srgb, var(--code-fg) 68%, var(--code-bg));
+  --syntax-keyword: var(--accent-primary);
+  --syntax-string: color-mix(in srgb, var(--accent-success) 60%, var(--code-fg));
+  --syntax-number: var(--accent-warning);
+  --syntax-constant: var(--syntax-number);
+  --syntax-builtin: var(--accent-secondary);
+  --syntax-type: var(--accent-secondary);
+  --syntax-function: color-mix(in srgb, var(--accent-link) 60%, var(--code-fg));
+  --syntax-variable: var(--code-fg);
+  --syntax-attribute: var(--accent-link);
+  --syntax-tag: var(--accent-primary);
+  --syntax-operator: var(--code-fg);
+  --syntax-punctuation: color-mix(in srgb, var(--code-fg) 80%, var(--code-bg));
+  --syntax-escape: var(--accent-warning);
+  --syntax-meta: var(--accent-secondary);
+  --syntax-regexp: var(--syntax-string);
+  --syntax-section: var(--accent-primary);
+  --syntax-addition: var(--accent-success);
+  --syntax-deletion: var(--accent-error);
 }

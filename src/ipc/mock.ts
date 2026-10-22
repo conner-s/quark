@@ -64,12 +64,17 @@ function mockSent(event: TimelineEvent): SentMessage {
   return { event_id: event.event_id, echo: event };
 }
 
-function mockEvent(sender: string, body: string, minutesAgo: number): TimelineEvent {
+function mockEvent(
+  sender: string,
+  body: string,
+  minutesAgo: number,
+  formattedBody: string | null = null,
+): TimelineEvent {
   return {
     event_id: `$evt${msgCounter++}`,
     sender,
     body,
-    formatted_body: null,
+    formatted_body: formattedBody,
     timestamp: Date.now() - minutesAgo * 60000,
     msg_type: "m.text",
     is_edit: false,
@@ -123,6 +128,49 @@ const MOCK_TIMELINE: TimelineEvent[] = [
       { key: "😄", count: 2, own: false, senders: [], own_event_id: null },
       { key: "💯", count: 1, own: false, senders: [], own_event_id: null },
     ] },
+
+  // Code blocks, so browser dev mode shows highlighting. Alice's is shaped the
+  // way Element sends one — `<p>` then `<pre>`, a newline between the blocks
+  // and before `</code>` — which is what the whitespace handling around <pre>
+  // in renderFormattedBody is for. Bob's is the shape Quark's composer sends.
+  mockEvent(
+    "@alice:matrix.org",
+    'pinning nixpkgs in the flake:\n\n```nix\ninputs = {\n    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";\n    # a comment\n  };\n```',
+    11,
+    '<p>pinning nixpkgs in the flake:</p>\n<pre><code class="language-nix">inputs = {\n    nixpkgs.url = &quot;github:NixOS/nixpkgs/nixos-unstable&quot;;\n    # a comment\n  };\n</code></pre>\n',
+  ),
+  mockEvent(
+    "@bob:matrix.org",
+    '```rust\n/// Strip everything but `language-*` from a code class.\nfn keep_language(class: &str) -> Option<&str> {\n    class.split_whitespace().find(|c| c.starts_with("language-"))\n}\n```',
+    10,
+    '<pre><code class="language-rust">/// Strip everything but `language-*` from a code class.\nfn keep_language(class: &amp;str) -&gt; Option&lt;&amp;str&gt; {\n    class.split_whitespace().find(|c| c.starts_with(&quot;language-&quot;))\n}</code></pre>',
+  ),
+  mockEvent(
+    "@carol:matrix.org",
+    '```diff\n-  --code-bg: rgba(255, 255, 255, 0.05);\n+  --code-bg: color-mix(in srgb, var(--fg) 6%, var(--bg));\n```',
+    9.5,
+    '<pre><code class="language-diff">-  --code-bg: rgba(255, 255, 255, 0.05);\n+  --code-bg: color-mix(in srgb, var(--fg) 6%, var(--bg));</code></pre>',
+  ),
+  // No language: rendered as a plain block, never auto-detected.
+  mockEvent(
+    "@dave:matrix.org",
+    "```\n$ pnpm dev\n  VITE ready in 312 ms\n  ➜  Local:   http://localhost:1450/\n```",
+    9,
+    "<pre><code>$ pnpm dev\n  VITE ready in 312 ms\n  ➜  Local:   http://localhost:1450/</code></pre>",
+  ),
+  // A language Quark ships no grammar for: plain block, class kept.
+  mockEvent(
+    "@alice:matrix.org",
+    '```zig\nconst std = @import("std");\n```',
+    8.8,
+    '<pre><code class="language-zig">const std = @import(&quot;std&quot;);</code></pre>',
+  ),
+  mockEvent(
+    "@bob:matrix.org",
+    "run `:theme catppuccin-latte` to check the light palette",
+    8.5,
+    "run <code>:theme catppuccin-latte</code> to check the light palette",
+  ),
 
   mockEvent("@dave:matrix.org", "just joined, this client looks amazing", 8),
   mockEvent("@alice:matrix.org", "welcome! try :help to see available commands", 5),
@@ -263,17 +311,35 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
         { user_id: "@dave:matrix.org", event_id: prev, ts: now - 60000 },
       ];
     }
+    // The formatted body is kept, as the backend keeps it: dropping it made a
+    // sent code block (or any markdown) render as its raw source once the room
+    // was reloaded from this timeline.
     case "send_message": {
       const body = args?.body as string ?? "";
-      const ev = mockEvent("@you:matrix.org", body, 0);
+      const ev = mockEvent("@you:matrix.org", body, 0, (args?.formattedBody as string | undefined) ?? null);
       if (args?.inReplyTo) ev.in_reply_to = args.inReplyTo as string;
       MOCK_TIMELINE.push(ev);
       return ev.event_id;
     }
     case "send_thread_reply": {
       const body = args?.body as string ?? "";
-      const ev = mockEvent("@you:matrix.org", body, 0);
+      const ev = mockEvent("@you:matrix.org", body, 0, (args?.formattedBody as string | undefined) ?? null);
       ev.thread_root = args?.threadRootEventId as string ?? null;
+      MOCK_TIMELINE.push(ev);
+      return ev.event_id;
+    }
+    case "edit_message": {
+      // Recorded as the m.replace event the backend would return alongside the
+      // original, so a reload folds it in through `_applyEdits` like a real one.
+      const ev = mockEvent(
+        "@you:matrix.org",
+        (args?.newBody as string) ?? "",
+        0,
+        (args?.newFormattedBody as string | undefined) ?? null,
+      );
+      ev.is_edit = true;
+      ev.relates_to_event_id = (args?.eventId as string) ?? null;
+      MOCK_TIMELINE.push(ev);
       return ev.event_id;
     }
     case "create_room": {
@@ -300,7 +366,6 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     case "leave_room":
     case "mark_room_read":
     case "send_reaction":
-    case "edit_message":
     case "redact_message":
     case "start_sync":
     case "invite_user":

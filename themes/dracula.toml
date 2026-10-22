@@ -42,6 +42,33 @@ border = "#6272a4"
 own_bg = "#3a2e4a"
 count = "#6272a4"
 
+# Code block syntax highlighting. A key left out falls back to a colour
+# derived from the palette above.
+# Dracula's own syntax palette, a shade darker than the theme background.
+[colors.syntax]
+background = "#21222c"
+foreground = "#f8f8f2"
+border = "#44475a"
+comment = "#6272a4"
+keyword = "#ff79c6"
+string = "#f1fa8c"
+number = "#bd93f9"
+constant = "#bd93f9"
+builtin = "#8be9fd"
+type = "#8be9fd"
+function = "#50fa7b"
+variable = "#f8f8f2"
+attribute = "#50fa7b"
+tag = "#ff79c6"
+operator = "#ff79c6"
+punctuation = "#f8f8f2"
+escape = "#ff79c6"
+meta = "#ffb86c"
+regexp = "#ff5555"
+section = "#bd93f9"
+addition = "#50fa7b"
+deletion = "#ff5555"
+
 [typography]
 font_family = "JetBrains Mono, Fira Code, monospace"
 font_size = 14
