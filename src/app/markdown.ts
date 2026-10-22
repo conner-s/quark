@@ -149,6 +149,65 @@ export function insideCodeFence(text: string, caret: number = text.length): bool
   return fence !== null;
 }
 
+/** A piece of a plain-text body: prose as written, or a fenced code block's content. */
+export type FencedPiece =
+  | { kind: "text"; text: string }
+  | { kind: "code"; lang: string | undefined; text: string };
+
+/**
+ * Cut a plain-text body at its top-level fenced code blocks, for the timeline
+ * to draw them as code. Messages Quark sent before it had fence support went
+ * out as plain text with their ``` lines in them, and bots and bridges still
+ * send them that way. The fence rules are markdownToHtml's, held to what
+ * someone typing code into plain text writes (see plainFence), including the
+ * dropped blank line beside a block, and nothing else is parsed: a plain body
+ * isn't markdown, so `>` quotes and `**` stay as typed. Prose comes back as
+ * written, joined with "\n"; code blocks stop it, so no piece starts or ends on
+ * the newline beside one.
+ */
+export function splitFencedCode(text: string): FencedPiece[] {
+  if (!text.includes("```")) return [{ kind: "text", text }];
+  return plainBlocks(text).flatMap((b): FencedPiece[] => {
+    if (b.kind === "code") return [{ kind: "code", lang: b.lang, text: plainCode(b) }];
+    if (b.kind === "text" && b.lines.length > 0) return [{ kind: "text", text: joinLines(b.lines) }];
+    return [];
+  });
+}
+
+/** Where a fenced block plain text means as code sits: its fence lines, by index. */
+export interface PlainFence {
+  open: number;
+  close: number;
+  lang: string | undefined;
+  code: string;
+}
+
+/**
+ * The fenced blocks plain text means as code (see plainFence), with the line
+ * indices of their opening and closing fences — what lets the renderer find
+ * the same fences in HTML that shows them as text, and swap in the code.
+ */
+export function plainFences(text: string): PlainFence[] {
+  if (!text.includes("```")) return [];
+  return plainBlocks(text).flatMap((b): PlainFence[] =>
+    b.kind === "code" && b.fences.length === 2
+      ? [{ open: b.fences[0].n, close: b.fences[1].n, lang: b.lang, code: plainCode(b) }]
+      : [],
+  );
+}
+
+/** At the depth cap parseBlocks reads `>` lines as text, which leaves fences the only blocks. */
+const plainBlocks = (text: string): Block[] => parseBlocks(sourceLines(text), MAX_QUOTE_DEPTH, true);
+
+/**
+ * A block's code as the HTML parser would leave it: a lone CR becomes a
+ * newline and NULs go. The highlighter checks its result by parsing it, and
+ * code holding either came back as different text — never coloured, and asked
+ * for again on every render.
+ */
+const plainCode = (b: Extract<Block, { kind: "code" }>): string =>
+  joinLines(b.lines).replace(/\r/g, "\n").replace(/\0/g, "");
+
 // ── Fences ───────────────────────────────────────────────────────────────────
 
 /**
@@ -167,6 +226,8 @@ interface Fence {
   /** Spaces before the opener; up to this many are stripped from each content line. */
   indent: number;
   lang: string | undefined;
+  /** The info string, trimmed: `lang` when it is one plausible language name. */
+  info: string;
 }
 
 /** The fence a line opens, or null if it opens none. */
@@ -178,8 +239,9 @@ function openFence(line: string): Fence | null {
   // keeps a one-line ```like this``` from opening a block that swallows the
   // rest of the message.
   if (marker[0] === "`" && info.includes("`")) return null;
-  const word = info.trim().split(/\s+/)[0];
-  return { marker, indent: indent.length, lang: LANG_RE.test(word) ? word : undefined };
+  const trimmed = info.trim();
+  const word = trimmed.split(/\s+/)[0];
+  return { marker, indent: indent.length, lang: LANG_RE.test(word) ? word : undefined, info: trimmed };
 }
 
 /** Whether a line closes `fence`. A would-be closer with an info string is content. */
@@ -226,13 +288,15 @@ const joinLines = (lines: Line[]): string => lines.map((l) => l.text).join("\n")
 /**
  * Group lines into text, `>` quote and fenced code blocks. `depth` is how many
  * quotes these lines already sit in; at {@link MAX_QUOTE_DEPTH} a `>` line is
- * plain text.
+ * plain text. `plain` is for text not written as markdown (see
+ * {@link plainFence}).
  */
-function parseBlocks(lines: Line[], depth = 0): Block[] {
+function parseBlocks(lines: Line[], depth = 0, plain = false): Block[] {
   const blocks: Block[] = [];
+  const reach = plain ? closerReach(lines) : undefined;
   let i = 0;
   while (i < lines.length) {
-    const code = fencedBlock(lines, i);
+    const code = fencedBlock(lines, i, reach);
     if (code) {
       blocks.push(code.block);
       i = code.next;
@@ -245,7 +309,7 @@ function parseBlocks(lines: Line[], depth = 0): Block[] {
         if (!q) break;
         quoted.push({ n: lines[i].n, text: q[1] });
       }
-      blocks.push({ kind: "quote", blocks: parseBlocks(quoted, depth + 1) });
+      blocks.push({ kind: "quote", blocks: parseBlocks(quoted, depth + 1, plain) });
       continue;
     }
     const last = blocks[blocks.length - 1];
@@ -255,23 +319,62 @@ function parseBlocks(lines: Line[], depth = 0): Block[] {
   }
 
   // Drop the one blank line separating a text run from an adjacent quote or
-  // code block: the block's own edges already break the line.
+  // code block: the block's own edges already break the line. A line of only
+  // spaces or tabs is blank too — it looks the same in the editor, and left in,
+  // it showed as an extra line beside the block.
   const isBlock = (b: Block | undefined): boolean => b !== undefined && b.kind !== "text";
+  const isBlank = (line: Line | undefined): boolean => line !== undefined && /^[ \t]*$/.test(line.text);
   blocks.forEach((b, j) => {
     if (b.kind !== "text") return;
-    if (isBlock(blocks[j - 1]) && b.lines[0]?.text === "") b.lines.shift();
-    if (isBlock(blocks[j + 1]) && b.lines[b.lines.length - 1]?.text === "") b.lines.pop();
+    if (isBlock(blocks[j - 1]) && isBlank(b.lines[0])) b.lines.shift();
+    if (isBlock(blocks[j + 1]) && isBlank(b.lines[b.lines.length - 1])) b.lines.pop();
   });
   return blocks;
 }
 
-/** The fenced code block opening at `lines[i]` and the index just past it, or null. */
-function fencedBlock(lines: Line[], i: number): { block: Block; next: number } | null {
+/**
+ * Whether `fence` opens a block in text that wasn't written as markdown: a
+ * plain-text body, where the sender's client took nothing as formatting.
+ * Fences there are what someone typed to mean code, and the sure sign of that
+ * is the composer convention — backticks, then nothing or one language name.
+ * Anything else on the line is the sender's prose (``` go here and paste
+ * this:), which the markdown rule would hide as an info string, and a tilde
+ * line is as often an underline or a separator (`~~~ news ~~~`). The block
+ * must close, too: an opener left open would box the rest of a message nobody
+ * marked up.
+ */
+function plainFence(fence: Fence): boolean {
+  return fence.marker[0] === "`" && (fence.info === "" || fence.info === fence.lang);
+}
+
+/**
+ * For each line, the longest backtick fence closing on it or after it (0 for
+ * none) — so a plain fence that must close can tell at once that it can't.
+ * Without it each such opener scanned to the end of the text: a 60 KB body of
+ * ``````a` lines took ~1.4 s, on every render.
+ */
+function closerReach(lines: Line[]): number[] {
+  const reach = new Array<number>(lines.length + 1).fill(0);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = FENCE_CLOSE_RE.exec(lines[i].text);
+    reach[i] = Math.max(reach[i + 1], m && m[1][0] === "`" ? m[1].length : 0);
+  }
+  return reach;
+}
+
+/**
+ * The fenced code block opening at `lines[i]` and the index just past it, or
+ * null. With `reach` (closerReach) the fence is held to {@link plainFence}.
+ */
+function fencedBlock(lines: Line[], i: number, reach?: number[]): { block: Block; next: number } | null {
+  const plain = reach !== undefined;
   const fence = openFence(lines[i].text);
-  if (!fence) return null;
+  if (!fence || (plain && !plainFence(fence))) return null;
+  if (plain && reach[i + 1] < fence.marker.length) return null;
   let end = i + 1;
   while (end < lines.length && !closesFence(lines[end].text, fence)) end++;
   const closed = end < lines.length;
+  if (plain && !closed) return null;
   const content = lines.slice(i + 1, end);
   if (!closed) {
     // Unclosed, the block runs to the end of its container (CommonMark), less
