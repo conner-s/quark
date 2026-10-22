@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { markdownToHtml, mapProse, withoutCode, insideCodeFence } from "./markdown.js";
+import { markdownToHtml, mapProse, withoutCode, insideCodeFence, splitFencedCode } from "./markdown.js";
 
 const resolveParty = (sc: string): string | undefined => (sc === "party" ? "mxc://e/party" : undefined);
 const PARTY_IMG = '<img data-mx-emoticon src="mxc://e/party" alt=":party:" title=":party:">';
@@ -446,5 +446,99 @@ describe("insideCodeFence", () => {
 
   it("ignores fences inside quotes", () => {
     expect(insideCodeFence("> ```\n> x")).toBe(false);
+  });
+});
+
+// Plain-text bodies (older Quark messages, bots, bridges) drawn with their
+// fences as code. Only fences: a plain body isn't markdown.
+describe("splitFencedCode", () => {
+  it("returns a body with no fence as one text piece, untouched", () => {
+    expect(splitFencedCode("hi **there** > not a quote")).toEqual([
+      { kind: "text", text: "hi **there** > not a quote" },
+    ]);
+  });
+
+  it("cuts out a fenced block with its language, the newlines beside it dropped", () => {
+    expect(splitFencedCode("pinning nixpkgs:\n```nix\ninputs = {\n  a = 1;\n};\n```\nthoughts?")).toEqual([
+      { kind: "text", text: "pinning nixpkgs:" },
+      { kind: "code", lang: "nix", text: "inputs = {\n  a = 1;\n};" },
+      { kind: "text", text: "thoughts?" },
+    ]);
+  });
+
+  it("drops one blank line beside a block, as markdownToHtml does", () => {
+    expect(splitFencedCode("a\n\n```\nx\n```\n\nb")).toEqual([
+      { kind: "text", text: "a" },
+      { kind: "code", lang: undefined, text: "x" },
+      { kind: "text", text: "b" },
+    ]);
+  });
+
+  it("leaves quotes and inline markdown as typed, code included", () => {
+    expect(splitFencedCode("> quoted\n```sh\necho **a** :b: `c`\n```")).toEqual([
+      { kind: "text", text: "> quoted" },
+      { kind: "code", lang: "sh", text: "echo **a** :b: `c`" },
+    ]);
+  });
+
+  it("doesn't find a fence inside a quote", () => {
+    expect(splitFencedCode("> ```js\n> x\n> ```")).toEqual([
+      { kind: "text", text: "> ```js\n> x\n> ```" },
+    ]);
+  });
+
+  it("strips a fence's indent from its lines, as the composer does", () => {
+    expect(splitFencedCode("  ```\n  x\n  ```")).toEqual([{ kind: "code", lang: undefined, text: "x" }]);
+  });
+
+  // A plain body wasn't written as markdown, so only what someone typing code
+  // into plain text writes opens a block: backticks, then nothing or one
+  // language name, and a closing fence.
+  it.each([
+    ["prose after the backticks", "``` go here and paste this:\nmake build\n```"],
+    ["a decorated header", "~~~ brb, grabbing coffee ~~~\nback in 5"],
+    ["a tilde underline", "Release notes\n~~~~~~~~~~~~~\n- fixed x\n- fixed y"],
+    ["tilde separators", "~~~~~~\nNEWS\n~~~~~~"],
+    ["an unclosed opener", "see:\n```\nrest"],
+    ["a lone opener", "```nix"],
+    ["an info string outside the language charset", '```"><img src=x>\nx\n```'],
+  ])("leaves %s as text", (_label, text) => {
+    expect(splitFencedCode(text)).toEqual([{ kind: "text", text }]);
+  });
+
+  it("finds a well-formed fence after one it left as text", () => {
+    expect(splitFencedCode("``` paste this:\n```sh\nmake\n```")).toEqual([
+      { kind: "text", text: "``` paste this:" },
+      { kind: "code", lang: "sh", text: "make" },
+    ]);
+  });
+
+  it("drops a whitespace-only line beside a block like an empty one", () => {
+    expect(splitFencedCode("Here's the log:\n  \n```\nerror\n```\n\t")).toEqual([
+      { kind: "text", text: "Here's the log:" },
+      { kind: "code", lang: undefined, text: "error" },
+    ]);
+  });
+
+  // As the HTML parser would: the highlighter checks its output by parsing it.
+  it("turns a lone CR in code into a newline and drops NULs", () => {
+    expect(splitFencedCode("```\ncopying 10%\rcopying 100%\0\n```")).toEqual([
+      { kind: "code", lang: undefined, text: "copying 10%\ncopying 100%" },
+    ]);
+  });
+
+  it("reads CRLF line endings", () => {
+    expect(splitFencedCode("a\r\n```js\r\nlet x;\r\n```")).toEqual([
+      { kind: "text", text: "a" },
+      { kind: "code", lang: "js", text: "let x;" },
+    ]);
+  });
+});
+
+describe("blank lines beside a block", () => {
+  // Spaces or a tab on the separating line look the same in the editor as an
+  // empty one, and left in they showed as an extra line beside the block.
+  it("drops a whitespace-only separator line as it drops an empty one", () => {
+    expect(markdownToHtml("a\n  \n```\nx\n```\n\t\nb")).toBe("a<pre><code>x</code></pre>b");
   });
 });

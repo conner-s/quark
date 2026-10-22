@@ -197,7 +197,7 @@ describe("the worker engine", () => {
       ["a span with an attribute", '<span class="hljs-keyword" onclick="alert(1)">let</span> x = 1;'],
       ["a span with a class no token has", '<span class="message__spoiler">let</span> x = 1;'],
       ["different text", '<span class="hljs-keyword">let</span> y = 2;'],
-    ])("leaving the block plain, uncached, when the HTML holds %s", async (_label, html) => {
+    ])("leaving the block plain, and given up, when the HTML holds %s", async (_label, html) => {
       const { root, code } = codeBlock("let x = 1;", "language-js");
       const before = root.innerHTML;
 
@@ -206,9 +206,11 @@ describe("the worker engine", () => {
       await expect(done).resolves.toBeUndefined();
 
       expect(root.innerHTML).toBe(before);
-      // Not cached: the next render asks again.
+      // Given up, not cached: the same text would come back the same, so the
+      // next render doesn't ask again.
       void hl.highlightCodeBlocks(codeBlock("let x = 1;", "language-js").root);
-      expect(workers[0].posted).toHaveLength(2);
+      expect(workers[0].posted).toHaveLength(1);
+      expect(highlighted(code)).toBe(false);
     });
 
     it("ignoring a reply that isn't for the job in flight", async () => {
