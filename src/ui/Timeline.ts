@@ -5,11 +5,10 @@ import { attachLongPress } from "../app/long_press.js";
 import { invoke } from "../ipc/invoke.js";
 import type { SearchResult } from "../ipc/types.js";
 import { type ThreadMessageData } from "./ThreadView.js";
-import { appendCaption, buildFileAffordance, renderFormattedBody } from "./message_body.js";
+import { appendCaption, buildFileAffordance, renderMessageBody } from "./message_body.js";
 import { isAnimatedUrl } from "../app/animated_urls.js";
 import { hashColor } from "./avatarColors.js";
 import { isMobile, viewportPan } from "../app/mobile.js";
-import { appendLinkifiedText } from "../app/links.js";
 import { withoutCode } from "../app/markdown.js";
 import { mountOverlay } from "./overlay.js";
 
@@ -601,11 +600,7 @@ function buildMessageElement(msg: MessageData): HTMLElement {
     const body = document.createElement("div");
     body.className = "message__body";
 
-    if (msg.htmlBody) {
-      renderFormattedBody(body, msg.htmlBody);
-    } else {
-      appendLinkifiedText(body, msg.body);
-    }
+    renderMessageBody(body, msg.body, msg.htmlBody);
 
     if (msg.wasEdited) {
       const marker = document.createElement("span");
@@ -2093,11 +2088,7 @@ export class Timeline {
     } else {
       const body = document.createElement("div");
       body.className = "thread-inline__message-body";
-      if (msg.htmlBody) {
-        renderFormattedBody(body, msg.htmlBody);
-      } else {
-        appendLinkifiedText(body, msg.body);
-      }
+      renderMessageBody(body, msg.body, msg.htmlBody);
       row.appendChild(body);
     }
 
@@ -2339,14 +2330,10 @@ export class Timeline {
     if (!el) return;
     const bodyEl = el.querySelector<HTMLElement>(".message__body");
     if (!bodyEl) return;
-    if (newHtmlBody) {
-      renderFormattedBody(bodyEl, newHtmlBody);
-    } else {
-      // Re-linkify: assigning textContent would drop the anchors the initial
-      // render produced, leaving an edited message's URLs as dead plain text.
-      bodyEl.textContent = "";
-      appendLinkifiedText(bodyEl, newBody);
-    }
+    // The full render path, not textContent: that would drop the anchors (and
+    // code blocks) the initial render produced, leaving an edited message's
+    // URLs as dead plain text.
+    renderMessageBody(bodyEl, newBody, newHtmlBody);
     // Mark as edited if not already marked
     if (!el.querySelector(".message__edited-marker")) {
       const marker = document.createElement("span");

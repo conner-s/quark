@@ -1260,6 +1260,39 @@ means by it, rather than to highlight.js's shell-session grammar, which keeps
 attribute at column 0 (`inputs = {` came out as a plain `i`), so the loader
 patches that rule until upstream fixes it.
 
+Messages written as code before Quark had fence support get the same code
+blocks. Both renderers go through `renderMessageBody`, which every surface and
+the in-place edit call, and it handles the two shapes those messages took:
+
+- **Plain text.** A fenced message whose text matched none of the inline rules
+  went out with no `formatted_body`, and bots and bridges still send code that
+  way. `renderPlainBody` draws the body's top-level fences as
+  `<pre><code class="language-…">`, built with the DOM. Only fences plain text
+  means as code count: backticks followed by nothing or one language name, and
+  closed. A plain body isn't markdown, so a `~~~ news ~~~` header, an underline
+  or a fence line followed by prose stays text, as do its `>` lines and `**`.
+  A body with more than 64 fences stays text.
+- **Mangled HTML.** The old formatter ran its inline rules over code lines too,
+  so code holding `__init__`, `*args`, `a || b` or a backtick went out as HTML,
+  with the fence as text between `<br>`s and the code underlined, italicised
+  or spoilered. That covers most Python and shell snippets, and other clients
+  send fences as text in HTML too (Element with markdown off, bridges). When a
+  message's HTML has no `<pre>` but shows a fence line, `repairTextFences` finds
+  the fences twice, in the plain body and in the HTML's rendered text (`<br>`
+  and block edges as line breaks, and each line of a `<blockquote>` starting
+  with `>`, as in the plain body), by the same plain-text rules. If both find
+  the same fences in the same order with the same languages, each stretch of
+  HTML from an opening fence line to its closing one is replaced in the DOM by a
+  code block holding the plain body's code, and lifted out of any inline element
+  (a spoiler the old formatter opened across a fence) it lands in. The rest of
+  the HTML stays as sent: reply quotes, mention pills, emoji and the sender's
+  formatting. No markdown is parsed, so the work is linear in the body.
+  Anything else is left as sent: fences that don't agree, a fence the HTML
+  shows across a block's edge, or HTML nested more than 32 elements deep. The
+  swap moves and removes nodes directly and never makes a DOM Range. WebKit
+  updates every live Range on every removal in the document, so a Range per
+  block made one crafted message take minutes there.
+
 Code comes from any room member, and several grammars are quadratic or worse
 on adversarial input: 10 000 characters of `$` labelled `java` take ~750 ms, and
 csharp is cubic on text that looks like generics. So highlighting runs in a
