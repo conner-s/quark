@@ -1,16 +1,17 @@
 // Message timeline
 
-import { createReactionBar, updateReactionBar, type ReactionGroup } from "./Reactions.js";
+import { createReactionBar, updateReactionBar, type ReactionGroup, type ReactionHoverDetail } from "./Reactions.js";
 import { attachLongPress } from "../app/long_press.js";
 import { invoke } from "../ipc/invoke.js";
 import type { SearchResult } from "../ipc/types.js";
 import { appendCaption, buildFileAffordance, renderMessageText } from "./message_body.js";
 import { isAnimatedUrl } from "../app/animated_urls.js";
 import { hashColor } from "./avatarColors.js";
-import { isMobile, viewportPan } from "../app/mobile.js";
+import { isMobile } from "../app/mobile.js";
 import { withoutCode } from "../app/markdown.js";
 import { mountOverlay } from "./overlay.js";
 import { ReceiptIndex, readersSignature, type Reader } from "./receipt_placement.js";
+import { UserListCard, buildUserAvatar, type UserResolvers } from "./UserListCard.js";
 
 // ── Blob URL management ───────────────────────────────────────────────────────
 // Blob URLs are more memory-efficient than data: URIs — the binary data is held
@@ -1025,18 +1026,15 @@ export class Timeline {
   private _receiptClusters = new Map<HTMLElement, { readers: Reader[]; sig: string }>();
   /** A reconciliation is queued (see `_scheduleReceiptRender`). */
   private _receiptRenderQueued = false;
-  /** The cluster the hover card is currently showing, if any. */
-  private _receiptTooltipAnchor: HTMLElement | null = null;
   /** Resolvers injected from the app layer so the decoration step can render
    *  real avatars/names without Timeline importing app/actions (layering). */
-  private _receiptAvatarResolver: ((userId: string) => string | undefined) | null = null;
-  private _receiptNameResolver: ((userId: string) => string) | null = null;
+  private _userResolvers: UserResolvers | null = null;
   /** Receipt avatars shown on one message before collapsing the rest into a
    *  single "…" chip (hover the group for the full reader list). */
   private static readonly MAX_RECEIPTS_SHOWN = 2;
-  /** Themed hover card listing all readers of a message; lazily created on
-   *  `<body>` (position:fixed) so the timeline's overflow can't clip it. */
-  private _receiptTooltipEl: HTMLElement | null = null;
+  /** Hover card listing a receipt cluster's readers or a reaction chip's
+   *  senders. */
+  private _userCard = new UserListCard(() => this._userResolvers);
 
   constructor() {
     // Non-scrolling wrapper. The overlays (loading indicator, jump-to-latest
@@ -1080,10 +1078,10 @@ export class Timeline {
     // window from the in-memory buffer happens first — only when the buffer
     // edge is reached does a server fetch get requested.
     this._el.addEventListener("scroll", () => {
-      // An open receipt card is position:fixed, so keep it on its cluster. On
-      // touch, where mouseleave may never come, it would otherwise float at
-      // its old place after a scroll.
-      if (this._receiptTooltipAnchor) this._followReceiptTooltip();
+      // An open user-list card is position:fixed, so keep it on its anchor.
+      // Not closed on every scroll: the reconcile pass keeps an unchanged
+      // cluster (and its card) across appends, and an append can scroll.
+      this._userCard.follow(this._el);
       const scrollTop = this._el.scrollTop;
       // column-reverse convention: scrollTop is 0 at the live tail and negative
       // scrolling up toward history. So distance-from-bottom is just -scrollTop,
@@ -1175,6 +1173,13 @@ export class Timeline {
       const found = this.scrollToMessage(eventId);
       if (!found) this._onJumpToMessageCallback?.(eventId);
     });
+
+    // Reaction chip hover — list who reacted in the shared user-list card.
+    this._listEl.addEventListener("quark:reaction-hover", (e: Event) => {
+      const { reaction } = (e as CustomEvent<ReactionHoverDetail>).detail;
+      this._userCard.showReaction(e.target as HTMLElement, reaction);
+    });
+    this._listEl.addEventListener("quark:reaction-unhover", () => this._userCard.hide());
 
     // Clicking inside the timeline notifies panels.ts so that activePanel is
     // updated to "timeline". This ensures keyboard navigation (j/k) works
@@ -2165,14 +2170,10 @@ export class Timeline {
 
   // ── Read receipts ──────────────────────────────────────────────────────────
 
-  /** Inject resolvers for receipt avatar URLs and display names so decoration
-   *  can render real avatars/names without importing the app layer. */
-  setReceiptResolvers(resolvers: {
-    avatarUrl: (userId: string) => string | undefined;
-    displayName: (userId: string) => string;
-  }): void {
-    this._receiptAvatarResolver = resolvers.avatarUrl;
-    this._receiptNameResolver = resolvers.displayName;
+  /** Inject resolvers for avatar URLs and display names so receipts and the
+   *  hover card can render real avatars/names without importing the app layer. */
+  setReceiptResolvers(resolvers: UserResolvers): void {
+    this._userResolvers = resolvers;
   }
 
   /** Replace the whole receipt state (initial seed on room open) and redecorate.
@@ -2198,13 +2199,7 @@ export class Timeline {
       `.read-receipt[data-receipt-user="${CSS.escape(userId)}"]`,
     );
     for (const span of spans) {
-      const img = document.createElement("img");
-      img.className = "read-receipt__avatar";
-      img.src = dataUrl;
-      img.alt = "";
-      img.setAttribute("aria-hidden", "true");
-      if (isAnimatedUrl(dataUrl)) img.dataset.gif = "1";
-      img.onerror = () => img.replaceWith(this._buildReceiptFallback(userId));
+      const img = buildUserAvatar(userId, dataUrl);
       const first = span.firstElementChild;
       if (first) first.replaceWith(img);
       else span.appendChild(img);
@@ -2263,7 +2258,7 @@ export class Timeline {
       shown.sig = sig;
       this._fillReceiptContainer(container, want.readers);
       // Refresh an open card in place rather than closing it under the pointer.
-      if (this._receiptTooltipAnchor === container) this._showReceiptTooltip(container, want.readers);
+      if (this._userCard.anchor === container) this._showReceiptTooltip(container, want.readers);
     }
 
     for (const [id, { host, readers }] of wanted) {
@@ -2272,11 +2267,9 @@ export class Timeline {
       host.appendChild(container);
     }
 
-    // The hovered cluster was removed. A detached node never gets mouseleave,
-    // so close its card here.
-    if (this._receiptTooltipAnchor && !this._receiptClusters.has(this._receiptTooltipAnchor)) {
-      this._hideReceiptTooltip();
-    }
+    // The hovered cluster was removed, or a re-render took the hovered
+    // reaction chip with it.
+    this._userCard.closeIfDetached();
   }
 
   /** Where clusters should be: rendered message ID → its element and readers. */
@@ -2318,7 +2311,7 @@ export class Timeline {
       const shown = this._receiptClusters.get(container);
       if (shown) this._showReceiptTooltip(container, shown.readers);
     });
-    container.addEventListener("mouseleave", () => this._hideReceiptTooltip());
+    container.addEventListener("mouseleave", () => this._userCard.hide());
     this._fillReceiptContainer(container, readers);
     return container;
   }
@@ -2332,7 +2325,7 @@ export class Timeline {
       const span = document.createElement("span");
       span.className = "read-receipt";
       span.dataset.receiptUser = userId;
-      span.appendChild(this._buildReceiptAvatar(userId, this._receiptAvatarResolver?.(userId)));
+      span.appendChild(buildUserAvatar(userId, this._userResolvers?.avatarUrl(userId)));
       container.appendChild(span);
     }
 
@@ -2344,126 +2337,25 @@ export class Timeline {
     }
   }
 
-  /** Lazily create the shared receipt hover card on `<body>`. */
-  private _ensureReceiptTooltip(): HTMLElement {
-    if (this._receiptTooltipEl) return this._receiptTooltipEl;
-    const el = document.createElement("div");
-    el.className = "read-receipts-tooltip";
-    el.style.display = "none";
-    mountOverlay(el);
-    this._receiptTooltipEl = el;
-    return el;
-  }
-
-  /** Populate and position the themed reader list above (or below) the cluster. */
+  /** The reader list for a receipt cluster, each with the time they read. */
   private _showReceiptTooltip(
     anchor: HTMLElement,
     entries: { userId: string; ts: number | null }[],
   ): void {
-    this._receiptTooltipAnchor = anchor;
-    const tip = this._ensureReceiptTooltip();
-    tip.replaceChildren();
-
-    const title = document.createElement("div");
-    title.className = "read-receipts-tooltip__title";
-    title.textContent = entries.length === 1 ? "Read by" : `Read by ${entries.length}`;
-    tip.appendChild(title);
-
-    for (const entry of entries) {
-      const row = document.createElement("div");
-      row.className = "read-receipts-tooltip__row";
-
-      const avatar = document.createElement("span");
-      avatar.className = "read-receipt";
-      avatar.appendChild(this._buildReceiptAvatar(entry.userId, this._receiptAvatarResolver?.(entry.userId)));
-      row.appendChild(avatar);
-
-      const name = document.createElement("span");
-      name.className = "read-receipts-tooltip__name";
-      name.textContent = this._receiptNameResolver?.(entry.userId) ?? entry.userId;
-      row.appendChild(name);
-
-      if (entry.ts != null) {
-        const time = document.createElement("span");
-        time.className = "read-receipts-tooltip__time";
-        time.textContent = new Date(entry.ts).toLocaleString(undefined, {
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        row.appendChild(time);
-      }
-
-      tip.appendChild(row);
-    }
-
-    tip.style.display = "block";
-    this._positionReceiptTooltip(anchor, tip);
-  }
-
-  /** Measure, then position the card above the cluster (flip below if it would
-   *  clip), right-aligned to the anchor and clamped to the viewport. */
-  private _positionReceiptTooltip(anchor: HTMLElement, tip: HTMLElement): void {
-    const a = anchor.getBoundingClientRect();
-    const t = tip.getBoundingClientRect();
-    let top = a.top - t.height - 6;
-    if (top < 8) top = a.bottom + 6;
-    const left = Math.max(8, Math.min(a.right - t.width, window.innerWidth - t.width - 8));
-    tip.style.left = `${left}px`;
-    // The rects are layout-viewport space; the tooltip is in the overlay layer,
-    // which carries the viewport pan (#33).
-    tip.style.top = `${top - viewportPan()}px`;
-  }
-
-  /** After a scroll: move the open card with its cluster, or close it once the
-   *  cluster has left the visible timeline. Not closed on every scroll — the
-   *  reconcile pass keeps an unchanged cluster (and its card) across appends,
-   *  and an append can scroll the timeline. */
-  private _followReceiptTooltip(): void {
-    const anchor = this._receiptTooltipAnchor;
-    const tip = this._receiptTooltipEl;
-    if (!anchor || !tip) return;
-    const a = anchor.getBoundingClientRect();
-    const view = this._el.getBoundingClientRect();
-    if (!anchor.isConnected || a.bottom <= view.top || a.top >= view.bottom) {
-      this._hideReceiptTooltip();
-      return;
-    }
-    this._positionReceiptTooltip(anchor, tip);
-  }
-
-  private _hideReceiptTooltip(): void {
-    this._receiptTooltipAnchor = null;
-    if (this._receiptTooltipEl) this._receiptTooltipEl.style.display = "none";
-  }
-
-  /** A receipt avatar: an <img> when a blob URL is known, else a colored initial. */
-  private _buildReceiptAvatar(userId: string, avatarUrl?: string): HTMLElement {
-    if (avatarUrl) {
-      const img = document.createElement("img");
-      img.className = "read-receipt__avatar";
-      img.src = avatarUrl;
-      img.alt = "";
-      img.setAttribute("aria-hidden", "true");
-      if (isAnimatedUrl(avatarUrl)) img.dataset.gif = "1";
-      img.onerror = () => img.replaceWith(this._buildReceiptFallback(userId));
-      return img;
-    }
-    return this._buildReceiptFallback(userId);
-  }
-
-  private _buildReceiptFallback(userId: string): HTMLElement {
-    const color = hashColor(userId);
-    const initial = (userId.startsWith("@") ? userId[1] : userId[0] ?? "?").toUpperCase();
-    const el = document.createElement("span");
-    el.className = "read-receipt__fallback";
-    el.textContent = initial;
-    // A solid colored disc with a bg-colored initial reads clearly at 14px,
-    // where a nested colored border (as the group avatars use) would not.
-    el.style.background = color;
-    el.setAttribute("aria-hidden", "true");
-    return el;
+    const title = entries.length === 1 ? "Read by" : `Read by ${entries.length}`;
+    const rows = entries.map(({ userId, ts }) => ({
+      userId,
+      detail:
+        ts == null
+          ? undefined
+          : new Date(ts).toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+    }));
+    this._userCard.show(anchor, [title], rows);
   }
 
   /** Returns the `.message__body` element for a message by event ID, or null.
@@ -2674,13 +2566,13 @@ export class Timeline {
     const bar = el.querySelector<HTMLElement>(".reaction-bar");
     if (reactions.length === 0) {
       bar?.remove();
-      return;
-    }
-    if (bar) {
+    } else if (bar) {
       updateReactionBar(bar, reactions);
     } else {
       el.appendChild(createReactionBar(reactions));
     }
+    // Removing or refilling the bar takes a hovered chip with it.
+    this._userCard.closeIfDetached();
   }
 
   /**

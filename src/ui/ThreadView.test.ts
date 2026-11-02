@@ -226,6 +226,54 @@ describe("ThreadView", () => {
     expect(view.getMessageEl("$a")!.querySelector(".reaction-bar")).toBeNull();
   });
 
+  // The timeline's hover card listens on its own list, which the panel sits
+  // beside rather than in, so the panel carries a card of its own.
+  describe("reaction hover card", () => {
+    const names: Record<string, string> = { "@bob:x": "Bob", "@carol:x": "Carol" };
+    /** This test's card. Earlier tests' views leave theirs on <body>. */
+    const card = (): HTMLElement | undefined => {
+      const cards = document.querySelectorAll<HTMLElement>(".user-list-card");
+      return cards[cards.length - 1];
+    };
+    const chip = (): HTMLElement => view.getMessageEl("$a")!.querySelector<HTMLElement>(".reaction")!;
+    /** Let the panel's MutationObserver deliver. */
+    const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+    beforeEach(() => {
+      view.setUserResolvers({ avatarUrl: () => undefined, displayName: (id) => names[id] ?? id });
+      view.open(ROOT);
+      view.setReplies([
+        msg({ id: "$a", reactions: [{ key: "👍", count: 2, own: false, senders: ["@bob:x", "@carol:x"] }] }),
+      ]);
+    });
+
+    it("lists who reacted with that key, then closes on leave", () => {
+      chip().dispatchEvent(new MouseEvent("mouseenter"));
+      expect(card()?.style.display).toBe("block");
+      expect(card()?.querySelector(".user-list-card__title")?.textContent).toBe("👍 Reacted by 2");
+      expect(Array.from(card()!.querySelectorAll(".user-list-card__name"), (n) => n.textContent)).toEqual([
+        "Bob",
+        "Carol",
+      ]);
+
+      chip().dispatchEvent(new MouseEvent("mouseleave"));
+      expect(card()?.style.display).toBe("none");
+    });
+
+    it("closes when a reaction update replaces the hovered chip", async () => {
+      chip().dispatchEvent(new MouseEvent("mouseenter"));
+      view.updateMessageReactions("$a", [{ key: "👍", count: 1, own: false, senders: ["@bob:x"] }]);
+      await settle();
+      expect(card()?.style.display).toBe("none");
+    });
+
+    it("closes when the thread closes", () => {
+      chip().dispatchEvent(new MouseEvent("mouseenter"));
+      view.close();
+      expect(card()?.style.display).toBe("none");
+    });
+  });
+
   // As an inline panel inside the timeline's list, a thread video was found by
   // the timeline and played in place; the panel keeps that rather than
   // dropping to the external player.

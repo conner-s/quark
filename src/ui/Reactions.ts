@@ -8,6 +8,14 @@ export interface ReactionGroup {
   own: boolean;
   /** Resolved mxc:// URL if this is a custom emoji reaction, otherwise undefined */
   imageUrl?: string;
+  /** User IDs of everyone who reacted with this key, listed on hover */
+  senders?: string[];
+}
+
+/** Detail of the bubbling `quark:reaction-hover` event a chip fires on
+ *  mouseenter; `quark:reaction-unhover` follows on mouseleave. */
+export interface ReactionHoverDetail {
+  reaction: ReactionGroup;
 }
 
 /**
@@ -49,13 +57,27 @@ function createReactionChip(reaction: ReactionGroup): HTMLElement {
     );
   });
 
-  // Emoji glyph or image
+  // Hovering lists who reacted. The timeline owns the hover card (it has the
+  // name and avatar resolvers), so the chip only announces itself.
+  chip.addEventListener("mouseenter", () => {
+    chip.dispatchEvent(
+      new CustomEvent<ReactionHoverDetail>("quark:reaction-hover", {
+        bubbles: true,
+        detail: { reaction },
+      })
+    );
+  });
+  chip.addEventListener("mouseleave", () => {
+    chip.dispatchEvent(new CustomEvent("quark:reaction-unhover", { bubbles: true }));
+  });
+
+  // Emoji glyph or image. No `title` on the image: the hover card is the
+  // tooltip, and a native one would pop up over it showing the mxc:// URL.
   if (reaction.imageUrl) {
     const img = document.createElement("img");
     img.className = "reaction__emoji";
     img.src = reaction.imageUrl;
     img.alt = reaction.key;
-    img.title = reaction.key;
     chip.appendChild(img);
   } else {
     const emojiSpan = document.createElement("span");
