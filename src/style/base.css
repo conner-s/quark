@@ -2008,10 +2008,11 @@ img[data-mx-emoticon] {
   cursor: default;
 }
 
-/* Themed hover card listing every reader + time. Matches the popover vocabulary
-   used by the context menu (bg/border/shadow/fonts) for a consistent terminal
-   look, rather than the unstyled native `title` tooltip. */
-.read-receipts-tooltip {
+/* Themed hover card listing a message's readers (with times) or the users
+   behind a reaction. Matches the popover vocabulary used by the context menu
+   (bg/border/shadow/fonts) for a consistent terminal look, rather than the
+   unstyled native `title` tooltip. */
+.user-list-card {
   position: fixed;
   z-index: 10000;
   background: var(--bg);
@@ -2022,10 +2023,10 @@ img[data-mx-emoticon] {
   max-width: 280px;
   color: var(--fg);
   font-size: calc(var(--font-size) - 1px);
-  pointer-events: none;  /* display only — never steal hover from the cluster */
+  pointer-events: none;  /* display only — never steal hover from its anchor */
 }
 
-.read-receipts-tooltip__title {
+.user-list-card__title {
   color: var(--msg-own);   /* matches .message-group__sender--own */
   font-size: calc(var(--font-size) - 2px);
   letter-spacing: 0.05em;
@@ -2033,27 +2034,41 @@ img[data-mx-emoticon] {
   margin-bottom: 5px;
 }
 
-.read-receipts-tooltip__row {
+/* A custom emoji reaction's image, leading the title like a Unicode glyph. */
+.user-list-card__emoji {
+  height: 1.4em;
+  width: auto;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.user-list-card__row {
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 2px 0;
 }
 
-.read-receipts-tooltip__name {
+.user-list-card__name {
   color: var(--fg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.read-receipts-tooltip__time {
+.user-list-card__detail {
   margin-left: auto;
   padding-left: 12px;
   flex-shrink: 0;
   color: var(--msg-timestamp);
   font-size: calc(var(--font-size) - 2px);
   white-space: nowrap;
+}
+
+.user-list-card__more {
+  color: var(--msg-timestamp);
+  font-size: calc(var(--font-size) - 2px);
+  padding-top: 3px;
 }
 
 /* Lift clear of the reaction chips when a message has both — the chips hang on

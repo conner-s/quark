@@ -18,7 +18,7 @@ import {
   _seenReactionEventIds,
   _emojiImageCache,
   _shortcodeToMxc,
-  _resolveReactionImage,
+  _toReactionChips,
 } from "./context.js";
 
 /**
@@ -37,19 +37,25 @@ export async function sendReaction(eventId: string, key: string): Promise<void> 
   if (targetEvent) {
     const current = targetEvent.reactions ?? [];
     const existing = current.find((r) => r.key === key);
+    // Kept in step with `count` so the chip's hover card lists the right people.
+    const me = AppState.get("ownUserId");
 
     let updated: typeof current;
     if (existing?.own) {
       // Toggle off — remove this user's reaction
       updated = current
-        .map((r) => r.key === key ? { ...r, count: r.count - 1, own: false, own_event_id: null } : r)
+        .map((r) => r.key === key
+          ? { ...r, count: r.count - 1, senders: r.senders.filter((s) => s !== me), own: false, own_event_id: null }
+          : r)
         .filter((r) => r.count > 0);
     } else if (existing) {
       // Increment existing group
-      updated = current.map((r) => r.key === key ? { ...r, count: r.count + 1, own: true } : r);
+      updated = current.map((r) => r.key === key
+        ? { ...r, count: r.count + 1, senders: me ? [...r.senders, me] : r.senders, own: true }
+        : r);
     } else {
       // Brand new reaction
-      updated = [...current, { key, count: 1, senders: [], own: true, own_event_id: null }];
+      updated = [...current, { key, count: 1, senders: me ? [me] : [], own: true, own_event_id: null }];
     }
 
     AppState.set(
@@ -57,7 +63,7 @@ export async function sendReaction(eventId: string, key: string): Promise<void> 
       events.map((e) => (e.event_id === eventId ? { ...e, reactions: updated } : e))
     );
 
-    const groups = updated.map((r) => ({ key: r.key, count: r.count, own: r.own, imageUrl: _resolveReactionImage(r.key) }));
+    const groups = _toReactionChips(updated);
     timeline.updateMessageReactions(eventId, groups);
     // …and in the thread panel, if the message is one of its rows.
     getComponents().threadView?.updateMessageReactions(eventId, groups);
@@ -78,7 +84,7 @@ export async function sendReaction(eventId: string, key: string): Promise<void> 
  */
 export function applyIncomingReaction(
   targetEventId: string,
-  _sender: string,
+  sender: string,
   key: string,
   reactionEventId: string,
 ): void {
@@ -94,9 +100,9 @@ export function applyIncomingReaction(
   const existing = current.find((r) => r.key === key);
   let updated: typeof current;
   if (existing) {
-    updated = current.map((r) => r.key === key ? { ...r, count: r.count + 1 } : r);
+    updated = current.map((r) => r.key === key ? { ...r, count: r.count + 1, senders: [...r.senders, sender] } : r);
   } else {
-    updated = [...current, { key, count: 1, senders: [], own: false, own_event_id: null }];
+    updated = [...current, { key, count: 1, senders: [sender], own: false, own_event_id: null }];
   }
 
   AppState.set(
@@ -104,7 +110,7 @@ export function applyIncomingReaction(
     events.map((e) => (e.event_id === targetEventId ? { ...e, reactions: updated } : e))
   );
 
-  const groups = updated.map((r) => ({ key: r.key, count: r.count, own: r.own, imageUrl: _resolveReactionImage(r.key) }));
+  const groups = _toReactionChips(updated);
   timeline.updateMessageReactions(targetEventId, groups);
   getComponents().threadView?.updateMessageReactions(targetEventId, groups);
 }

@@ -172,8 +172,8 @@ const MOCK_TIMELINE: TimelineEvent[] = [
   mockEvent("@alice:matrix.org", "hey everyone, check this out", 32),
   { ..._aliceThemeEvent,
     reactions: [
-      { key: "🎉", count: 4, own: false, senders: [], own_event_id: null },
-      { key: "🚀", count: 2, own: true, senders: ["@you:matrix.org"], own_event_id: "$mock-rxn1" },
+      { key: "🎉", count: 4, own: false, senders: ["@bob:matrix.org", "@carol:matrix.org", "@dave:matrix.org", "@alice:matrix.org"], own_event_id: null },
+      { key: "🚀", count: 2, own: true, senders: ["@bob:matrix.org", "@you:matrix.org"], own_event_id: "$mock-rxn1" },
     ] },
   mockEvent("@alice:matrix.org", "also shipping the notification system today", 30),
 
@@ -188,7 +188,7 @@ const MOCK_TIMELINE: TimelineEvent[] = [
   mockEvent("@alice:matrix.org", "already done — try :theme catppuccin-mocha", 18),
   { ...mockEvent("@alice:matrix.org", "eight built-in themes total now", 17),
     reactions: [
-      { key: "👍", count: 3, own: true, senders: ["@you:matrix.org"], own_event_id: "$mock-rxn2" },
+      { key: "👍", count: 3, own: true, senders: ["@bob:matrix.org", "@carol:matrix.org", "@you:matrix.org"], own_event_id: "$mock-rxn2" },
     ] },
 
   // Carol replies to her own question — tests same-sender reply bubble break
@@ -197,8 +197,8 @@ const MOCK_TIMELINE: TimelineEvent[] = [
 
   { ...mockEvent("@carol:matrix.org", "agreed, dd to redact is *chef's kiss*", 12),
     reactions: [
-      { key: "😄", count: 2, own: false, senders: [], own_event_id: null },
-      { key: "💯", count: 1, own: false, senders: [], own_event_id: null },
+      { key: "😄", count: 2, own: false, senders: ["@alice:matrix.org", "@dave:matrix.org"], own_event_id: null },
+      { key: "💯", count: 1, own: false, senders: ["@bob:matrix.org"], own_event_id: null },
     ] },
 
   mockEvent("@dave:matrix.org", "just joined, this client looks amazing", 8),

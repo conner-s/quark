@@ -1435,7 +1435,10 @@ Shows the running app version, a "Quark on GitHub" link (opens in the system bro
       the upload (or the GIF's download), and queued like a message one held
       every message typed after it until the upload finished. Reactions are not
       queued — their order carries no meaning
-- [x] Reactions (m.annotation) — Unicode + custom emoji
+- [x] Reactions (m.annotation) — Unicode + custom emoji. Hovering a chip, in
+      the timeline or the thread panel, lists who reacted with that key, in the
+      same themed card as the read receipts' reader list (at most 15 names,
+      then "and N more"; `src/ui/UserListCard.ts`)
 - [x] Message editing & redaction — an edit re-runs the outgoing formatter, so
       `m.new_content` keeps the HTML `formatted_body` and custom emoji survive
       the edit instead of degrading to literal `:shortcode:` text
@@ -2091,6 +2094,7 @@ quark/
 │   │   ├── ThreadView.ts     # Thread panel (the open thread, in the timeline)
 │   │   ├── thread_split.ts   # Parts the room around the thread panel (paint only)
 │   │   ├── Reactions.ts      # Reaction bar
+│   │   ├── UserListCard.ts   # Hover card listing readers / who reacted
 │   │   ├── Input.ts          # Compose bar with mode indicator
 │   │   ├── EmojiPicker.ts    # Keyboard-navigable emoji/sticker picker
 │   │   ├── StickerPicker.ts  # Sticker grid browser

@@ -487,7 +487,7 @@ describe("timelineEventToMessage", () => {
       reactions: [{ key: "👍", count: 2, own: true, senders: ["@bob:x", "@me:x"], own_event_id: "$react" }],
     });
     expect(timelineEventToMessage(e).reactions).toEqual([
-      { key: "👍", count: 2, own: true, imageUrl: undefined },
+      { key: "👍", count: 2, own: true, senders: ["@bob:x", "@me:x"], imageUrl: undefined },
     ]);
   });
 });

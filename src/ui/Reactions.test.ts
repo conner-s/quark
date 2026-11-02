@@ -102,6 +102,30 @@ describe("Reactions", () => {
 
       expect(chip?.getAttribute("aria-label")).toContain("5 people");
     });
+
+    it("announces hover with the reaction, bubbling so the timeline can show who reacted", () => {
+      const reaction: ReactionGroup = { key: "👍", count: 2, own: false, senders: ["@a:x", "@b:x"] };
+      const bar = createReactionBar([reaction]);
+      const onHover = vi.fn();
+      const onUnhover = vi.fn();
+      bar.addEventListener("quark:reaction-hover", onHover);
+      bar.addEventListener("quark:reaction-unhover", onUnhover);
+
+      const chip = bar.querySelector<HTMLElement>(".reaction")!;
+      chip.dispatchEvent(new MouseEvent("mouseenter"));
+      expect(onHover).toHaveBeenCalledTimes(1);
+      expect((onHover.mock.calls[0][0] as CustomEvent).detail).toEqual({ reaction });
+
+      chip.dispatchEvent(new MouseEvent("mouseleave"));
+      expect(onUnhover).toHaveBeenCalledTimes(1);
+    });
+
+    it("gives custom emoji no native title, which would cover the hover card", () => {
+      const bar = createReactionBar([
+        { key: "mxc://x/blob", count: 1, own: false, imageUrl: "data:image/png;base64,AA==" },
+      ]);
+      expect(bar.querySelector("img")?.hasAttribute("title")).toBe(false);
+    });
   });
 
   describe("updateReactionBar", () => {

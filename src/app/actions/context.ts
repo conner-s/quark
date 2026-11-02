@@ -26,7 +26,8 @@ import {
 } from "../../ipc/index.js";
 
 import type { AppComponents } from "../../ui/App.js";
-import type { RoomInfo, TimelineEvent, RoomMember } from "../../ipc/types.js";
+import type { RoomInfo, TimelineEvent, RoomMember, ReactionGroup as IpcReactionGroup } from "../../ipc/types.js";
+import type { ReactionGroup } from "../../ui/Reactions.js";
 import type { RoomEntry } from "../../ui/RoomList.js";
 import type { MessageData, ReplyPreviewData } from "../../ui/Timeline.js";
 import type { ThreadMessageData } from "../../ui/ThreadView.js";
@@ -41,14 +42,13 @@ let _components: AppComponents | null = null;
 
 export function setComponents(components: AppComponents): void {
   _components = components;
-  // Give the timeline the resolvers it needs to render real avatars/display
-  // names on read-receipt chips without importing the app layer (keeps the
-  // UI → app dependency one-directional). Optional-chained so partial test
-  // mocks of `timeline` don't need to stub it.
-  components.timeline?.setReceiptResolvers?.({
-    avatarUrl: resolveSenderAvatarUrl,
-    displayName: resolveDisplayName,
-  });
+  // Give the timeline and thread panel the resolvers they need to render real
+  // avatars/display names on read-receipt chips and hover cards without
+  // importing the app layer (keeps the UI → app dependency one-directional).
+  // Optional-chained so partial test mocks don't need to stub them.
+  const userResolvers = { avatarUrl: resolveSenderAvatarUrl, displayName: resolveDisplayName };
+  components.timeline?.setReceiptResolvers?.(userResolvers);
+  components.threadView?.setUserResolvers?.(userResolvers);
 }
 
 export function getComponents(): AppComponents {
@@ -391,6 +391,18 @@ export function _resolveReactionImage(key: string): string | undefined {
   return _emojiImageCache.get(key);
 }
 
+/** Map IPC reaction groups to reaction-bar chips, with any custom emoji image
+ *  already downloaded. */
+export function _toReactionChips(reactions: IpcReactionGroup[]): ReactionGroup[] {
+  return reactions.map((r) => ({
+    key: r.key,
+    count: r.count,
+    own: r.own,
+    senders: r.senders,
+    imageUrl: _resolveReactionImage(r.key),
+  }));
+}
+
 // ── Reply previews ───────────────────────────────────────────────────────────
 
 /**
@@ -524,12 +536,7 @@ export function timelineEventToMessage(e: TimelineEvent, allEvents?: TimelineEve
     mediaEncryptionInfo: e.media_encryption_info ?? undefined,
     mediaThumbnailUrl: e.media_thumbnail_url ?? undefined,
     mediaThumbnailEncryptionInfo: e.media_thumbnail_encryption_info ?? undefined,
-    reactions: e.reactions?.map((r) => ({
-      key: r.key,
-      count: r.count,
-      own: r.own,
-      imageUrl: _resolveReactionImage(r.key),
-    })),
+    reactions: e.reactions ? _toReactionChips(e.reactions) : undefined,
     replyTo,
     isThreadRoot: threadRootCounts ? threadRootCounts.has(e.event_id) : undefined,
     threadReplyCount: threadRootCounts?.get(e.event_id)?.count,
@@ -592,12 +599,7 @@ export function timelineEventToThreadMessage(
     mediaEncryptionInfo: e.media_encryption_info ?? undefined,
     mediaThumbnailUrl: e.media_thumbnail_url ?? undefined,
     mediaThumbnailEncryptionInfo: e.media_thumbnail_encryption_info ?? undefined,
-    reactions: e.reactions?.map((r) => ({
-      key: r.key,
-      count: r.count,
-      own: r.own,
-      imageUrl: _resolveReactionImage(r.key),
-    })),
+    reactions: e.reactions ? _toReactionChips(e.reactions) : undefined,
     replyTo: e.in_reply_to ? replyPreviewFor(e.in_reply_to, ...lookups) : undefined,
   };
 }
@@ -725,15 +727,7 @@ export async function _downloadReactionEmoji(
         for (const e of events) {
           const reactions = e.reactions ?? [];
           if (!reactions.some((r) => r.key === mxc)) continue;
-          timeline.updateMessageReactions(
-            e.event_id,
-            reactions.map((r) => ({
-              key: r.key,
-              count: r.count,
-              own: r.own,
-              imageUrl: _emojiImageCache.get(r.key),
-            }))
-          );
+          timeline.updateMessageReactions(e.event_id, _toReactionChips(reactions));
         }
       })
       .catch(() => { /* non-critical */ });

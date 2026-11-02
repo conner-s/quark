@@ -17,11 +17,12 @@
 // untouched, and nothing here can move its scroll. The compose box below stays
 // live and sends into the thread.
 
-import { createReactionBar, type ReactionGroup } from "./Reactions.js";
+import { createReactionBar, type ReactionGroup, type ReactionHoverDetail } from "./Reactions.js";
 import { attachLongPress } from "../app/long_press.js";
 import { appendCaption, buildFileAffordance, renderMessageText } from "./message_body.js";
 import { buildReplyPreview, buildVideoAffordance, playVideoInline, type ReplyPreviewData } from "./Timeline.js";
 import { TimelineSplit, type SplitHost } from "./thread_split.js";
+import { UserListCard, type UserResolvers } from "./UserListCard.js";
 
 export interface ThreadMessageData {
   id: string;
@@ -99,6 +100,10 @@ export class ThreadView {
   private _loading = false;
   /** Parts the room around the panel; null until embedded in a timeline. */
   private _split: TimelineSplit | null = null;
+  /** Who reacted, on hovering a reaction chip. The timeline's card can't serve
+   *  these chips: the panel sits beside its list, not in it. */
+  private _userResolvers: UserResolvers | null = null;
+  private _userCard = new UserListCard(() => this._userResolvers);
 
   private _onClose: (() => void) | null = null;
   private _onFocus: (() => void) | null = null;
@@ -161,6 +166,7 @@ export class ThreadView {
     this._scrollEl.className = "thread-view__scroll";
     this._scrollEl.addEventListener("scroll", () => {
       this._stickToBottom = this._isAtBottom();
+      this._userCard.follow(this._scrollEl);
     });
     this._sheetEl.appendChild(this._scrollEl);
 
@@ -244,10 +250,29 @@ export class ThreadView {
       const { eventId } = (e as CustomEvent<{ eventId: string }>).detail;
       if (!this.scrollToMessage(eventId)) this._onJumpOutside?.(eventId);
     });
+
+    this._sheetEl.addEventListener("quark:reaction-hover", (e: Event) => {
+      const { reaction } = (e as CustomEvent<ReactionHoverDetail>).detail;
+      this._userCard.showReaction(e.target as HTMLElement, reaction);
+    });
+    this._sheetEl.addEventListener("quark:reaction-unhover", () => this._userCard.hide());
+    // Rows are rebuilt from many places (open, replies, root swaps, confirms,
+    // reaction updates), and a removed chip never gets mouseleave. One observer
+    // covers them all; the check it runs is a single isConnected.
+    if (typeof MutationObserver !== "undefined") {
+      new MutationObserver(() => this._userCard.closeIfDetached())
+        .observe(this._scrollEl, { childList: true, subtree: true });
+    }
   }
 
   getElement(): HTMLElement {
     return this._el;
+  }
+
+  /** Inject resolvers for avatar URLs and display names, as the timeline's
+   *  `setReceiptResolvers`, for the reaction hover card. */
+  setUserResolvers(resolvers: UserResolvers): void {
+    this._userResolvers = resolvers;
   }
 
   /** Mount over `host`'s timeline region and open threads in it, at their
@@ -406,6 +431,8 @@ export class ThreadView {
    *  until the fold ends, but the thread is closed at once: nothing selects,
    *  counts or receives into it from here on. */
   close(): void {
+    // The rows stay drawn through the fold, so the observer won't see them go.
+    this._userCard.hide();
     this._root = null;
     this._messages = [];
     this._selectedIndex = -1;
