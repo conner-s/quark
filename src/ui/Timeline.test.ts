@@ -419,6 +419,79 @@ describe("Timeline", () => {
       const bar = timeline.getElement().querySelector(".reaction-bar");
       expect(bar).toBeNull();
     });
+
+    // Hovering a chip lists who reacted, in the card the receipts use.
+    describe("hover card", () => {
+      const names: Record<string, string> = { "@bob:x": "Bob", "@carol:x": "Carol" };
+      /** This test's card. Earlier tests' timelines leave theirs on <body>. */
+      const card = (): HTMLElement | undefined => {
+        const cards = document.querySelectorAll<HTMLElement>(".user-list-card");
+        return cards[cards.length - 1];
+      };
+      const chip = (key: string): HTMLElement =>
+        Array.from(timeline.getElement().querySelectorAll<HTMLElement>(".reaction")).find(
+          (c) => c.querySelector(".reaction__emoji")?.textContent === key,
+        )!;
+      const flush = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve));
+
+      beforeEach(() => {
+        timeline.setReceiptResolvers({ avatarUrl: () => undefined, displayName: (id) => names[id] ?? id });
+        timeline.setMessages([
+          makeMsg({
+            id: "e1",
+            reactions: [
+              { key: "👍", count: 2, own: false, senders: ["@bob:x", "@carol:x"] },
+              { key: "🎉", count: 1, own: false },
+            ],
+          }),
+        ]);
+      });
+
+      it("lists everyone who reacted with that key, then closes on leave", () => {
+        chip("👍").dispatchEvent(new MouseEvent("mouseenter"));
+        expect(card()?.style.display).toBe("block");
+        expect(card()?.querySelector(".user-list-card__title")?.textContent).toBe("👍 Reacted by 2");
+        expect(
+          Array.from(card()!.querySelectorAll(".user-list-card__name"), (n) => n.textContent),
+        ).toEqual(["Bob", "Carol"]);
+
+        chip("👍").dispatchEvent(new MouseEvent("mouseleave"));
+        expect(card()?.style.display).toBe("none");
+      });
+
+      it("shows no card for a chip whose senders are unknown", () => {
+        chip("🎉").dispatchEvent(new MouseEvent("mouseenter"));
+        expect(card()?.style.display ?? "none").toBe("none");
+      });
+
+      it("closes the card when a reaction update replaces the hovered chip", () => {
+        chip("👍").dispatchEvent(new MouseEvent("mouseenter"));
+        timeline.updateMessageReactions("e1", [
+          { key: "👍", count: 3, own: false, senders: ["@bob:x", "@carol:x", "@dave:x"] },
+        ]);
+        expect(card()?.style.display).toBe("none");
+      });
+
+      it("stays open across a receipt pass the chip survives", async () => {
+        timeline.setReadReceipts([{ userId: "@bob:x", eventId: "e1", ts: null }]);
+        await flush();
+        chip("👍").dispatchEvent(new MouseEvent("mouseenter"));
+
+        timeline.appendMessage(makeMsg({ id: "e2", senderId: "@carol:x", timestamp: "2024-01-01T12:05:00Z" }));
+        await flush();
+
+        expect(card()?.style.display).toBe("block");
+      });
+
+      it("sums reactors past the row limit instead of growing without bound", () => {
+        const senders = Array.from({ length: 20 }, (_, i) => `@user${i}:x`);
+        timeline.updateMessageReactions("e1", [{ key: "👍", count: 20, own: false, senders }]);
+        chip("👍").dispatchEvent(new MouseEvent("mouseenter"));
+
+        expect(card()!.querySelectorAll(".user-list-card__row")).toHaveLength(15);
+        expect(card()!.querySelector(".user-list-card__more")?.textContent).toBe("and 5 more");
+      });
+    });
   });
 
   describe("searchLoaded", () => {
@@ -513,7 +586,7 @@ describe("Timeline", () => {
       );
     /** This test's hover card. Earlier tests' timelines leave theirs on <body>. */
     const card = (): HTMLElement | undefined => {
-      const cards = document.querySelectorAll<HTMLElement>(".read-receipts-tooltip");
+      const cards = document.querySelectorAll<HTMLElement>(".user-list-card");
       return cards[cards.length - 1];
     };
     const hover = (el: HTMLElement): void => {
