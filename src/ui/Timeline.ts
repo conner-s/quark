@@ -42,7 +42,7 @@ function revokeActiveBlobUrls(): void {
  * highlight left over in some other message must not put a "selection" group
  * in this message's context menu.
  */
-function selectionWithin(el: HTMLElement | null): string {
+export function selectionWithin(el: HTMLElement | null): string {
   if (!el) return "";
   const sel = window.getSelection?.();
   if (!sel || sel.isCollapsed || sel.rangeCount === 0) return "";
@@ -1351,7 +1351,7 @@ export class Timeline {
     this._onContextMenuCallback?.(eventId, x, y, this._selectionInMessage(eventId));
   }
 
-  /** Text highlighted inside a message, main timeline or inline thread alike. */
+  /** Text highlighted inside a timeline message. */
   private _selectionInMessage(eventId: string): string {
     return selectionWithin(this._el.querySelector<HTMLElement>(`[data-message-id="${eventId}"]`));
   }

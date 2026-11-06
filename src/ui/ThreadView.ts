@@ -20,7 +20,7 @@
 import { createReactionBar, type ReactionGroup } from "./Reactions.js";
 import { attachLongPress } from "../app/long_press.js";
 import { appendCaption, buildFileAffordance, renderMessageText } from "./message_body.js";
-import { buildReplyPreview, buildVideoAffordance, playVideoInline, type ReplyPreviewData } from "./Timeline.js";
+import { buildReplyPreview, buildVideoAffordance, playVideoInline, selectionWithin, type ReplyPreviewData } from "./Timeline.js";
 import { TimelineSplit, type SplitHost } from "./thread_split.js";
 
 export interface ThreadMessageData {
@@ -102,7 +102,7 @@ export class ThreadView {
 
   private _onClose: (() => void) | null = null;
   private _onFocus: (() => void) | null = null;
-  private _onContextMenu: ((eventId: string, x: number, y: number) => void) | null = null;
+  private _onContextMenu: ((eventId: string, x: number, y: number, selection: string) => void) | null = null;
   private _onImageClick: ((src: string, alt: string, eventId: string) => void) | null = null;
   private _onJumpOutside: ((eventId: string) => void) | null = null;
   private _onUnresolvedReply: ((eventId: string) => void) | null = null;
@@ -223,7 +223,7 @@ export class ThreadView {
       const id = row?.dataset.messageId;
       if (!id || isProvisional(id)) return;
       e.preventDefault();
-      this._onContextMenu?.(id, e.clientX, e.clientY);
+      this._onContextMenu?.(id, e.clientX, e.clientY, selectionWithin(row));
     });
 
     // Long press → the message's action sheet, as in the timeline: on touch
@@ -234,7 +234,8 @@ export class ThreadView {
         const id = target.closest<HTMLElement>("[data-message-id]")?.dataset.messageId ?? null;
         return id && !isProvisional(id) ? id : null;
       },
-      onLongPress: (id, x, y) => this._onContextMenu?.(id, x, y),
+      onLongPress: (id, x, y) =>
+        this._onContextMenu?.(id, x, y, selectionWithin(this._sheetEl.querySelector<HTMLElement>(`[data-message-id="${id}"]`))),
     });
 
     // A reply preview inside the thread jumps within it. Stopped here so the
@@ -275,7 +276,7 @@ export class ThreadView {
   }
 
   /** Right-click, long press or a row's ⋯ button. */
-  onContextMenu(cb: (eventId: string, x: number, y: number) => void): void {
+  onContextMenu(cb: (eventId: string, x: number, y: number, selection: string) => void): void {
     this._onContextMenu = cb;
   }
 
@@ -732,7 +733,7 @@ export class ThreadView {
     actions.appendChild(button("↩", "Reply in thread (r)", () => bubble("quark:msg-reply", { eventId: msg.id })));
     actions.appendChild(button("⋯", "More actions", (btn) => {
       const r = btn.getBoundingClientRect();
-      this._onContextMenu?.(msg.id, r.left, r.bottom);
+      this._onContextMenu?.(msg.id, r.left, r.bottom, selectionWithin(row));
     }));
     return actions;
   }
