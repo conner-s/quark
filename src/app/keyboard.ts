@@ -1169,7 +1169,7 @@ export function setupKeyboard(components: AppComponents): void {
   // In the thread panel, minus what doesn't apply there: opening a thread (it
   // is one), editing (not supported in threads) and the touch text-selection
   // row (it targets the timeline's DOM).
-  threadView.onContextMenu((eventId, x, y) => showMessageMenu(eventId, x, y, "", {}));
+  threadView.onContextMenu((eventId, x, y, selection) => showMessageMenu(eventId, x, y, selection, {}));
 
   // Right-click / long-press context menu for messages
   timeline.onContextMenu((eventId, x, y, selection) => showMessageMenu(eventId, x, y, selection, {

@@ -1310,11 +1310,13 @@ Keys: `j`/`k` (or ↑/↓) move between rows, `h`/`l` (or ←/→) move within t
 
 | Group | Entries |
 |-------|---------|
-| `respond` | Reply, React, Thread |
+| `respond` | Reply, React, Reply in thread |
 | `clipboard` | Copy message text, Copy as quote, Select text (mobile only) |
 | `selection` | Search web for "…", Copy selected text — shown only when text is highlighted **inside that message** |
 | `save` | Save to Photos (mobile only), Save as file — image messages only |
 | `event` | View raw event, Edit, Delete — Edit and Delete are greyed on someone else's message |
+
+A row in the thread panel opens the same message menu without Reply in thread, Edit and Select text: it is already a thread, threads take no edits, and Select text targets the timeline's DOM. Its selection rows work as in the timeline.
 
 The room-list, space-strip, section and overflow menus use the same shell with a header and plain separators.
 
