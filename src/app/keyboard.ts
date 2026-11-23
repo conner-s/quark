@@ -1391,6 +1391,15 @@ export function setupKeyboard(components: AppComponents): void {
     }), { title: `tab · ${view.label}` });
   });
 
+  // Right-click (or long press) on the strip's empty space.
+  spaceStrip.onStripContextMenu((x, y) => {
+    contextMenu.show(x, y, buildMenu("strip", currentAvailability(), {
+      "new-tab": () => createTab(),
+      "open-tabs": () => openTabEditor(currentTabId() ?? undefined),
+      "create-space": () => void openCreateRoom({ kind: "space", parentSpaceId: null }),
+    }));
+  });
+
   // The tabs dialog's delete asks first, like the menu's.
   components.tabsDialog.onDelete((viewId) => void deleteTab(viewId));
   components.tabsDialog.setKnownTags(knownTags);

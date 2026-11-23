@@ -6,6 +6,9 @@ import { attachLongPress } from "../app/long_press.js";
 import { plusIcon } from "./icons.js";
 import { formatMentionCount, type SpaceBadge } from "../app/space_badges.js";
 
+/** What a press off every icon resolves to: not a space, not a tab. */
+const STRIP_BACKGROUND = ":strip";
+
 export interface SpaceItem {
   id: string;
   /** Display label (first letter of name used as fallback icon) */
@@ -41,6 +44,7 @@ export class SpaceStrip {
   private _onSelect: ((id: string) => void) | null = null;
   private _onContextMenu: ((spaceId: string, x: number, y: number) => void) | null = null;
   private _onViewContextMenu: ((viewId: string, x: number, y: number) => void) | null = null;
+  private _onStripContextMenu: ((x: number, y: number) => void) | null = null;
   private _onCreateSpace: (() => void) | null = null;
 
   constructor() {
@@ -49,11 +53,20 @@ export class SpaceStrip {
     this._el.setAttribute("role", "listbox");
     this._el.setAttribute("aria-label", "Spaces");
 
-    // Touch path to the space and tab context menus (#99). Container-level,
-    // since items are rebuilt on every render.
+    // Touch path to the space, tab and strip context menus (#99).
+    // Container-level, since items are rebuilt on every render.
     attachLongPress(this._el, {
-      resolve: (target) => target.closest<HTMLElement>(".space-strip__item")?.dataset.spaceId ?? null,
+      resolve: (target) =>
+        target.closest<HTMLElement>(".space-strip__item")?.dataset.spaceId ?? STRIP_BACKGROUND,
       onLongPress: (id, x, y) => this._openMenu(id, x, y),
+    });
+
+    // A right-click off every icon gets the strip's own menu rather than the
+    // webview's Back / Forward / Reload. Items open theirs and stop here.
+    this._el.addEventListener("contextmenu", (e) => {
+      if (e.defaultPrevented) return;
+      e.preventDefault();
+      this._openMenu(STRIP_BACKGROUND, e.clientX, e.clientY);
     });
 
   }
@@ -78,6 +91,11 @@ export class SpaceStrip {
   /** Right-click (or long press) on a tab rather than a space. */
   onViewContextMenu(handler: (viewId: string, x: number, y: number) => void): void {
     this._onViewContextMenu = handler;
+  }
+
+  /** Right-click (or long press) on the strip's empty space, off every icon. */
+  onStripContextMenu(handler: (x: number, y: number) => void): void {
+    this._onStripContextMenu = handler;
   }
 
   /** Replace the tabs drawn above and below the spaces. */
@@ -326,7 +344,8 @@ export class SpaceStrip {
   }
 
   private _openMenu(id: string, x: number, y: number): void {
-    if (isViewId(id)) this._onViewContextMenu?.(id, x, y);
+    if (id === STRIP_BACKGROUND) this._onStripContextMenu?.(x, y);
+    else if (isViewId(id)) this._onViewContextMenu?.(id, x, y);
     else this._onContextMenu?.(id, x, y);
   }
 
