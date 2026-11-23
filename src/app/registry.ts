@@ -909,9 +909,9 @@ const ACTION_LITERALS = [
     chrome: ["space-strip"],
   },
   {
-    // Within the room's section of a space's list. Pseudo-spaces (Home, DMs,
-    // Groups) sort by activity and have no order to change; the menu rows are
-    // only offered where a move is possible.
+    // Within the room's section of a space's list or a tab's (which the first
+    // move makes hand-sorted); the menu rows are only offered where a move is
+    // possible.
     id: "move-room-up",
     description: "Move the room up in its space",
     requires: ["room"],

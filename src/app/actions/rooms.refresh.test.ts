@@ -228,11 +228,28 @@ describe("tabs", () => {
     await vi.waitFor(() => expect(setRoomViews).toHaveBeenCalled());
   });
 
-  it("refuses to reorder a tab sorted any other way, even a section that lists a space", async () => {
+  it("switches a tab sorted any other way to by hand, starting from the order shown", async () => {
+    // Recent activity: c, then a, then b.
+    vi.mocked(ipc.getRooms).mockResolvedValue([
+      { ...room("!a:x"), last_activity_ts: 200 },
+      { ...room("!b:x"), last_activity_ts: 100 },
+      { ...room("!c:x"), last_activity_ts: 300 },
+    ]);
+    await open(tab({ sort: "recent" }));
+    expect(listed()).toEqual(["!c:x", "!a:x", "!b:x"]);
+    await moveRoomInSpace("!b:x", -1);
+    expect(listed()).toEqual(["!c:x", "!b:x", "!a:x"]);
+    const saved = AppState.get("roomViews").find((v) => v.id === AppState.get("currentSpaceId"))!;
+    expect(saved).toMatchObject({ sort: "manual", order: ["!c:x", "!b:x", "!a:x"] });
+    expect(showError).not.toHaveBeenCalled();
+  });
+
+  it("never writes a space's order from a tab grouped by space, sorted by hand or not", async () => {
     await open(tab({ groupBy: "space", sort: "recent" }));
     await moveRoomInSpace("!b:x", -1);
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining("sorted by hand"));
     expect(ipc.reorderSpaceChildren).not.toHaveBeenCalled();
+    const saved = AppState.get("roomViews").find((v) => v.id === AppState.get("currentSpaceId"))!;
+    expect(saved.sort).toBe("manual");
   });
 
   it("returns to the first tab when the open one is deleted elsewhere", async () => {

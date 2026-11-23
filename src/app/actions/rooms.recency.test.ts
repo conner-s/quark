@@ -75,7 +75,7 @@ describe("bumpRoomActivity", () => {
   });
 
   it("coalesces a burst of bumps into a single re-render", () => {
-    const spy = vi.spyOn(roomList, "setRooms");
+    const spy = vi.spyOn(roomList, "setSections");
     bumpRoomActivity("!c:x", 400);
     bumpRoomActivity("!b:x", 500);
     vi.runAllTimers();
@@ -113,7 +113,7 @@ describe("bumpRoomActivity", () => {
   });
 
   it("is a no-op for rooms missing from the cache", () => {
-    const spy = vi.spyOn(roomList, "setRooms");
+    const spy = vi.spyOn(roomList, "setSections");
     bumpRoomActivity("!nope:x", 999);
     vi.runAllTimers();
     expect(spy).not.toHaveBeenCalled();

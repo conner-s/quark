@@ -1004,7 +1004,7 @@ space — or tab, deleted on another device — gone returns to the first tab. R
 caller's promise settles after a run that *started after its call*, so
 `join → refresh → select` never races an older response.
 
-**Reordering.** In a space's list (and in a tab sorted by hand — see below), a room
+**Reordering.** In a space's list (and in any tab — see below), a room
 moves within its section: **Move up / Move down** on its menu (long press on
 touch), `K` / `J` in the room list, or drag it with the mouse
 (`src/ui/room_list_drag.ts` — pointer events, not HTML5 drag-and-drop, which
@@ -1082,10 +1082,11 @@ the spaces), and:
   (Favourites first, user tags by name, untagged as "Other", Low priority last).
   A section listing a space keeps the space's right-click menu.
 - **How it sorts**, within each group: recent activity, unread first (mentions,
-  then unread, then the rest, each by activity), name, or **by hand**. A
-  hand-sorted tab reorders exactly like a space — drag, `J` / `K`, or Move
-  up / down on the room's menu — within one section at a time, and the order is
-  the tab's own: moving a room in a tab grouped by space never writes that
+  then unread, then the rest, each by activity), name, or **by hand**. Any
+  tab reorders exactly like a space — drag, `J` / `K`, or Move up / down on
+  the room's menu — within one section at a time, and the first move in a tab
+  sorted any other way switches it to by hand, starting from the order it was
+  showing (a toast says so). The order is the tab's own: moving a room in a tab grouped by space never writes that
   space's `m.space.child` order. Rooms the tab hasn't placed yet go last, by
   activity. A room the tab hides for now (an unread-only tab) keeps its place.
 - **Home only:** whether it opens the DM canvas on desktop or lists like any
@@ -1172,7 +1173,7 @@ the other, as in other clients (`set_room_tag`).
 | Global        | `I`           | Open room info                |
 | Global        | `S`           | Set your presence status      |
 | Global        | `?`           | Open settings                 |
-| Room list     | `J` / `K`     | Move the room down / up in its space, or in a tab sorted by hand |
+| Room list     | `J` / `K`     | Move the room down / up in its space or tab (a tab becomes hand-sorted) |
 | Timeline      | `r`           | Reply to selected message     |
 | Timeline      | `e`           | React to selected message (opens the emoji picker) |
 | Timeline      | `t`           | Reply in thread (again: close)|
