@@ -179,6 +179,9 @@ pub fn run() {
             commands::start_sync,
             // Rooms
             commands::get_rooms,
+            commands::get_room_views,
+            commands::set_room_views,
+            commands::set_room_tag,
             commands::find_dm_room,
             commands::get_room_members,
             commands::join_room,

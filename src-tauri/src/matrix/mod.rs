@@ -10,6 +10,7 @@ pub mod reactions;
 pub mod relations;
 pub mod room_list_watch;
 pub mod rooms;
+pub mod room_views;
 pub mod space_order;
 pub mod spaces;
 pub mod stickers;

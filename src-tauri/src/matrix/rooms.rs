@@ -37,6 +37,11 @@ pub struct RoomInfo {
     /// a mute set from another client shows up here too — unlike the local
     /// `mute_rooms` list, which only records mutes this device tried to set.
     pub muted: bool,
+    /// The room's `m.tag` names (`m.favourite`, `m.lowpriority`, `u.*`, …),
+    /// sorted. Custom room-list tabs filter and group by them. Defaulted so a
+    /// cached payload from an older backend still parses.
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 /// The SDK's two unread counters, mapped onto the names the UI uses.
@@ -443,6 +448,7 @@ pub async fn get_rooms(client: &Client, recency: &RecencyState) -> Result<Vec<Ro
             let is_direct = room.is_direct().await.unwrap_or(false);
             let is_encrypted = room.is_encrypted().await.unwrap_or(false);
             let member_count = room.joined_members_count();
+            let tags = crate::matrix::room_views::tag_names(room.tags().await.ok().flatten());
 
             let unread = RoomUnread::from(room.unread_notification_counts());
 
@@ -466,6 +472,7 @@ pub async fn get_rooms(client: &Client, recency: &RecencyState) -> Result<Vec<Ro
                 member_count,
                 last_activity_ts,
                 muted,
+                tags,
             }
         });
     }
@@ -1600,6 +1607,7 @@ mod tests {
             member_count: 2,
             last_activity_ts: None,
             muted: false,
+            tags: Vec::new(),
         }
     }
 
@@ -1763,6 +1771,7 @@ mod tests {
             member_count: 42,
             last_activity_ts: Some(1_700_000_000_000),
             muted: true,
+            tags: vec!["m.favourite".to_string()],
         };
         let json = serde_json::to_string(&info).expect("serialize");
         let back: RoomInfo = serde_json::from_str(&json).expect("deserialize");
