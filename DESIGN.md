@@ -897,10 +897,9 @@ The room list has a two-column layout inspired by Cinny:
 
 **Left strip — Space selector:**
 - Narrow vertical strip showing space icons (avatar images or first-letter fallback)
-- A "Home" icon at the top for rooms not in any space, and a "DMs" icon
-- An "All Rooms" icon (`≡`) under Home lists every joined room, sorted by
-  activity. On desktop Home opens the DM canvas rather than a list, so before
-  this tab the full list was only on screen at startup, before a space was picked
+- Room-list **tabs** above and below the spaces — see *Room-list tabs* below.
+  By default: Home (`⌂`) and All Rooms (`≡`) above, Direct Messages (`✉`) and
+  Group Rooms (`#`) below
 - Spaces display their avatar/icon; this is the only place icons appear in the room list
 - The space list ends in a `+` that creates a space (see *Creating rooms and spaces*)
 - `j/k` (or rebound keys) to navigate spaces, `Enter` to select
@@ -989,19 +988,20 @@ touches the room list (`matrix/room_list_watch.rs`): any invite,
 leave or knock section; in a joined room, our *own* `m.room.member` or a state
 event that changes a row or a space's shape (`m.room.name`, `avatar`,
 `canonical_alias`, `topic`, `create`, `encryption`, `tombstone`,
-`m.space.child`, `m.space.parent`); or `m.direct` / `m.push_rules` account data.
+`m.space.child`, `m.space.parent`); `m.direct` / `m.push_rules` /
+`tel.quark.room_views` account data; or a room's `m.tag` account data.
 Other members' joins and leaves do not count — most state traffic in a busy room
 is exactly that. The event is a bare signal; the frontend debounces it (250ms)
 into `refreshRooms`, which re-reads rooms, spaces and invites and re-renders
 whichever list is showing — **real spaces included**. Before #14 nothing emitted
-the event at all, and a refresh only redrew pseudo-spaces, so a room joined or
+the event at all, and a refresh only redrew the tabs, so a room joined or
 left from another client did not appear until restart. A refresh that finds the
 open room gone (left, kicked) clears the timeline; one that finds the selected
-space gone returns to Home. Refreshes are serialized and coalesced — every
+space — or tab, deleted on another device — gone returns to the first tab. Refreshes are serialized and coalesced — every
 caller's promise settles after a run that *started after its call*, so
 `join → refresh → select` never races an older response.
 
-**Reordering.** In a space's list (not the activity-sorted pseudo-spaces), a room
+**Reordering.** In a space's list (and in a tab sorted by hand — see below), a room
 moves within its section: **Move up / Move down** on its menu (long press on
 touch), `K` / `J` in the room list, or drag it with the mouse
 (`src/ui/room_list_drag.ts` — pointer events, not HTML5 drag-and-drop, which
@@ -1049,6 +1049,99 @@ after the ordered children) is a separate write: if that fails — no permission
 in the space — the room exists and the dialog closes with a warning, while a
 failed creation keeps the dialog open with the error inline.
 
+### Room-list tabs
+
+The entries above and below the spaces on the strip are **tabs**: each one is a
+filter over the joined rooms, plus how to group and sort what it keeps
+(`src/app/room_views.ts`). Four are built in, and the user can add their own.
+
+| Tab | Lists | Default |
+| --- | --- | --- |
+| Home `⌂` | every DM, plus rooms in no space | above spaces; opens the DM canvas on desktop |
+| All Rooms `≡` | every joined room | above spaces |
+| Direct Messages `✉` | rooms marked `m.direct` | below spaces |
+| Group Rooms `#` | rooms in no space that aren't DMs | below spaces |
+
+All Rooms exists because Home opens the DM canvas on desktop: before it, the
+whole list was only on screen at startup, before a space had been picked.
+
+**A tab** has a name and a one- or two-character icon, a place (above or below
+the spaces), and:
+
+- **What it keeps.** Direct messages yes/no, and which other rooms: all, those
+  in no space, those in chosen top-level spaces (subspace rooms included), or
+  none. Then optionally: only rooms with one of these tags, never rooms with
+  these tags, unread only (a mention, or unread and not muted), hide muted.
+  What counts as a DM is the user's `m.direct`, as everywhere else.
+- **How it groups.** No grouping; DMs / rooms; by space (one section per
+  top-level space in strip order, a room in two spaces listed in both, then
+  "Direct messages" and "Other rooms" for what is in none); or by tag
+  (Favourites first, user tags by name, untagged as "Other", Low priority last).
+  A section listing a space keeps the space's right-click menu.
+- **How it sorts**, within each group: recent activity, unread first (mentions,
+  then unread, then the rest, each by activity), name, or **by hand**. A
+  hand-sorted tab reorders exactly like a space — drag, `J` / `K`, or Move
+  up / down on the room's menu — within one section at a time, and the order is
+  the tab's own: moving a room in a tab grouped by space never writes that
+  space's `m.space.child` order. Rooms the tab hasn't placed yet go last, by
+  activity. A room the tab hides for now (an unread-only tab) keeps its place.
+- **Home only:** whether it opens the DM canvas on desktop or lists like any
+  other tab. On mobile Home is always a list.
+
+Built-in tabs can be edited, hidden and reset, not deleted. Custom tabs can be
+deleted (after a confirmation); their rooms are untouched.
+
+**Where to change them.** `:tabs` (or Settings → General → *room-list tabs*)
+opens the tabs dialog: every tab, hidden ones included, with a show/hide box,
+↑ / ↓ to reorder within its group, and `+ new`; the selected tab's editor saves
+each change as it is made (text fields on Enter or when you leave them, so a
+name is one write). A right-click or long press on a tab gives **Edit tab…**,
+**Hide tab**, **Move up / down**, **New tab…**, and **Reset tab** or **Delete
+tab**. From the keyboard `:newtab [name]`, `:hidetab`, `:resettab` and
+`:deletetab` act on the tab being viewed; Move tab up / down are in the palette.
+A hidden tab comes back from `:tabs`. Hiding the tab being viewed moves to the
+first visible one.
+
+**Storage.** One global account-data event, `tel.quark.room_views`, so the
+same tabs follow the account to every device:
+
+```json
+{
+  "version": 1,
+  "views": [
+    { "id": "__home__", "label": "Home", "icon": "⌂", "position": "top",
+      "hidden": false, "canvas": true, "dms": true, "rooms": "unspaced",
+      "spaces": [], "tags": [], "exclude_tags": [], "unread_only": false,
+      "hide_muted": false, "group_by": "none", "sort": "recent", "order": [] },
+    { "id": "__view_k3j9x2ab", "label": "Work", "icon": "W", "rooms": "spaces",
+      "spaces": ["!work:example.org"], "group_by": "space", "sort": "manual",
+      "order": ["!b:example.org", "!a:example.org"] }
+  ]
+}
+```
+
+The list's order is the strip's order within each place. Built-ins have fixed
+IDs (`__home__`, `__all__`, `__dms__`, `__groups__`); custom tabs are
+`__view_<random>`. Every field falls back to its default when missing or
+invalid, entries with an unknown ID are dropped, and a built-in the list doesn't
+mention — an account that never saved, or a built-in added by a later build —
+is inserted at its default place, so it appears rather than staying invisible.
+The backend stores the content opaquely (`get_room_views` / `set_room_views`,
+`matrix/room_views.rs`); the frontend owns the schema. A change shows at once
+and is then written, one write at a time (`src/app/view_store.ts`). Reads come
+from the sync store, which hears of a write only when sync echoes it, so until
+the echo (or for a minute, if another device wrote over it) a read that doesn't
+match the pending write is ignored rather than flicking the strip back. A failed
+write puts the previous tabs back and says so.
+
+**Room tags** (`m.tag` room account data) are what tag filters and grouping
+read; `RoomInfo.tags` carries them. Set them with **Favourite / Unfavourite** on
+the room's menu, `:tag <name>` / `:untag <name>` (`:fav`, `:unfav`), or the
+*Tags* field in Room settings (comma-separated). A bare word is a user tag
+(`work` → `u.work`); `favourite` and `low priority` are the spec's
+`m.favourite` / `m.lowpriority`, which exclude each other — setting one clears
+the other, as in other clients (`set_room_tag`).
+
 ### Vim-Style Navigation
 
 **Modes:**
@@ -1076,7 +1169,7 @@ failed creation keeps the dialog open with the error inline.
 | Global        | `I`           | Open room info                |
 | Global        | `S`           | Set your presence status      |
 | Global        | `?`           | Open settings                 |
-| Room list     | `J` / `K`     | Move the room down / up in its space |
+| Room list     | `J` / `K`     | Move the room down / up in its space, or in a tab sorted by hand |
 | Timeline      | `r`           | Reply to selected message     |
 | Timeline      | `e`           | React to selected message (opens the emoji picker) |
 | Timeline      | `t`           | Reply in thread (again: close)|
@@ -1492,6 +1585,8 @@ Shows the running app version, a "Quark on GitHub" link (opens in the system bro
 - [x] Room directory & federated room search
 - [x] In-room message search — header search box (`:search`) with four tiers: loaded window (instant) · local cache (matrix-sdk event cache, offline) · back-to-date · entire history. Server tiers stream results one page at a time (bounded memory) and are cancelable.
 - [x] Spaces: hierarchy display, space-scoped room lists, restricted joins
+- [x] Room-list tabs: built-in and custom, filtered, grouped and sorted; synced as account data
+- [x] Room tags (`m.tag`): favourite, low priority, user tags
 - [x] Threads (m.thread relation) — replies carry media and MSC2530 captions,
       converted by the same code path as the main timeline. Replies *inside* a
       thread are sent as MSC3440 threaded replies (`m.thread` carrying a real
@@ -2507,6 +2602,7 @@ quark/
 │   │   ├── DialogBase.ts     # Shared dialog chrome: overlay, header, Esc, form rows
 │   │   ├── PickerBase.ts     # Shared picker overlay + keymap-driven SelectionList
 │   │   ├── RoomList.ts       # Room list panel
+│   │   ├── TabsDialog.ts     # Room-list tabs: show, hide, order, edit
 │   │   ├── Timeline.ts       # Message rendering
 │   │   ├── MessageRow.ts     # Single message (text, images, emoji)
 │   │   ├── ReplyPreview.ts   # Inline reply rendering
