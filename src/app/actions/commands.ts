@@ -55,6 +55,7 @@ import {
   openSpaceSettings,
   openDebugViewer,
   openDebugViewerForEvent,
+  openInspector,
 } from "./dialogs.js";
 import { setupCrossSigning } from "./crypto.js";
 import { startVerification } from "./verification.js";
@@ -190,6 +191,11 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
 
     case "upload-file": {
       showToast("Upload: not yet implemented", "info");
+      break;
+    }
+
+    case "open-devtools": {
+      await openInspector();
       break;
     }
 

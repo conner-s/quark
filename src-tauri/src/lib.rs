@@ -2,6 +2,7 @@ pub mod apns;
 pub mod clipboard_files;
 pub mod commands;
 pub mod config;
+pub mod devtools;
 pub mod events;
 pub mod gif;
 pub mod local_files;
@@ -316,6 +317,8 @@ pub fn run() {
             // App Config
             commands::get_app_config,
             commands::set_app_config,
+            commands::get_devtools_support,
+            commands::open_devtools,
             commands::set_user_color_override,
             // Updater
             commands::update_check,
@@ -388,6 +391,9 @@ pub fn run() {
             if let Some(notif_state) = app.try_state::<Mutex<notifications::NotificationConfig>>() {
                 if let Ok(mut g) = notif_state.lock() { *g = loaded_notif; }
             }
+            // The windows exist by now; a feature build offers the inspector only
+            // if `[debug] devtools` says so.
+            devtools::apply(app.handle(), loaded_app.debug.devtools);
 
             // Swap the media cache to the persistent data dir. Same desktop-
             // vs-mobile split as the config dir above so desktop users keep

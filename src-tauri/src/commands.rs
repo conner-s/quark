@@ -2864,6 +2864,7 @@ pub async fn get_app_config(
 /// `[user_colors.overrides]` is kept as stored: `set_user_color_override` owns it.
 #[tauri::command]
 pub async fn set_app_config(
+    app: tauri::AppHandle,
     config_state: State<'_, Mutex<AppConfig>>,
     cache_state: State<'_, CacheState>,
     paths: State<'_, crate::Paths>,
@@ -2877,11 +2878,30 @@ pub async fn set_app_config(
     let next = apply_whole_config(&guard, config);
     save_app_config_to(&path, &next)?;
     let new_cache_mb = next.media.cache_size_mb;
+    let devtools = next.debug.devtools;
     *guard = next;
     drop(guard);
     // Sync MediaCache size limit in case it changed.
     let _ = cache_state.0.set_max_size_mb(new_cache_mb);
+    crate::devtools::apply(&app, devtools);
     Ok(())
+}
+
+/// What this build can do with the Web Inspector: `always`, `toggle` (with
+/// `[debug] devtools`), or `none`.
+#[tauri::command]
+pub fn get_devtools_support() -> crate::devtools::DevtoolsSupport {
+    crate::devtools::SUPPORT
+}
+
+/// Open the Web Inspector, or say why this build or setting can't.
+#[tauri::command]
+pub fn open_devtools(
+    app: tauri::AppHandle,
+    config_state: State<'_, Mutex<AppConfig>>,
+) -> Result<(), String> {
+    let setting = config_state.lock().map_err(|_| "App config lock poisoned")?.debug.devtools;
+    crate::devtools::open(&app, setting)
 }
 
 /// Set (or, with `None`, remove) this device's local color for another user

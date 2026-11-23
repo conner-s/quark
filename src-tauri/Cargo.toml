@@ -9,9 +9,10 @@ repository = "https://github.com/mcplummet/quark"
 homepage = "https://quark.tel"
 
 [dependencies]
-# `devtools` is intentionally NOT enabled: Tauri turns the Web Inspector on
-# automatically in debug builds, and the `devtools` feature is only what would
-# additionally enable it in *release* builds — which we don't want shipping.
+# Tauri's `devtools` is not enabled here: Tauri turns the Web Inspector on
+# automatically in debug builds, and its `devtools` feature is only what would
+# additionally enable it in *release* builds, which installers don't ship. This
+# crate's own opt-in `devtools` feature (below) turns it on, behind a setting.
 # 2.12 is a hard floor, not incidental, for two iOS reasons:
 # - 2.11 is the first release whose runtime handles WKWebView's
 #   `webViewWebContentProcessDidTerminate:` and reloads the webview. Without it,
@@ -111,6 +112,8 @@ tauri-plugin-single-instance = "2"
 # target_os); the command returns nothing on other platforms.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+# The inspector switch (src/devtools.rs): the same webkit2gtk wry builds on.
+webkit2gtk = "2.0"
 wl-clipboard-rs = "0.9"
 x11-clipboard = "0.9"
 
@@ -139,6 +142,9 @@ wiremock = "0.6"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+# The Web Inspector in a release build, off until `[debug] devtools` turns it
+# on (src/devtools.rs). Not in default: release installers ship without it.
+devtools = ["tauri/devtools"]
 
 # Cargo's default release profile keeps symbol tables, which leaves the Android
 # JNI .so (libquark_lib.so) unstripped — and nothing in the Gradle release path

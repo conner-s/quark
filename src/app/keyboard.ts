@@ -22,6 +22,7 @@ import {
   openSpaceSettings,
   openDebugViewer,
   openDebugViewerForEvent,
+  openInspector,
   openPinnedMessages,
   openSearch,
   openRoomDirectory,
@@ -425,6 +426,10 @@ export function dispatchAction(action: string, components: AppComponents): void 
 
     case "edit-status":
       editStatus();
+      break;
+
+    case "open-devtools":
+      void openInspector();
       break;
 
     case "help":

@@ -200,6 +200,14 @@ pub struct UpdaterConfig {
     pub auto_check: bool,
 }
 
+/// Debugging aids. Only `devtools` so far.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct DebugConfig {
+    /// Offer the Web Inspector, in a build that has it (see `crate::devtools`).
+    #[serde(default)]
+    pub devtools: bool,
+}
+
 // ─── Root config ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -222,6 +230,8 @@ pub struct AppConfig {
     pub updater: UpdaterConfig,
     #[serde(default)]
     pub user_colors: super::user_colors::UserColorsConfig,
+    #[serde(default)]
+    pub debug: DebugConfig,
 }
 
 // ─── Default impls ────────────────────────────────────────────────────────────
@@ -310,6 +320,7 @@ impl Default for AppConfig {
             cache: CacheConfig::default(),
             updater: UpdaterConfig::default(),
             user_colors: super::user_colors::UserColorsConfig::default(),
+            debug: DebugConfig::default(),
         }
     }
 }
