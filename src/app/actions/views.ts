@@ -25,14 +25,14 @@ import {
   defaultViewId,
   deleteView,
   getView,
-  initViewStore,
+  prepareViews,
   resetView,
   setViewHidden,
   updateView,
   viewContext,
   visibleViews,
 } from "../view_store.js";
-import { getRoomViews, setRoomViews, setRoomTag } from "../../ipc/index.js";
+import { setRoomTag } from "../../ipc/index.js";
 import { showError, showSuccess, showToast } from "../../ui/NotificationToast.js";
 import { askConfirm } from "../../ui/ConfirmDialog.js";
 import type { ContextMenuEntry } from "../../ui/ContextMenu.js";
@@ -40,12 +40,14 @@ import { getComponents } from "./context.js";
 import { rerenderViewList, selectSpace } from "./rooms.js";
 
 /**
- * Wire the tab store to the backend and keep the strip and list current as
- * the set changes — from here, or from another device via sync. Returns an
- * unbind function.
+ * Keep the strip and list current as the tab set changes — from here, or from
+ * another device via sync. Returns an unbind function. The store itself is
+ * wired to the backend from the start (`view_store.ts`), so a room-list load
+ * before this runs still reads the account's tabs.
  */
 export function bindRoomViews(): () => void {
-  initViewStore({ getRoomViews, setRoomViews }, showError);
+  // The first tab change then needn't wait for the account's set.
+  void prepareViews();
   const { spaceStrip } = getComponents();
   spaceStrip.setViews(visibleViews());
   return AppState.on("roomViews", () => {
@@ -174,11 +176,19 @@ export function openTabEditor(viewId?: string): void {
   getComponents().tabsDialog.show(viewId);
 }
 
-/** Add a tab and open it in the editor. The tab is there at once; the save follows. */
+/**
+ * Add a tab and open it in the editor. The tab is there at once and the save
+ * follows, except for a session's first change, which waits for the read of
+ * the account's tabs (`view_store.ts`); the editor opens once it is there.
+ */
 export function createTab(label?: string): void {
   const view = newView(label ?? "", allViews().map((v) => v.id));
-  void addView(view);
-  getComponents().tabsDialog.show(view.id);
+  const added = addView(view);
+  const open = (): void => {
+    if (getView(view.id)) getComponents().tabsDialog.show(view.id);
+  };
+  if (getView(view.id)) open();
+  else void added.then(open);
 }
 
 export function hideTab(viewId: string): void {

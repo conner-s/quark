@@ -19,17 +19,23 @@ import {
   initViewStore,
   loadViews,
   moveView,
+  prepareViews,
   resetView,
   setViewHidden,
   updateView,
   visibleViews,
 } from "./view_store.js";
 
+// `stored` is what the sync store holds, `server` what the homeserver does. A
+// write reaches the server, and by default echoes into the store at once.
 let stored: unknown;
+let server: unknown;
 let clock: number;
 const ipc = {
   getRoomViews: vi.fn(async () => stored),
+  fetchRoomViews: vi.fn(async () => server),
   setRoomViews: vi.fn(async (content: Record<string, unknown>) => {
+    server = content;
     stored = content;
   }),
 };
@@ -37,10 +43,14 @@ const onError = vi.fn();
 
 beforeEach(() => {
   stored = null;
+  server = null;
   clock = 1_000;
   ipc.getRoomViews.mockClear();
+  ipc.fetchRoomViews.mockClear();
+  ipc.fetchRoomViews.mockImplementation(async () => server);
   ipc.setRoomViews.mockClear();
   ipc.setRoomViews.mockImplementation(async (content) => {
+    server = content;
     stored = content;
   });
   onError.mockClear();
@@ -51,8 +61,9 @@ beforeEach(() => {
 const ids = () => allViews().map((v) => v.id);
 
 describe("view_store", () => {
-  it("saves a change locally at once and to account data", async () => {
-    const p = setViewHidden(GROUPS_VIEW_ID, true);
+  it("saves a change locally at once and to account data, once the server has been read", async () => {
+    await prepareViews();
+    const p =setViewHidden(GROUPS_VIEW_ID, true);
     expect(visibleViews().map((v) => v.id)).not.toContain(GROUPS_VIEW_ID);
     await p;
     expect(ipc.setRoomViews).toHaveBeenCalledTimes(1);
@@ -92,12 +103,18 @@ describe("view_store", () => {
     expect(allViews().find((v) => v.id === HOME_VIEW_ID)!.label).toBe("Elsewhere");
   });
 
-  it("accepts the echo, and lets the store win once the grace runs out", async () => {
+  it("lets the store win once the grace runs out", async () => {
+    // The write never echoes: another device wrote over it.
     ipc.setRoomViews.mockImplementation(async () => {});
     await updateView(HOME_VIEW_ID, { label: "Base" });
+    const other = parseViews(null);
+    other[0] = { ...other[0], label: "Elsewhere" };
+    stored = serializeViews(other);
+    await loadViews();
+    expect(allViews().find((v) => v.id === HOME_VIEW_ID)!.label).toBe("Base");
     clock += ECHO_GRACE_MS + 1;
     await loadViews();
-    expect(allViews().find((v) => v.id === HOME_VIEW_ID)!.label).toBe("Home");
+    expect(allViews().find((v) => v.id === HOME_VIEW_ID)!.label).toBe("Elsewhere");
   });
 
   it("takes another device's change when nothing is pending", async () => {
@@ -148,5 +165,77 @@ describe("view_store", () => {
     expect(defaultViewId()).toBe(HOME_VIEW_ID);
     for (const id of ids()) await setViewHidden(id, true);
     expect(defaultViewId()).toBe(ALL_VIEW_ID);
+  });
+});
+
+describe("a session's first change", () => {
+  const mine = newView("Work", []);
+  const withMine = () => serializeViews([...parseViews(null), mine]);
+
+  it("starts from the server's set, not the defaults shown before the store was read", async () => {
+    // A restart: nothing read yet, the defaults on screen, the account's set on the server.
+    server = withMine();
+    const extra = newView("Play", ids());
+    await addView(extra);
+    expect(ids()).toEqual(expect.arrayContaining([mine.id, extra.id]));
+    expect(parseViews(server).map((v) => v.id)).toEqual(expect.arrayContaining([mine.id, extra.id]));
+  });
+
+  it("starts from the server's set when the store hasn't caught up (a new device)", async () => {
+    server = withMine();
+    stored = null;
+    await updateView(HOME_VIEW_ID, { label: "Base" });
+    expect(parseViews(server).map((v) => v.id)).toContain(mine.id);
+    expect(ipc.fetchRoomViews).toHaveBeenCalledTimes(1);
+  });
+
+  it("is refused, and says so, when the server can't be read; the next change retries", async () => {
+    server = withMine();
+    ipc.fetchRoomViews.mockRejectedValueOnce(new Error("offline"));
+    await setViewHidden(GROUPS_VIEW_ID, true);
+    expect(ipc.setRoomViews).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining("offline"));
+    expect(ids()).not.toContain(mine.id);
+    await setViewHidden(GROUPS_VIEW_ID, true);
+    expect(ipc.setRoomViews).toHaveBeenCalledTimes(1);
+    expect(parseViews(server).map((v) => v.id)).toContain(mine.id);
+  });
+
+  it("reads the server once a session, however many changes follow", async () => {
+    await prepareViews();
+    await updateView(HOME_VIEW_ID, { label: "Base" });
+    await updateView(HOME_VIEW_ID, { label: "Base 2" });
+    expect(ipc.fetchRoomViews).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps changes made while the read is under way, in order", async () => {
+    server = withMine();
+    const a = updateView(mine.id, { label: "One" });
+    const b = updateView(mine.id, { label: "Two" });
+    await Promise.all([a, b]);
+    expect(parseViews(server).find((v) => v.id === mine.id)!.label).toBe("Two");
+  });
+
+  it("is reported by the change, not by a quiet prepareViews", async () => {
+    ipc.fetchRoomViews.mockRejectedValueOnce(new Error("offline"));
+    expect(await prepareViews()).toBe(false);
+    expect(onError).not.toHaveBeenCalled();
+  });
+});
+
+describe("an empty store", () => {
+  it("doesn't undo a set already seen this session", async () => {
+    const mine = newView("Work", []);
+    server = serializeViews([...parseViews(null), mine]);
+    await prepareViews();
+    stored = null; // the store hasn't heard of it yet
+    clock += ECHO_GRACE_MS + 1;
+    await loadViews();
+    expect(ids()).toContain(mine.id);
+  });
+
+  it("is the defaults when nothing was ever saved", async () => {
+    await loadViews();
+    expect(ids()).toEqual(parseViews(null).map((v) => v.id));
   });
 });

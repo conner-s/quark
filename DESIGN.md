@@ -1145,6 +1145,17 @@ the echo (or for a minute, if another device wrote over it) a read that doesn't
 match the pending write is ignored rather than flicking the strip back. A failed
 write puts the previous tabs back and says so.
 
+A write replaces the whole set, so it must start from the account's real one.
+The store is wired to the backend from the start, so the room-list load a
+restored session makes before the UI is bound still reads the tabs. And once a
+session, before its first change, the set is read from the homeserver itself
+(`fetch_room_views`; started early when the UI binds), because the sync store
+can be behind it, as on a new device before its first sync. If that read fails
+the change is refused with an error rather than written over tabs this device
+hasn't seen, and the next change tries again. An empty store never replaces a
+set already seen in the session: nothing writes "no tabs", so empty only means
+the store hasn't heard yet.
+
 **Room tags** (`m.tag` room account data) are what tag filters and grouping
 read; `RoomInfo.tags` carries them. Set them with **Favourite / Unfavourite** on
 the room's menu, `:tag <name>` / `:untag <name>` (`:fav`, `:unfav`), or the

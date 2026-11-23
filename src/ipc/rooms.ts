@@ -23,6 +23,16 @@ export async function getRoomViews(): Promise<unknown> {
   return invoke<unknown>("get_room_views");
 }
 
+/**
+ * The tab definitions as the homeserver has them (null when none were saved).
+ * A request, unlike `getRoomViews`: the view store makes it once, before its
+ * first write, so a write never replaces a set the sync store hasn't caught
+ * up with.
+ */
+export async function fetchRoomViews(): Promise<unknown> {
+  return invoke<unknown>("fetch_room_views");
+}
+
 /** Replace the account's room-list tab definitions. */
 export async function setRoomViews(content: Record<string, unknown>): Promise<void> {
   return invoke<void>("set_room_views", { content });

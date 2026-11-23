@@ -37,6 +37,20 @@ pub async fn get_room_views(client: &Client) -> Value {
         .unwrap_or(Value::Null)
 }
 
+/// The tab definitions as the homeserver has them; `Null` if the account has
+/// none. A request, so not for every refresh: the view store reads this once
+/// before its first write of a session, because the sync store can lag the
+/// server (a new device before its first sync) and a write is a whole-set
+/// replace.
+pub async fn fetch_room_views(client: &Client) -> Result<Value, String> {
+    let raw = client
+        .account()
+        .fetch_account_data(GlobalAccountDataEventType::from(VIEWS_EVENT))
+        .await
+        .map_err(|e| format!("Couldn't read tabs from the server: {e}"))?;
+    Ok(raw.and_then(|raw| raw.deserialize_as::<Value>().ok()).unwrap_or(Value::Null))
+}
+
 /// Replace the stored tab definitions. The content must be a JSON object.
 pub async fn set_room_views(client: &Client, content: &Value) -> Result<(), String> {
     if !content.is_object() {

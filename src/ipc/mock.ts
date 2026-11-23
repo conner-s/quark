@@ -322,6 +322,7 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
     case "get_rooms":
       return MOCK_ROOMS;
     case "get_room_views":
+    case "fetch_room_views":
       return _mockRoomViews;
     case "set_room_views":
       _mockRoomViews = structuredClone(args?.content ?? null);
