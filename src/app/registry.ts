@@ -52,6 +52,8 @@ export type MenuSurface =
   | "section"
   /** A room-list tab on the space strip (Home, All Rooms, your own). */
   | "tab"
+  /** The space strip's empty space, below and between its icons. */
+  | "strip"
   /**
    * The mobile top bar's ⋮ menu. Mobile hides the desktop room header, which
    * carried the only pointer affordance for search and pinned messages, so
@@ -753,6 +755,7 @@ const ACTION_LITERALS = [
     menus: [
       { surface: "create", label: "New space", group: 1, order: 2 },
       { surface: "space", label: "New subspace", group: 2, order: 2 },
+      { surface: "strip", label: "New space", group: 2, order: 1 },
     ],
     chrome: ["space-strip"],
   },
@@ -820,7 +823,7 @@ const ACTION_LITERALS = [
     description: "Show, hide, order and edit the room-list tabs",
     requires: ["session"],
     command: { name: "tabs", aliases: ["edittab"] },
-    menus: [{ surface: "tab", label: "Edit tab…", group: 1, order: 1 }],
+    menus: [{ surface: "tab", label: "Edit tab…", group: 1, order: 1 }, { surface: "strip", label: "Edit tabs…", group: 1, order: 2 }],
     chrome: ["settings"],
   },
   {
@@ -828,7 +831,7 @@ const ACTION_LITERALS = [
     description: "Add a room-list tab",
     requires: ["session"],
     command: { name: "newtab", aliases: ["mktab"], args: "[name]" },
-    menus: [{ surface: "tab", label: "New tab…", group: 3, order: 1 }],
+    menus: [{ surface: "tab", label: "New tab…", group: 3, order: 1 }, { surface: "strip", label: "New tab…", group: 1, order: 1 }],
   },
   {
     id: "hide-tab",

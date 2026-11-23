@@ -1098,7 +1098,9 @@ opens the tabs dialog: every tab, hidden ones included, with a show/hide box,
 each change as it is made (text fields on Enter or when you leave them, so a
 name is one write). A right-click or long press on a tab gives **Edit tab…**,
 **Hide tab**, **Move up / down**, **New tab…**, and **Reset tab** or **Delete
-tab**. From the keyboard `:newtab [name]`, `:hidetab`, `:resettab` and
+tab**. A right-click or long press on the strip's empty space, off every icon,
+gives **New tab…**, **Edit tabs…** and **New space** rather than the webview's
+own Back / Forward / Reload menu. From the keyboard `:newtab [name]`, `:hidetab`, `:resettab` and
 `:deletetab` act on the tab being viewed; Move tab up / down are in the palette.
 A hidden tab comes back from `:tabs`. Hiding the tab being viewed moves to the
 first visible one.

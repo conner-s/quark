@@ -229,5 +229,25 @@ describe("SpaceStrip", () => {
       expect(onSpace).toHaveBeenCalledWith(SPACE_ID, 5, 6);
       expect(onTab).toHaveBeenCalledTimes(1);
     });
+
+    it("gives a right-click off every icon the strip menu, not the webview's", () => {
+      const onStrip = vi.fn();
+      const onTab = vi.fn();
+      strip.setSpaces([]);
+      strip.onStripContextMenu(onStrip);
+      strip.onViewContextMenu(onTab);
+      const fire = (el: Element) => {
+        const e = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 3, clientY: 4 });
+        el.dispatchEvent(e);
+        return e;
+      };
+      const bg = fire(strip.getElement());
+      expect(bg.defaultPrevented).toBe(true);
+      expect(onStrip).toHaveBeenCalledWith(3, 4);
+      // An icon's own menu wins; the strip's doesn't open as well.
+      fire(strip.getElement().querySelector('[data-space-id="__home__"]')!);
+      expect(onTab).toHaveBeenCalledTimes(1);
+      expect(onStrip).toHaveBeenCalledTimes(1);
+    });
   });
 });
