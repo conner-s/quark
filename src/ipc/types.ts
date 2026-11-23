@@ -39,6 +39,11 @@ export interface RoomInfo {
    * from an older backend still parses.
    */
   muted?: boolean;
+  /**
+   * The room's `m.tag` names (`m.favourite`, `m.lowpriority`, `u.*`, …),
+   * sorted. Optional so a payload from an older backend still parses.
+   */
+  tags?: string[];
 }
 
 /** Options for creating a room — matches matrix::rooms::CreateRoomOptions */

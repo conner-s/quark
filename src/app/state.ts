@@ -3,6 +3,7 @@
 import type { RoomInfo, TimelineEvent, InviteInfo } from "../ipc/types.js";
 import type { UpdateInfo } from "../ipc/index.js";
 import type { SendKeyBehavior } from "../ipc/app_config.js";
+import { parseViews, type RoomView } from "./room_views.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,10 @@ export interface AppStateSnapshot {
   loggedIn: boolean;
   /** Matrix user ID of the locally logged-in user (e.g. @alice:matrix.org). */
   ownUserId: string | null;
+  /** Top-level spaces in strip order — what a tab grouped by space lists. */
+  topLevelSpaces: { id: string; name: string }[];
+  /** The room-list tabs, built-in and custom, in stored order (app/view_store.ts). */
+  roomViews: RoomView[];
   /** Display name of the locally logged-in user. */
   ownDisplayName: string | null;
   currentRoomId: string | null;
@@ -135,6 +140,8 @@ class AppStateManager {
     roomListCache: [],
     spaceRoomIds: [],
     spaceMembers: null,
+    topLevelSpaces: [],
+    roomViews: parseViews(null),
     invites: [],
     currentTimeline: [],
     replyToEventId: null,

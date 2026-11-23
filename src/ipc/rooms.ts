@@ -15,6 +15,28 @@ export async function getRooms(): Promise<RoomInfo[]> {
 }
 
 /**
+ * The account's room-list tab definitions (`tel.quark.room_views` account
+ * data), as sync last delivered them; null when none were ever saved. Parse
+ * with `parseViews` (app/room_views.ts).
+ */
+export async function getRoomViews(): Promise<unknown> {
+  return invoke<unknown>("get_room_views");
+}
+
+/** Replace the account's room-list tab definitions. */
+export async function setRoomViews(content: Record<string, unknown>): Promise<void> {
+  return invoke<void>("set_room_views", { content });
+}
+
+/**
+ * Add (`on`) or remove one `m.tag` on a room. Favourite and low priority
+ * exclude each other: setting one clears the other.
+ */
+export async function setRoomTag(roomId: string, tag: string, on: boolean): Promise<void> {
+  return invoke<void>("set_room_tag", { roomId, tag, on });
+}
+
+/**
  * Get the most recently active 1:1 DMs with latest-message previews for the
  * Home view. Matches the Rust `get_home_data` command.
  */
