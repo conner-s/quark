@@ -898,6 +898,9 @@ The room list has a two-column layout inspired by Cinny:
 **Left strip — Space selector:**
 - Narrow vertical strip showing space icons (avatar images or first-letter fallback)
 - A "Home" icon at the top for rooms not in any space, and a "DMs" icon
+- An "All Rooms" icon (`≡`) under Home lists every joined room, sorted by
+  activity. On desktop Home opens the DM canvas rather than a list, so before
+  this tab the full list was only on screen at startup, before a space was picked
 - Spaces display their avatar/icon; this is the only place icons appear in the room list
 - The space list ends in a `+` that creates a space (see *Creating rooms and spaces*)
 - `j/k` (or rebound keys) to navigate spaces, `Enter` to select

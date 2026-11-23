@@ -301,13 +301,13 @@ describe("bindSpaceBadges", () => {
     unbind();
   });
 
-  it("lights a DM that is also in a space in the space, Home and DMs — not Group Rooms", () => {
+  it("lights a DM that is also in a space in the space, All Rooms, Home and DMs — not Group Rooms", () => {
     AppState.set("spaceRoomIds", ["!d"]);
     AppState.set("spaceMembers", { [S]: ["!d"] });
     AppState.set("roomListCache", [room("!d", { unread: 1, is_direct: true })]);
     const strip = fakeStrip();
     const unbind = bindSpaceBadges(strip);
-    expect([...strip.last()!.keys()].sort()).toEqual([S, "__dms__", "__home__"].sort());
+    expect([...strip.last()!.keys()].sort()).toEqual([S, "__all__", "__dms__", "__home__"].sort());
     unbind();
   });
 
