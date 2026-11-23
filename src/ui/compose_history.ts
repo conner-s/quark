@@ -67,6 +67,11 @@ export class ComposeHistory {
     return this.pos > 0;
   }
 
+  /** Whether there is an undone change to re-apply. */
+  get canRedo(): boolean {
+    return this.pos < this.steps.length - 1;
+  }
+
   /** Record the field's value after a change. */
   record(after: string, opts: RecordOpts): void {
     if (after === this.current) return;

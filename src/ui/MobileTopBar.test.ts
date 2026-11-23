@@ -25,7 +25,7 @@ const OVERFLOW_HANDLERS = {
 };
 
 const shape = (entries: ReturnType<typeof buildMenu>): string[] =>
-  entries.map((e) => ("separator" in e && e.separator ? "──" : e.label));
+  entries.map((e) => ("label" in e ? e.label : "──"));
 
 beforeEach(() => {
   for (const entry of keymapManager.getEntries()) {

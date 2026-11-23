@@ -57,7 +57,12 @@ export type MenuSurface =
    */
   | "overflow"
   /** The room list header's `+`: new room, new space, browse the directory. */
-  | "create";
+  | "create"
+  /**
+   * Right-click inside the compose box. Desktop only: on touch the native
+   * selection callout is the editing UI, and a second one would fight it.
+   */
+  | "compose";
 
 /**
  * Non-menu places an action has a dedicated on-screen control. Declaring it
@@ -101,7 +106,46 @@ export interface MenuSpec {
   order: number;
   /** Rendered as destructive (leave, redact, …). */
   danger?: boolean;
+  /**
+   * What the row does when its `requires` fail against the menu's target.
+   * Hidden by default; "disable" keeps it listed but greyed, for rows whose
+   * absence would read as a missing feature — Edit and Delete on someone
+   * else's message.
+   */
+  whenUnavailable?: "hide" | "disable";
+  /**
+   * Hint for a key the platform owns rather than the keymap — Ctrl-x in a
+   * text field — or a glyph naming where the row goes (↗ leaves the app). Never
+   * set it for anything a quarkrc can rebind: those hints come from the live
+   * keymap, which is the reason this registry exists.
+   */
+  hint?: string;
+  /**
+   * Render as a toggle in the group's chip row rather than as a menu row, with
+   * this as its glyph. The label becomes the chip's tooltip.
+   */
+  chip?: string;
+  /** Chip glyph in the secondary accent (the inline-code chip). */
+  accent?: boolean;
 }
+
+/**
+ * Section-header titles for surfaces whose groups are named. A surface listed
+ * here draws a header strip above each group; any other surface separates its
+ * groups with a plain rule.
+ */
+export const MENU_SECTIONS: Readonly<Partial<Record<MenuSurface, Readonly<Record<number, string>>>>> = {
+  message: { 1: "respond", 2: "clipboard", 3: "selection", 4: "event" },
+  compose: { 1: "format", 2: "clipboard", 3: "selection", 4: "insert", 5: "draft" },
+};
+
+/** Why a compose-menu row needs no keyboard or touch path of its own. */
+const EDITING_EXEMPT =
+  "Restates an editing affordance the platform already gives keyboard and touch users — the text field's own keys and the native selection callout.";
+
+/** Why a formatting toggle has no touch path. */
+const FORMAT_EXEMPT =
+  "Touch has no compose menu by decision (#54): a custom mobile format bar duplicates the native selection callout poorly, and doing it properly needs native UIEditMenuInteraction / Android ActionMode work.";
 
 export interface ActionEntry {
   /** Stable identifier. Matches the dispatchAction case where one exists. */
@@ -351,22 +395,56 @@ const ACTION_LITERALS = [
     palette: false,
   },
   {
+    id: "copy-as-quote",
+    description: "Copy text as a markdown quote",
+    menus: [
+      { surface: "message", label: "Copy as quote", group: 2, order: 2 },
+      { surface: "compose", label: "Copy as quote", group: 3, order: 2 },
+    ],
+    palette: false,
+    parityExempt:
+      "`>` (quote-selection) is the keyboard form, and quotes straight into the compose box rather than via the clipboard.",
+  },
+  {
     // Mobile only, and expressed by the caller withholding the handler off
     // mobile rather than by a requirement: on desktop you select text by
     // dragging, and the row would be noise.
     id: "select-message-text",
     description: "Select text within the message",
     requires: ["message"],
-    menus: [{ surface: "message", label: "Select text", group: 2, order: 2 }],
+    menus: [{ surface: "message", label: "Select text", group: 2, order: 3 }],
     palette: false,
     parityExempt:
       "Keyboard users reach the same thing through enter-text-select (`o`), which is the richer form; this row exists because that path needs a caret and mobile has none.",
   },
   {
+    // Offered only with a selection, by the caller withholding the handler
+    // otherwise. Its label echoes the query, which the caller supplies.
+    id: "search-web",
+    description: "Search the web for the selected text",
+    menus: [
+      { surface: "message", label: "Search web", group: 3, order: 1, hint: "\u2197" },
+      { surface: "compose", label: "Search web", group: 3, order: 1, hint: "\u2197" },
+    ],
+    palette: false,
+    parityExempt:
+      "Leaves the app for a browser search; the browser is the keyboard path, and a binding would be a shortcut to a URL.",
+  },
+  {
+    id: "copy-selection",
+    description: "Copy the selected text",
+    menus: [
+      { surface: "message", label: "Copy selected text", group: 3, order: 2, hint: "Ctrl-c" },
+      { surface: "compose", label: "Copy", group: 2, order: 2, hint: "Ctrl-c" },
+    ],
+    palette: false,
+    parityExempt: EDITING_EXEMPT,
+  },
+  {
     id: "view-raw-event",
     description: "View the selected message's source event",
     requires: ["message"],
-    menus: [{ surface: "message", label: "View raw event", group: 2, order: 3 }],
+    menus: [{ surface: "message", label: "View raw event", group: 4, order: 1 }],
     palette: false,
     parityExempt:
       "`:debug $eventId` is the keyboard form, and `:debug` covers the room's state; this row is the pointer shortcut to the same viewer.",
@@ -400,7 +478,7 @@ const ACTION_LITERALS = [
       { sequence: "E", context: "global" },
       { sequence: "c", context: "global" },
     ],
-    menus: [{ surface: "message", label: "Edit", group: 3, order: 1 }],
+    menus: [{ surface: "message", label: "Edit", group: 4, order: 2, whenUnavailable: "disable" }],
     palette: false,
   },
   {
@@ -408,7 +486,7 @@ const ACTION_LITERALS = [
     description: "Delete the selected message",
     requires: ["own-message"],
     bindings: [{ sequence: "dd", context: "global" }],
-    menus: [{ surface: "message", label: "Delete", group: 3, order: 2, danger: true }],
+    menus: [{ surface: "message", label: "Delete", group: 4, order: 3, danger: true, whenUnavailable: "disable" }],
     palette: false,
   },
   {
@@ -435,6 +513,7 @@ const ACTION_LITERALS = [
     requires: ["room"],
     command: { name: "emoji" },
     bindings: [{ sequence: "Ctrl-e", context: "insert" }],
+    menus: [{ surface: "compose", label: "Emoji\u2026", group: 4, order: 1 }],
     chrome: ["compose"],
     palette: true,
   },
@@ -444,6 +523,7 @@ const ACTION_LITERALS = [
     requires: ["room"],
     command: { name: "gif" },
     bindings: [{ sequence: "Ctrl-g", context: "insert" }],
+    menus: [{ surface: "compose", label: "GIF\u2026", group: 4, order: 2 }],
     chrome: ["compose"],
     palette: true,
   },
@@ -463,27 +543,27 @@ const ACTION_LITERALS = [
     description: "Bold the selected text",
     requires: ["room"],
     bindings: [{ sequence: "Ctrl-b", context: "insert" }],
+    menus: [{ surface: "compose", label: "Bold \u2014 **text**", group: 1, order: 1, chip: "B" }],
     palette: false,
-    parityExempt:
-      "Keyboard-only by decision (#54): a custom mobile format bar duplicates the native selection callout poorly, and doing it properly needs native UIEditMenuInteraction / Android ActionMode work.",
+    parityExempt: FORMAT_EXEMPT,
   },
   {
     id: "format-italic",
     description: "Italicise the selected text",
     requires: ["room"],
     bindings: [{ sequence: "Ctrl-i", context: "insert" }],
+    menus: [{ surface: "compose", label: "Italic \u2014 *text*", group: 1, order: 2, chip: "I" }],
     palette: false,
-    parityExempt:
-      "Keyboard-only by decision (#54): a custom mobile format bar duplicates the native selection callout poorly, and doing it properly needs native UIEditMenuInteraction / Android ActionMode work.",
+    parityExempt: FORMAT_EXEMPT,
   },
   {
     id: "format-underline",
     description: "Underline the selected text",
     requires: ["room"],
     bindings: [{ sequence: "Ctrl-u", context: "insert" }],
+    menus: [{ surface: "compose", label: "Underline \u2014 __text__", group: 1, order: 3, chip: "U" }],
     palette: false,
-    parityExempt:
-      "Keyboard-only by decision (#54): a custom mobile format bar duplicates the native selection callout poorly, and doing it properly needs native UIEditMenuInteraction / Android ActionMode work.",
+    parityExempt: FORMAT_EXEMPT,
   },
   {
     id: "format-strikethrough",
@@ -491,9 +571,78 @@ const ACTION_LITERALS = [
     requires: ["room"],
     // Shift because there is no conventional bare chord for strikethrough.
     bindings: [{ sequence: "Ctrl-Shift-x", context: "insert" }],
+    menus: [{ surface: "compose", label: "Strikethrough \u2014 ~~text~~", group: 1, order: 4, chip: "S" }],
+    palette: false,
+    parityExempt: FORMAT_EXEMPT,
+  },
+  {
+    id: "format-spoiler",
+    description: "Mark the selected text as a spoiler",
+    requires: ["room"],
+    menus: [{ surface: "compose", label: "Spoiler \u2014 ||text||", group: 1, order: 5, chip: "\u2016" }],
+    palette: false,
+    parityExempt: FORMAT_EXEMPT,
+  },
+  {
+    id: "format-code",
+    description: "Mark the selected text as inline code",
+    requires: ["room"],
+    menus: [{ surface: "compose", label: "Inline code \u2014 `text`", group: 1, order: 6, chip: "`", accent: true }],
+    palette: false,
+    parityExempt: FORMAT_EXEMPT,
+  },
+  {
+    id: "cut",
+    description: "Cut the selected text",
+    requires: ["room"],
+    menus: [{ surface: "compose", label: "Cut", group: 2, order: 1, hint: "Ctrl-x" }],
+    palette: false,
+    parityExempt: EDITING_EXEMPT,
+  },
+  {
+    id: "paste",
+    description: "Paste from the clipboard",
+    requires: ["room"],
+    menus: [{ surface: "compose", label: "Paste", group: 2, order: 3, hint: "Ctrl-v" }],
+    palette: false,
+    parityExempt: EDITING_EXEMPT,
+  },
+  {
+    id: "paste-plain",
+    description: "Paste with markdown escaped",
+    requires: ["room"],
+    menus: [{ surface: "compose", label: "Paste as plain text", group: 2, order: 4, hint: "Ctrl-Shift-v" }],
+    palette: false,
+    parityExempt: EDITING_EXEMPT,
+  },
+  {
+    id: "attach-file",
+    description: "Attach a file",
+    requires: ["room"],
+    menus: [{ surface: "compose", label: "Attach file\u2026", group: 4, order: 3 }],
+    chrome: ["compose"],
     palette: false,
     parityExempt:
-      "Keyboard-only by decision (#54): a custom mobile format bar duplicates the native selection callout poorly, and doing it properly needs native UIEditMenuInteraction / Android ActionMode work.",
+      "The file dialog it opens is itself pointer-driven; `:upload` is the keyboard form it is meant to become.",
+  },
+  {
+    id: "insert-mention",
+    description: "Start a mention",
+    requires: ["room"],
+    menus: [{ surface: "compose", label: "Mention\u2026", group: 4, order: 4, hint: "@" }],
+    palette: false,
+    parityExempt:
+      "Typing `@` is the keyboard and touch form; this row only types it for you at the caret.",
+  },
+  {
+    id: "discard-draft",
+    description: "Discard the draft, its staged attachments and any pending reply; while editing a message, cancel the edit",
+    requires: ["room"],
+    // Relabelled "Cancel edit" while a message is being edited (compose_menu.ts).
+    menus: [{ surface: "compose", label: "Discard draft", group: 5, order: 3, danger: true }],
+    palette: false,
+    parityExempt:
+      "Clearing the field and pressing Escape is the keyboard and touch form; the row does both in one step, and while editing it is Escape alone.",
   },
   {
     // #117. Compose Normal resolves these insert-context chords too (they are
@@ -504,8 +653,10 @@ const ACTION_LITERALS = [
     requires: ["room"],
     command: { name: "undo", aliases: ["u"] },
     bindings: [{ sequence: "Ctrl-z", context: "insert" }],
+    // No hint: the row prints whatever the live keymap binds.
+    menus: [{ surface: "compose", label: "Undo", group: 5, order: 1 }],
     parityExempt:
-      "Editing history of the text field itself, reached by keyboard and by :undo (palette). No on-screen control: where the platform has an undo command (macOS Edit menu, iOS shake) it reaches the same history through beforeinput; Android has none.",
+      "Editing history of the text field itself, reached by keyboard, by :undo (palette) and on desktop by the compose menu's Undo row. Touch has no compose menu (#54): where the platform has an undo command (macOS Edit menu, iOS shake) it reaches the same history through beforeinput; Android has none.",
   },
   {
     id: "compose-redo",
@@ -516,8 +667,9 @@ const ACTION_LITERALS = [
       { sequence: "Ctrl-Shift-z", context: "insert" },
       { sequence: "Ctrl-y", context: "insert" },
     ],
+    menus: [{ surface: "compose", label: "Redo", group: 5, order: 2 }],
     parityExempt:
-      "Editing history of the text field itself, reached by keyboard and by :redo (palette). The platform's own redo never has anything to redo (no native undo runs), so there is no touch route.",
+      "Editing history of the text field itself, reached by keyboard, by :redo (palette) and on desktop by the compose menu's Redo row. Touch has no compose menu (#54), and the platform's own redo never has anything to redo (no native undo runs), so there is no touch route.",
   },
 
   // ── Panels and dialogs ─────────────────────────────────────────────────
