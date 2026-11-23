@@ -14,9 +14,9 @@ export interface CacheStats {
 
 const _now = Date.now();
 const MOCK_ROOMS: RoomInfo[] = [
-  { room_id: "!general:matrix.org", name: "general", topic: "General discussion", avatar_url: null, unread_count: 3, notification_count: 1, is_direct: false, is_encrypted: true, member_count: 42, last_activity_ts: _now - 5 * 60_000, muted: false },
-  { room_id: "!dev:matrix.org", name: "dev", topic: "Development talk", avatar_url: null, unread_count: 0, notification_count: 0, is_direct: false, is_encrypted: true, member_count: 18, last_activity_ts: _now - 2 * 60 * 60_000, muted: false },
-  { room_id: "!random:matrix.org", name: "random", topic: "Off-topic banter", avatar_url: null, unread_count: 12, notification_count: 0, is_direct: false, is_encrypted: false, member_count: 35, last_activity_ts: _now - 30 * 60_000, muted: true },
+  { room_id: "!general:matrix.org", name: "general", topic: "General discussion", avatar_url: null, unread_count: 3, notification_count: 1, is_direct: false, is_encrypted: true, member_count: 42, last_activity_ts: _now - 5 * 60_000, muted: false, tags: ["m.favourite"] },
+  { room_id: "!dev:matrix.org", name: "dev", topic: "Development talk", avatar_url: null, unread_count: 0, notification_count: 0, is_direct: false, is_encrypted: true, member_count: 18, last_activity_ts: _now - 2 * 60 * 60_000, muted: false, tags: ["u.work"] },
+  { room_id: "!random:matrix.org", name: "random", topic: "Off-topic banter", avatar_url: null, unread_count: 12, notification_count: 0, is_direct: false, is_encrypted: false, member_count: 35, last_activity_ts: _now - 30 * 60_000, muted: true, tags: ["m.lowpriority"] },
   { room_id: "!dm-alice:matrix.org", name: "Alice", topic: null, avatar_url: null, unread_count: 1, notification_count: 0, is_direct: true, is_encrypted: true, member_count: 2, last_activity_ts: _now - 10 * 60_000, muted: false },
   { room_id: "!dm-bob:matrix.org", name: "Bob", topic: null, avatar_url: null, unread_count: 0, notification_count: 0, is_direct: true, is_encrypted: true, member_count: 2, last_activity_ts: _now - 3 * 60 * 60_000, muted: false },
 ];
@@ -58,6 +58,9 @@ function mockSpaceChildren(spaceId: string): SpaceChild[] {
 }
 
 let msgCounter = 100;
+
+/** Mock `tel.quark.room_views` account data; null until something is saved. */
+let _mockRoomViews: unknown = null;
 
 /** Mock `[user_colors]` — kept across calls so a local override set from the
  *  profile popup survives the next `get_app_config`. */
@@ -318,6 +321,26 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       return null;
     case "get_rooms":
       return MOCK_ROOMS;
+    case "get_room_views":
+      return _mockRoomViews;
+    case "set_room_views":
+      _mockRoomViews = structuredClone(args?.content ?? null);
+      return null;
+    case "set_room_tag": {
+      const room = MOCK_ROOMS.find((r) => r.room_id === args?.roomId);
+      if (!room) throw new Error("You are not in this room");
+      const tag = args?.tag as string;
+      const exclusive: Record<string, string> = { "m.favourite": "m.lowpriority", "m.lowpriority": "m.favourite" };
+      const tags = new Set(room.tags ?? []);
+      if (args?.on) {
+        tags.add(tag);
+        if (exclusive[tag]) tags.delete(exclusive[tag]);
+      } else {
+        tags.delete(tag);
+      }
+      room.tags = [...tags].sort();
+      return null;
+    }
     case "get_timeline":
       return { events: MOCK_TIMELINE, prev_batch: null };
     case "open_room_timeline":
