@@ -21,6 +21,7 @@ describe("pseudo_spaces", () => {
       expect(isPseudoSpace("__home__")).toBe(true);
       expect(isPseudoSpace("__dms__")).toBe(true);
       expect(isPseudoSpace("__groups__")).toBe(true);
+      expect(isPseudoSpace("__all__")).toBe(true);
     });
 
     it("rejects real space ids", () => {
@@ -90,6 +91,17 @@ describe("pseudo_spaces", () => {
     it("excludes regular rooms that belong to a space", () => {
       const r = room({ room_id: "!a:s", is_direct: false });
       expect(filter(r, new Set(["!a:s"]))).toBe(false);
+    });
+  });
+
+  describe("__all__ filter — every joined room", () => {
+    const filter = getPseudoSpace("__all__")!.filter;
+
+    it("includes spaced rooms, unspaced rooms and DMs alike", () => {
+      const spaced = new Set(["!in:s"]);
+      expect(filter(room({ room_id: "!in:s" }), spaced)).toBe(true);
+      expect(filter(room({ room_id: "!out:s" }), spaced)).toBe(true);
+      expect(filter(room({ room_id: "!dm:s", is_direct: true }), spaced)).toBe(true);
     });
   });
 

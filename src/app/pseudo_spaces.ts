@@ -36,6 +36,16 @@ export const PSEUDO_SPACES: PseudoSpace[] = [
     filter: (r, spaceRoomIds) => r.is_direct || !spaceRoomIds.has(r.room_id),
   },
   {
+    // Every joined room in one recency-sorted list. On desktop Home opens the
+    // DM canvas rather than a list, so before this the whole list was only on
+    // screen at startup, before any space had been picked.
+    id: "__all__",
+    label: "All Rooms",
+    icon: "≡",
+    position: "top",
+    filter: () => true,
+  },
+  {
     id: "__dms__",
     label: "Direct Messages",
     icon: "✉",
