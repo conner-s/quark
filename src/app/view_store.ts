@@ -9,6 +9,14 @@
 // set and undo the change on screen for a moment, so while a write is waiting
 // for its echo, a read that doesn't match it is ignored — for a while: if the
 // echo never comes (another device wrote over it), the store wins.
+//
+// A write replaces the whole set, so it must start from the account's real
+// one. The store is wired to the backend from the start (not when the UI
+// binds, which a restored session reaches only after its first room-list
+// load), and the first change of a session waits for one read from the
+// homeserver itself: the sync store can be behind it, as on a new device
+// before its first sync. If that read fails, the change is refused rather than
+// written over tabs this device hasn't seen.
 
 import { AppState } from "./state.js";
 import {
@@ -22,9 +30,14 @@ import {
   type RoomView,
   type ViewContext,
 } from "./room_views.js";
+import { fetchRoomViews, getRoomViews, setRoomViews } from "../ipc/index.js";
+import { showError } from "../ui/NotificationToast.js";
 
 export interface ViewStoreIpc {
+  /** The set as the sync store has it. */
   getRoomViews(): Promise<unknown>;
+  /** The set as the homeserver has it (a request). */
+  fetchRoomViews(): Promise<unknown>;
   setRoomViews(content: Record<string, unknown>): Promise<void>;
 }
 
@@ -44,19 +57,40 @@ export function canonicalJson(value: unknown): string {
   );
 }
 
-let _ipc: ViewStoreIpc | null = null;
-let _onError: (message: string) => void = () => {};
+// Looked up at call time, not here: a test that mocks the IPC module wholesale
+// may not define these, and never calls them.
+const BACKEND: ViewStoreIpc = {
+  getRoomViews: () => getRoomViews(),
+  fetchRoomViews: () => fetchRoomViews(),
+  setRoomViews: (content) => setRoomViews(content),
+};
+
+let _ipc: ViewStoreIpc = BACKEND;
+let _onError: (message: string) => void = (message) => showError(message);
 let _pending: { json: string; at: number } | null = null;
 let _writeChain: Promise<void> = Promise.resolve();
 let _now: () => number = () => Date.now();
+/** This session's read from the homeserver: under way, or done. */
+let _serverRead: Promise<boolean> | null = null;
+let _serverReadDone = false;
+let _serverReadError = "";
+/** Whether a stored set has been seen this session (from the store or the server). */
+let _seenStored = false;
 
-/** Wire the store to the backend. Called once at startup (and by tests). */
+/**
+ * Swap the backend and error reporting, and start a fresh session's state.
+ * Tests use it; the app runs on the defaults.
+ */
 export function initViewStore(ipc: ViewStoreIpc, onError: (message: string) => void, now?: () => number): void {
   _ipc = ipc;
   _onError = onError;
   _pending = null;
   _writeChain = Promise.resolve();
-  if (now) _now = now;
+  _serverRead = null;
+  _serverReadDone = false;
+  _serverReadError = "";
+  _seenStored = false;
+  _now = now ?? (() => Date.now());
 }
 
 // ── Reads ────────────────────────────────────────────────────────────────────
@@ -84,9 +118,15 @@ export function viewContext(): ViewContext {
   };
 }
 
+/** Show a set read from the store or the server, if it differs. */
+function show(content: unknown): void {
+  if (content !== null && content !== undefined) _seenStored = true;
+  const next = parseViews(content);
+  if (JSON.stringify(next) !== JSON.stringify(allViews())) AppState.set("roomViews", next);
+}
+
 /** Re-read the tabs from the store; part of every room-list refresh. */
 export async function loadViews(): Promise<void> {
-  if (!_ipc) return;
   let content: unknown;
   try {
     content = await _ipc.getRoomViews();
@@ -94,6 +134,9 @@ export async function loadViews(): Promise<void> {
     console.warn("Failed to read room-list tabs:", err);
     return;
   }
+  // Nothing in the store after a set was seen means the store hasn't heard
+  // yet (a new device before its first sync): nothing ever writes "no tabs".
+  if ((content === null || content === undefined) && _seenStored) return;
   const json = canonicalJson(content);
   if (_pending) {
     if (json === _pending.json) {
@@ -104,20 +147,69 @@ export async function loadViews(): Promise<void> {
       _pending = null;
     }
   }
-  const next = parseViews(content);
-  if (JSON.stringify(next) !== JSON.stringify(allViews())) AppState.set("roomViews", next);
+  show(content);
+}
+
+/**
+ * Read the set from the homeserver, once a session. Resolves false when it
+ * can't (the reason kept in `_serverReadError`); a failed read is tried again
+ * by the next caller.
+ */
+function readServerOnce(): Promise<boolean> {
+  _serverRead ??= (async () => {
+    try {
+      const content = await _ipc.fetchRoomViews();
+      // The store may still be behind; hold this set against it like a write.
+      _pending = { json: canonicalJson(content), at: _now() };
+      show(content);
+      _serverReadDone = true;
+      return true;
+    } catch (err) {
+      _serverRead = null;
+      _serverReadError = err instanceof Error ? err.message : String(err);
+      return false;
+    }
+  })();
+  return _serverRead;
+}
+
+/**
+ * Read the account's tabs from the homeserver now, so the session's first
+ * change needn't wait for it. Quiet: if it fails, that change tries again and
+ * reports.
+ */
+export function prepareViews(): Promise<boolean> {
+  return readServerOnce();
 }
 
 // ── Writes ───────────────────────────────────────────────────────────────────
 
+/**
+ * Make a change to the set: `fn` gets the current set and returns the next
+ * (or null for no change). Applies at once once this session has read the
+ * server; the first change waits for that read and applies to what it found.
+ */
+function change(fn: (views: RoomView[]) => RoomView[] | null): Promise<void> {
+  const apply = (): Promise<void> => {
+    const next = fn(allViews());
+    return next ? saveViews(next) : Promise.resolve();
+  };
+  if (_serverReadDone) return apply();
+  return readServerOnce().then((ok) => {
+    if (ok) return apply();
+    // Not written over tabs this device hasn't seen.
+    _onError(`Couldn't load your tabs from the server, so that change wasn't saved: ${_serverReadError}`);
+  });
+}
+
 /** Show `next` at once and save it. A failed save puts the previous set back. */
-export function saveViews(next: RoomView[]): Promise<void> {
+function saveViews(next: RoomView[]): Promise<void> {
   const previous = allViews();
   AppState.set("roomViews", next);
+  _seenStored = true;
   const content = serializeViews(next);
   _pending = { json: canonicalJson(content), at: _now() };
   _writeChain = _writeChain.then(async () => {
-    if (!_ipc) return;
     try {
       await _ipc.setRoomViews(content);
     } catch (err) {
@@ -131,9 +223,9 @@ export function saveViews(next: RoomView[]): Promise<void> {
 }
 
 function replace(id: string, fn: (v: RoomView) => RoomView): Promise<void> {
-  const views = allViews();
-  if (!views.some((v) => v.id === id)) return Promise.resolve();
-  return saveViews(views.map((v) => (v.id === id ? fn(cloneView(v)) : v)));
+  return change((views) =>
+    views.some((v) => v.id === id) ? views.map((v) => (v.id === id ? fn(cloneView(v)) : v)) : null,
+  );
 }
 
 export const updateView = (id: string, patch: Partial<Omit<RoomView, "id">>): Promise<void> =>
@@ -149,13 +241,13 @@ export function resetView(id: string): Promise<void> {
 
 /** Add a tab at the end of its position group. */
 export function addView(view: RoomView): Promise<void> {
-  return saveViews([...allViews(), cloneView(view)]);
+  return change((views) => [...views, cloneView(view)]);
 }
 
 /** Delete a custom tab. Built-ins can only be hidden. */
 export function deleteView(id: string): Promise<void> {
   if (isBuiltinView(id)) return Promise.resolve();
-  return saveViews(allViews().filter((v) => v.id !== id));
+  return change((views) => (views.some((v) => v.id === id) ? views.filter((v) => v.id !== id) : null));
 }
 
 /**
@@ -164,18 +256,18 @@ export function deleteView(id: string): Promise<void> {
  * their place in the stored list.
  */
 export function moveView(id: string, delta: -1 | 1): Promise<void> {
-  const views = allViews();
-  const view = views.find((v) => v.id === id);
-  if (!view) return Promise.resolve();
-  const peers = views.filter((v) => v.position === view.position && (!v.hidden || v.id === id));
-  const at = peers.findIndex((v) => v.id === id);
-  const other = peers[at + delta];
-  if (!other) return Promise.resolve();
-  const i = views.indexOf(view);
-  const j = views.indexOf(other);
-  const next = [...views];
-  [next[i], next[j]] = [next[j], next[i]];
-  return saveViews(next);
+  return change((views) => {
+    const view = views.find((v) => v.id === id);
+    if (!view) return null;
+    const peers = views.filter((v) => v.position === view.position && (!v.hidden || v.id === id));
+    const other = peers[peers.findIndex((v) => v.id === id) + delta];
+    if (!other) return null;
+    const i = views.indexOf(view);
+    const j = views.indexOf(other);
+    const next = [...views];
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  });
 }
 
 /** Whether `moveView(id, delta)` would move anything. */

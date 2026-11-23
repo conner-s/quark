@@ -13,7 +13,7 @@ const { AppState } = await import("../state.js");
 const { RoomList } = await import("../../ui/RoomList.js");
 const { showError } = await import("../../ui/NotificationToast.js");
 const { ALL_VIEW_ID, DMS_VIEW_ID, newView, parseViews, serializeViews } = await import("../room_views.js");
-const { getView, initViewStore } = await import("../view_store.js");
+const { getView, initViewStore, prepareViews } = await import("../view_store.js");
 type ContextMenuItem = import("../../ui/ContextMenu.js").ContextMenuItem;
 
 let roomList: InstanceType<typeof RoomList>;
@@ -21,7 +21,7 @@ let unbind: () => void;
 const title = () => roomList.getHeaderElement().querySelector(".room-list__header-label")!.textContent;
 const sortBtn = () => roomList.getHeaderElement().querySelector<HTMLButtonElement>(".room-list__header-sort")!;
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   roomList = new RoomList();
   setComponents({ roomList } as never);
@@ -31,7 +31,9 @@ beforeEach(() => {
     topLevelSpaces: [{ id: "!work:x", name: "Work" }],
     roomListCache: [],
   });
-  initViewStore({ getRoomViews: async () => serializeViews(AppState.get("roomViews")), setRoomViews: vi.fn(async () => {}) }, vi.fn());
+  const current = async () => serializeViews(AppState.get("roomViews"));
+  initViewStore({ getRoomViews: current, fetchRoomViews: current, setRoomViews: vi.fn(async () => {}) }, vi.fn());
+  await prepareViews();
   unbind = bindRoomListHeader();
 });
 

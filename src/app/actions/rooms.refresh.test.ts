@@ -32,7 +32,7 @@ const { RoomList } = await import("../../ui/RoomList.js");
 const ipc = await import("../../ipc/index.js");
 const { showError } = await import("../../ui/NotificationToast.js");
 const { newView, parseViews, serializeViews } = await import("../room_views.js");
-const { initViewStore } = await import("../view_store.js");
+const { initViewStore, prepareViews } = await import("../view_store.js");
 type RoomView = import("../room_views.js").RoomView;
 
 function room(id: string): RoomInfo {
@@ -201,7 +201,9 @@ describe("tabs", () => {
   beforeEach(async () => {
     // The refresh merges with the last membership it published; start clean.
     AppState.set("spaceMembers", null);
-    initViewStore({ getRoomViews: async () => serializeViews(AppState.get("roomViews")), setRoomViews }, vi.fn());
+    const current = async () => serializeViews(AppState.get("roomViews"));
+    initViewStore({ getRoomViews: current, fetchRoomViews: current, setRoomViews }, vi.fn());
+    await prepareViews();
     vi.mocked(ipc.getRooms).mockResolvedValue([room("!a:x"), room("!b:x"), room("!c:x")]);
     vi.mocked(ipc.getSpaceChildren).mockResolvedValue([child("!a:x"), child("!b:x")]);
   });

@@ -194,6 +194,7 @@ pub fn run() {
             // Rooms
             commands::get_rooms,
             commands::get_room_views,
+            commands::fetch_room_views,
             commands::set_room_views,
             commands::set_room_tag,
             commands::find_dm_room,

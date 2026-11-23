@@ -511,6 +511,14 @@ pub async fn get_room_views(state: State<'_, MatrixState>) -> Result<serde_json:
     Ok(crate::matrix::room_views::get_room_views(&client).await)
 }
 
+/// The account's tab definitions as the homeserver has them, or null. A
+/// request; the view store makes it once before its first write.
+#[tauri::command]
+pub async fn fetch_room_views(state: State<'_, MatrixState>) -> Result<serde_json::Value, String> {
+    let client = get_client(&state)?;
+    crate::matrix::room_views::fetch_room_views(&client).await
+}
+
 #[tauri::command]
 pub async fn set_room_views(state: State<'_, MatrixState>, content: serde_json::Value) -> Result<(), String> {
     let client = get_client(&state)?;

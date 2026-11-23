@@ -2,16 +2,17 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { TabsDialog } from "./TabsDialog.js";
 import { AppState } from "../app/state.js";
 import { ALL_VIEW_ID, HOME_VIEW_ID, parseViews } from "../app/room_views.js";
-import { allViews, getView, initViewStore } from "../app/view_store.js";
+import { allViews, getView, initViewStore, prepareViews } from "../app/view_store.js";
 
 const setRoomViews = vi.fn(async () => {});
 let dlg: TabsDialog;
 
-beforeEach(() => {
+beforeEach(async () => {
   setRoomViews.mockClear();
   AppState.set("roomViews", parseViews(null));
   AppState.set("topLevelSpaces", [{ id: "!work:x", name: "Work" }, { id: "!play:x", name: "Play" }]);
-  initViewStore({ getRoomViews: async () => null, setRoomViews }, vi.fn());
+  initViewStore({ getRoomViews: async () => null, fetchRoomViews: async () => null, setRoomViews }, vi.fn());
+  await prepareViews();
   dlg = new TabsDialog();
   document.body.appendChild(dlg.getElement());
 });
