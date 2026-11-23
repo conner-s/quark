@@ -67,10 +67,12 @@ import {
   createTab,
   currentTabId,
   deleteTab,
+  groupTab,
   hideTab,
   openTabEditor,
   resetTab,
   setTag,
+  sortTab,
   withCurrentTab,
 } from "./views.js";
 import { FAVOURITE_TAG } from "../room_views.js";
@@ -478,6 +480,20 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
 
     case "hide-tab": {
       withCurrentTab(hideTab);
+      break;
+    }
+
+    case "sort-tab": {
+      const typed = parsed.args.join(" ");
+      if (!typed.trim()) return usageError(entry);
+      sortTab(typed);
+      break;
+    }
+
+    case "group-tab": {
+      const typed = parsed.args.join(" ");
+      if (!typed.trim()) return usageError(entry);
+      groupTab(typed);
       break;
     }
 

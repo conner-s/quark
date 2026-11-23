@@ -66,6 +66,7 @@ const CHROME_TOUCH: Readonly<Record<ChromeSurface, boolean>> = {
   "status-bar": true,
   "drawer": true,
   "settings": true,
+  "room-list-header": true,
 };
 
 /** Whether a piece of chrome is visible on desktop. */
@@ -79,6 +80,7 @@ const CHROME_POINTER: Readonly<Record<ChromeSurface, boolean>> = {
   "status-bar": true,
   "drawer": true,
   "settings": true,
+  "room-list-header": true,
 };
 
 export interface Reachability {

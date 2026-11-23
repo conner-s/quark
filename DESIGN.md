@@ -1105,6 +1105,14 @@ own Back / Forward / Reload menu. From the keyboard `:newtab [name]`, `:hidetab`
 A hidden tab comes back from `:tabs`. Hiding the tab being viewed moves to the
 first visible one.
 
+**The room list header** names what is listed: the tab's name (the startup
+list is the first visible tab's), or the space's. For a tab, a sort button
+beside the `+` shows its sort (`recent ▾`, `a–z ▾`, …) and opens a menu of
+every sort and grouping, the current ones ticked, and **Edit tab…**. A space
+has no sort button, because its order is the space's own. `:sort
+recent|unread|name|hand` and `:group none|kind|space|tag` do the same from the
+keyboard, on the tab being viewed.
+
 **Storage.** One global account-data event, `tel.quark.room_views`, so the
 same tabs follow the account to every device:
 

@@ -48,6 +48,9 @@ export class RoomList {
   private _onSelect: ((id: string) => void) | null = null;
   private _onContextMenu: ((roomId: string, x: number, y: number) => void) | null = null;
   private _onSectionContextMenu: ((spaceId: string, x: number, y: number) => void) | null = null;
+  private _titleEl: HTMLElement;
+  private _sortBtnEl: HTMLButtonElement;
+  private _onSortClick: ((x: number, y: number) => void) | null = null;
   private _createBtnEl: HTMLButtonElement;
   private _onCreateClick: ((x: number, y: number) => void) | null = null;
   private _onReorder: ((orderKey: string, roomIds: string[], movedRoomId: string) => void) | null = null;
@@ -59,10 +62,25 @@ export class RoomList {
     this._headerEl = document.createElement("div");
     this._headerEl.className = "room-list__header";
 
-    const headerLabel = document.createElement("span");
-    headerLabel.className = "room-list__header-label";
-    headerLabel.textContent = "Rooms";
-    this._headerEl.appendChild(headerLabel);
+    // Names what is listed: the tab's label, or the space's name.
+    this._titleEl = document.createElement("span");
+    this._titleEl.className = "room-list__header-label";
+    this._titleEl.textContent = "Rooms";
+    this._headerEl.appendChild(this._titleEl);
+
+    // The tab's sort, which opens a menu to change it (and its grouping).
+    // Hidden for a space, whose order is the space's own.
+    this._sortBtnEl = document.createElement("button");
+    this._sortBtnEl.type = "button";
+    this._sortBtnEl.className = "room-list__header-sort";
+    this._sortBtnEl.hidden = true;
+    this._sortBtnEl.setAttribute("aria-haspopup", "menu");
+    this._sortBtnEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const rect = this._sortBtnEl.getBoundingClientRect();
+      this._onSortClick?.(rect.left, rect.bottom);
+    });
+    this._headerEl.appendChild(this._sortBtnEl);
 
     // The header's `+` opens the create menu: new room, new space, browse the
     // directory. It used to open the directory outright — joining was the only
@@ -130,6 +148,25 @@ export class RoomList {
   /** Header element exposed so callers can wire mobile drawer-close behaviour. */
   getHeaderElement(): HTMLElement {
     return this._headerEl;
+  }
+
+  /** Name what the list shows: the tab's label, or the space's name. */
+  setTitle(title: string): void {
+    this._titleEl.textContent = title;
+    this._titleEl.title = title;
+  }
+
+  /** Show the tab's sort on the header's sort button, or hide it (`null`). */
+  setSortLabel(label: string | null): void {
+    this._sortBtnEl.hidden = label === null;
+    this._sortBtnEl.textContent = label === null ? "" : `${label} ▾`;
+    this._sortBtnEl.setAttribute("aria-label", label === null ? "" : `Sorted by ${label}; change sort or grouping`);
+    this._sortBtnEl.title = "Sort and group this tab";
+  }
+
+  /** Wire the header's sort button (opens the sort menu at the given point). */
+  onSortClick(handler: (x: number, y: number) => void): void {
+    this._onSortClick = handler;
   }
 
   /** Wire the header's `+` (opens the create menu at the given point). */

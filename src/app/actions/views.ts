@@ -5,12 +5,17 @@ import { AppState } from "../state.js";
 import { isMobile } from "../mobile.js";
 import {
   FAVOURITE_TAG,
+  GROUP_OPTIONS,
   LOW_PRIORITY_TAG,
+  SORT_OPTIONS,
+  SORT_SHORT,
   isBuiltinView,
   matchesView,
   mergeManualOrder,
   newView,
   normalizeTag,
+  parseGroupBy,
+  parseSort,
   sortRooms,
   tagLabel,
 } from "../room_views.js";
@@ -30,6 +35,7 @@ import {
 import { getRoomViews, setRoomViews, setRoomTag } from "../../ipc/index.js";
 import { showError, showSuccess, showToast } from "../../ui/NotificationToast.js";
 import { askConfirm } from "../../ui/ConfirmDialog.js";
+import type { ContextMenuEntry } from "../../ui/ContextMenu.js";
 import { getComponents } from "./context.js";
 import { rerenderViewList, selectSpace } from "./rooms.js";
 
@@ -63,6 +69,82 @@ export function bindRoomViews(): () => void {
     }
     rerenderViewList();
   });
+}
+
+// ── The room list header ─────────────────────────────────────────────────────
+
+/** A space's name for the header, or "Rooms" when it isn't known yet. */
+function spaceTitle(spaceId: string): string {
+  return AppState.get("topLevelSpaces").find((s) => s.id === spaceId)?.name
+    ?? AppState.get("roomListCache").find((r) => r.room_id === spaceId)?.name
+    ?? "Rooms";
+}
+
+/**
+ * Keep the room list header naming what is listed — the tab's label or the
+ * space's name — and, for a tab, showing its sort. Returns an unbind function.
+ */
+export function bindRoomListHeader(): () => void {
+  const { roomList } = getComponents();
+  const update = (): void => {
+    // Nothing selected yet is the startup list, which is the default tab's.
+    const id = AppState.get("currentSpaceId") ?? defaultViewId();
+    const view = getView(id);
+    roomList.setTitle(view ? view.label : spaceTitle(id));
+    roomList.setSortLabel(view ? SORT_SHORT[view.sort] : null);
+  };
+  update();
+  const unbind = [
+    AppState.on("currentSpaceId", update),
+    AppState.on("roomViews", update),
+    AppState.on("topLevelSpaces", update),
+  ];
+  return () => unbind.forEach((off) => off());
+}
+
+/**
+ * The header's sort menu for a tab: each sort, each grouping (the current
+ * ones ticked), and the tab's editor for the rest.
+ */
+export function tabSortMenu(viewId: string): ContextMenuEntry[] {
+  const view = getView(viewId);
+  if (!view) return [];
+  const tick = (on: boolean) => (on ? { hint: "✓" } : {});
+  return [
+    ...SORT_OPTIONS.map(([sort, label]): ContextMenuEntry => ({
+      label: `sort: ${label}`,
+      ...tick(view.sort === sort),
+      action: () => void updateView(viewId, { sort }),
+    })),
+    { separator: true },
+    ...GROUP_OPTIONS.map(([groupBy, label]): ContextMenuEntry => ({
+      label: `group: ${label}`,
+      ...tick(view.groupBy === groupBy),
+      action: () => void updateView(viewId, { groupBy }),
+    })),
+    { separator: true },
+    { label: "Edit tab…", action: () => openTabEditor(viewId) },
+  ];
+}
+
+/** `:sort <how>` on the tab being viewed. */
+export function sortTab(typed: string): void {
+  const sort = parseSort(typed);
+  if (!sort) {
+    showError("Usage: :sort recent|unread|name|hand");
+    return;
+  }
+  withCurrentTab((id) => updateView(id, { sort }));
+}
+
+/** `:group <how>` on the tab being viewed. */
+export function groupTab(typed: string): void {
+  const groupBy = parseGroupBy(typed);
+  if (!groupBy) {
+    showError("Usage: :group none|kind|space|tag");
+    return;
+  }
+  withCurrentTab((id) => updateView(id, { groupBy }));
 }
 
 // ── The tab menu ─────────────────────────────────────────────────────────────
