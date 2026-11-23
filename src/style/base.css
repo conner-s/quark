@@ -309,9 +309,11 @@ body.quark-modal-open .input-bar__field {
   flex-shrink: 0;
 }
 
-/* Pushes the directory button to the right edge in both the desktop header and
- * the mobile one, which is already a flex row with a ◀ pseudo-element. */
+/* Takes the free width, pushing the sort and `+` buttons to the right edge in
+ * both the desktop header and the mobile one, which is already a flex row with
+ * a ◀ pseudo-element. */
 .room-list__header-label {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -319,7 +321,7 @@ body.quark-modal-open .input-bar__field {
 }
 
 .room-list__header-btn {
-  margin-left: auto;
+  margin-left: 6px;
   flex-shrink: 0;
   background: transparent;
   border: none;
@@ -332,6 +334,35 @@ body.quark-modal-open .input-bar__field {
 }
 
 .room-list__header-btn:hover {
+  color: var(--accent-primary);
+}
+
+/* The tab's sort: lower-case like the rest of the chrome, beside the `+`. */
+.room-list__header-sort {
+  flex-shrink: 0;
+  margin-left: 6px;
+  background: transparent;
+  border: none;
+  padding: 0 2px;
+  color: var(--roomlist-muted);
+  font-family: var(--font-family);
+  font-size: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.room-list__header-sort:hover {
+  color: var(--accent-primary);
+}
+
+.room-list__header-sort[hidden] {
+  display: none;
+}
+
+body.quark-mobile .room-list__header-sort {
+  min-height: 44px;
   color: var(--accent-primary);
 }
 

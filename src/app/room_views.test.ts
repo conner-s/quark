@@ -292,3 +292,16 @@ describe("helpers", () => {
     expect(newView("", [a.id]).label).toBe("New tab");
   });
 });
+
+describe("parseSort / parseGroupBy", () => {
+  it("take the stored names and the words people type", async () => {
+    const { parseSort, parseGroupBy } = await import("./room_views.js");
+    expect(parseSort("hand")).toBe("manual");
+    expect(parseSort(" A-Z ")).toBe("name");
+    expect(parseSort("unread")).toBe("unread");
+    expect(parseSort("sideways")).toBeNull();
+    expect(parseGroupBy("tags")).toBe("tag");
+    expect(parseGroupBy("off")).toBe("none");
+    expect(parseGroupBy("nope")).toBeNull();
+  });
+});

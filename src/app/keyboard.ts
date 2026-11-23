@@ -82,8 +82,8 @@ import {
   roomTags,
   knownTags,
 } from "./actions.js";
-import { currentTabId, resetTab, withCurrentTab } from "./actions/views.js";
-import { canMoveView, getView, moveView } from "./view_store.js";
+import { bindRoomListHeader, currentTabId, resetTab, tabSortMenu, withCurrentTab } from "./actions/views.js";
+import { canMoveView, defaultViewId, getView, moveView } from "./view_store.js";
 import { FAVOURITE_TAG, isBuiltinView } from "./room_views.js";
 import { AppState } from "./state.js";
 import { resolveComposeSubmit } from "./compose_submit.js";
@@ -1404,6 +1404,13 @@ export function setupKeyboard(components: AppComponents): void {
   components.tabsDialog.onDelete((viewId) => void deleteTab(viewId));
   components.tabsDialog.setKnownTags(knownTags);
   bindRoomViews();
+
+  // The room list header: what is listed, and for a tab its sort menu.
+  bindRoomListHeader();
+  roomList.onSortClick((x, y) => {
+    const viewId = currentTabId() ?? defaultViewId();
+    contextMenu.show(x, y, tabSortMenu(viewId));
+  });
 
   // The room list header's `+`: new room / new space / directory.
   roomList.onCreateClick((x, y) => {

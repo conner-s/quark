@@ -81,7 +81,9 @@ export type ChromeSurface =
   | "status-bar"
   | "drawer"
   | "settings"
-  | "timeline";
+  | "timeline"
+  /** The room list header's sort button, shown while a tab is listed. */
+  | "room-list-header";
 
 export interface BindingSpec {
   /** Key sequence in keymapManager's syntax, e.g. "gg" or "Ctrl-e". */
@@ -1005,6 +1007,20 @@ const ACTION_LITERALS = [
     requires: ["session"],
     menus: [{ surface: "tab", label: "Move down", group: 2, order: 2 }],
     palette: true,
+  },
+  {
+    id: "sort-tab",
+    description: "Sort the tab being viewed: recent, unread, name, or by hand",
+    requires: ["session"],
+    command: { name: "sort", args: "<recent|unread|name|hand>" },
+    chrome: ["room-list-header"],
+  },
+  {
+    id: "group-tab",
+    description: "Group the tab being viewed: none, kind, space, or tag",
+    requires: ["session"],
+    command: { name: "group", args: "<none|kind|space|tag>" },
+    chrome: ["room-list-header"],
   },
   {
     id: "reset-tab",

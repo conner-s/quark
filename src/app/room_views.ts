@@ -19,6 +19,42 @@ export type RoomScope = "all" | "unspaced" | "spaces" | "none";
 export type ViewGroupBy = "none" | "kind" | "space" | "tag";
 export type ViewSort = "recent" | "name" | "unread" | "manual";
 
+/** How each grouping reads in the tab editor and the room list header's menu. */
+export const GROUP_OPTIONS: [ViewGroupBy, string][] = [
+  ["none", "no grouping"],
+  ["kind", "DMs / rooms"],
+  ["space", "by space"],
+  ["tag", "by tag"],
+];
+
+/** How each sort reads in the tab editor and the room list header's menu. */
+export const SORT_OPTIONS: [ViewSort, string][] = [
+  ["recent", "recent activity"],
+  ["unread", "unread first"],
+  ["name", "name"],
+  ["manual", "by hand (drag, J/K)"],
+];
+
+/** The short form the room list header shows for a tab's sort. */
+export const SORT_SHORT: Record<ViewSort, string> = {
+  recent: "recent",
+  unread: "unread",
+  name: "a–z",
+  manual: "by hand",
+};
+
+/** What `:sort` and `:group` accept, beside the stored names. */
+const SORT_WORDS: Record<string, ViewSort> = { recent: "recent", activity: "recent", unread: "unread", name: "name", az: "name", "a-z": "name", manual: "manual", hand: "manual" };
+const GROUP_WORDS: Record<string, ViewGroupBy> = { none: "none", off: "none", kind: "kind", type: "kind", space: "space", spaces: "space", tag: "tag", tags: "tag" };
+
+export function parseSort(word: string): ViewSort | null {
+  return SORT_WORDS[word.trim().toLowerCase()] ?? null;
+}
+
+export function parseGroupBy(word: string): ViewGroupBy | null {
+  return GROUP_WORDS[word.trim().toLowerCase()] ?? null;
+}
+
 export interface RoomView {
   id: string;
   label: string;

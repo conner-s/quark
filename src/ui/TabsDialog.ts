@@ -16,7 +16,9 @@
 import { DialogBase } from "./DialogBase.js";
 import { AppState } from "../app/state.js";
 import {
+  GROUP_OPTIONS,
   HOME_VIEW_ID,
+  SORT_OPTIONS,
   defaultIcon,
   formatTags,
   isBuiltinView,
@@ -45,18 +47,6 @@ const SCOPE_OPTIONS: [RoomScope, string][] = [
   ["unspaced", "rooms in no space"],
   ["spaces", "rooms in chosen spaces"],
   ["none", "no rooms (DMs only)"],
-];
-const GROUP_OPTIONS: [ViewGroupBy, string][] = [
-  ["none", "no grouping"],
-  ["kind", "DMs / rooms"],
-  ["space", "by space"],
-  ["tag", "by tag"],
-];
-const SORT_OPTIONS: [ViewSort, string][] = [
-  ["recent", "recent activity"],
-  ["unread", "unread first"],
-  ["name", "name"],
-  ["manual", "by hand (drag, J/K)"],
 ];
 const POSITION_OPTIONS: [ViewPosition, string][] = [
   ["top", "above spaces"],
