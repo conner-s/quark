@@ -28,7 +28,7 @@ import {
   visibleViews,
 } from "../view_store.js";
 import { getRoomViews, setRoomViews, setRoomTag } from "../../ipc/index.js";
-import { showError, showSuccess } from "../../ui/NotificationToast.js";
+import { showError, showSuccess, showToast } from "../../ui/NotificationToast.js";
 import { askConfirm } from "../../ui/ConfirmDialog.js";
 import { getComponents } from "./context.js";
 import { rerenderViewList, selectSpace } from "./rooms.js";
@@ -120,18 +120,24 @@ export async function deleteTab(viewId: string): Promise<void> {
 // ── Hand ordering ────────────────────────────────────────────────────────────
 
 /**
- * Put one section of a hand-sorted tab in `sectionIds` order: at once in the
- * list, then in the tab's stored order (see `mergeManualOrder`).
+ * Put one section of a tab in `sectionIds` order: at once in the list, then
+ * in the tab's stored order (see `mergeManualOrder`).
+ *
+ * A tab sorted any other way becomes hand-sorted, starting from the order it
+ * was showing — so the one room moved is the only thing that changes.
  */
 export function applyViewOrder(viewId: string, orderKey: string, sectionIds: string[]): Promise<void> {
   const view = getView(viewId);
-  if (!view || view.sort !== "manual") return Promise.resolve();
+  if (!view) return Promise.resolve();
   getComponents().roomList.applySectionOrder(orderKey, sectionIds);
   const rooms = AppState.get("roomListCache");
   const ctx = viewContext();
   const shown = sortRooms(view, rooms.filter((r) => matchesView(view, r, ctx))).map((r) => r.room_id);
   const order = mergeManualOrder(view, shown, sectionIds, new Set(rooms.map((r) => r.room_id)));
-  return updateView(viewId, { order });
+  if (view.sort !== "manual") {
+    showToast(`${view.label} is now sorted by hand — change it back in :tabs`, "info");
+  }
+  return updateView(viewId, { sort: "manual", order });
 }
 
 // ── Room tags ────────────────────────────────────────────────────────────────

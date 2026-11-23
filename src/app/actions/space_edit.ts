@@ -142,14 +142,14 @@ export function applySectionOrder(orderKey: string, roomIds: string[]): Promise<
 }
 
 /**
- * Move a room one place up or down within its section of the space or
- * hand-sorted tab being viewed. Does nothing in a tab sorted any other way, or
- * at either end.
+ * Move a room one place up or down within its section of the space or tab
+ * being viewed (the first move in a tab sorted any other way makes it
+ * hand-sorted). Does nothing at either end.
  */
 export function moveRoomInSpace(roomId: string, delta: -1 | 1): Promise<void> {
   const section = getComponents().roomList.getSectionFor(roomId);
   if (!section) {
-    showError("Rooms can only be reordered inside a space, or in a tab sorted by hand");
+    showError("Rooms can only be reordered inside a space or a tab");
     return Promise.resolve();
   }
   const ids = section.roomIds;

@@ -1152,26 +1152,21 @@ export async function renderSpaceView(
 /**
  * Draw a tab's rooms into the room list and return the listed room IDs.
  *
- * An ungrouped tab that isn't sorted by hand is one flat list. Otherwise it is
- * sections: labelled groups, and — when sorted by hand — sections the room
- * list can reorder, keyed so a drop writes this tab's order. A section listing
- * a space keeps that space for its label's menu, but `orderKey: null` stops a
- * drag there from rewriting the space's own order.
+ * Every section can be reordered, keyed so a drop writes this tab's own order
+ * (`applyViewOrder`) — the first move in a tab sorted any other way turns it
+ * into a hand-sorted one. A section listing a space keeps that space for its
+ * label's menu, but its key is the tab's, so a drag there never rewrites the
+ * space's `m.space.child` order.
  */
 function renderView(view: RoomView): string[] {
   const { roomList } = getComponents();
   const sections = buildViewSections(view, AppState.get("roomListCache"), viewContext());
-  const manual = view.sort === "manual";
-  if (sections.length === 1 && !sections[0].label && !manual) {
-    roomList.setRooms(sections[0].rooms.map(roomInfoToEntry));
-  } else {
-    roomList.setSections(sections.map((s): RoomSection => ({
-      label: s.label,
-      rooms: s.rooms.map(roomInfoToEntry),
-      ...(s.spaceId ? { spaceId: s.spaceId } : {}),
-      orderKey: manual ? viewOrderKey(view.id, s.key) : null,
-    })));
-  }
+  roomList.setSections(sections.map((s): RoomSection => ({
+    label: s.label,
+    rooms: s.rooms.map(roomInfoToEntry),
+    ...(s.spaceId ? { spaceId: s.spaceId } : {}),
+    orderKey: viewOrderKey(view.id, s.key),
+  })));
   return [...new Set(sections.flatMap((s) => s.rooms.map((r) => r.room_id)))];
 }
 
