@@ -50,6 +50,8 @@ export type MenuSurface =
   | "room"
   | "space"
   | "section"
+  /** A room-list tab on the space strip (Home, All Rooms, your own). */
+  | "tab"
   /**
    * The mobile top bar's ⋮ menu. Mobile hides the desktop room header, which
    * carried the only pointer affordance for search and pinned messages, so
@@ -772,6 +774,96 @@ const ACTION_LITERALS = [
     bindings: [{ sequence: "J", context: "roomlist" }],
     menus: [{ surface: "room", label: "Move down", group: 3, order: 4 }],
     palette: true,
+  },
+
+  // ── Room tags ──────────────────────────────────────────────────────────
+  // Tabs filter and group by `m.tag`. Favourite gets a menu row each way, the
+  // same as mute; any other tag is typed (`:tag work`) or edited in the room
+  // settings' tags field.
+  {
+    id: "favourite-room",
+    description: "Mark this room as a favourite",
+    requires: ["room"],
+    command: { name: "favourite", aliases: ["fav", "favorite"] },
+    menus: [{ surface: "room", label: "Favourite", group: 3, order: 2.5 }],
+    chrome: ["settings"],
+  },
+  {
+    id: "unfavourite-room",
+    description: "Remove this room from your favourites",
+    requires: ["room"],
+    command: { name: "unfavourite", aliases: ["unfav", "unfavorite"] },
+    menus: [{ surface: "room", label: "Unfavourite", group: 3, order: 2.5 }],
+    chrome: ["settings"],
+  },
+  {
+    id: "tag-room",
+    description: "Tag this room (work, favourite, low priority, …)",
+    requires: ["room"],
+    command: { name: "tag", args: "<tag>" },
+    chrome: ["settings"],
+  },
+  {
+    id: "untag-room",
+    description: "Remove a tag from this room",
+    requires: ["room"],
+    command: { name: "untag", args: "<tag>" },
+    chrome: ["settings"],
+  },
+
+  // ── Room-list tabs ─────────────────────────────────────────────────────
+  // The tab menu is a right-click or long press on a tab in the space strip.
+  // From the keyboard each acts on the tab being viewed, and `:tabs` reaches
+  // every one of them, hidden tabs included.
+  {
+    id: "open-tabs",
+    description: "Show, hide, order and edit the room-list tabs",
+    requires: ["session"],
+    command: { name: "tabs", aliases: ["edittab"] },
+    menus: [{ surface: "tab", label: "Edit tab…", group: 1, order: 1 }],
+    chrome: ["settings"],
+  },
+  {
+    id: "new-tab",
+    description: "Add a room-list tab",
+    requires: ["session"],
+    command: { name: "newtab", aliases: ["mktab"], args: "[name]" },
+    menus: [{ surface: "tab", label: "New tab…", group: 3, order: 1 }],
+  },
+  {
+    id: "hide-tab",
+    description: "Hide the room-list tab (bring it back from :tabs)",
+    requires: ["session"],
+    command: { name: "hidetab" },
+    menus: [{ surface: "tab", label: "Hide tab", group: 1, order: 2 }],
+  },
+  {
+    id: "move-tab-up",
+    description: "Move the tab up the strip",
+    requires: ["session"],
+    menus: [{ surface: "tab", label: "Move up", group: 2, order: 1 }],
+    palette: true,
+  },
+  {
+    id: "move-tab-down",
+    description: "Move the tab down the strip",
+    requires: ["session"],
+    menus: [{ surface: "tab", label: "Move down", group: 2, order: 2 }],
+    palette: true,
+  },
+  {
+    id: "reset-tab",
+    description: "Reset a built-in tab to how it ships",
+    requires: ["session"],
+    command: { name: "resettab" },
+    menus: [{ surface: "tab", label: "Reset tab", group: 4, order: 1 }],
+  },
+  {
+    id: "delete-tab",
+    description: "Delete a tab you made",
+    requires: ["session"],
+    command: { name: "deletetab", aliases: ["rmtab"] },
+    menus: [{ surface: "tab", label: "Delete tab", group: 4, order: 2, danger: true }],
   },
 
   // ── Membership ─────────────────────────────────────────────────────────

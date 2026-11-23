@@ -30,6 +30,7 @@ const MENU_TOUCH: Readonly<Record<MenuSurface, boolean>> = {
   room: true,      // long press in the room list
   section: true,   // long press on a subspace label
   space: true,     // long press on a space icon
+  tab: true,       // long press on a tab icon
   overflow: true,  // the mobile top bar's ⋮ — mobile-only by definition
   create: true,    // the room list header's + (in the drawer on mobile)
 };
@@ -40,6 +41,7 @@ const MENU_POINTER: Readonly<Record<MenuSurface, boolean>> = {
   room: true,
   section: true,
   space: true,
+  tab: true,
   // The mobile top bar does not exist on desktop, so this surface is touch-only
   // and cannot be what makes an action pointer-reachable.
   overflow: false,

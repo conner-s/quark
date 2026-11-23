@@ -90,6 +90,18 @@ export const generalTab: SettingsTab = {
       ));
     }
 
+    // The tabs live in account data and save as they are edited, so they get
+    // their own dialog rather than riding on this tab's [save].
+    section.appendChild(controls.sectionTitle("Room list"));
+    section.appendChild(controls.dispatchButton(
+      "[room-list tabs]",
+      "Show, hide, order and edit the room-list tabs",
+      () => {
+        ctx.close();
+        ctx.dispatch("open-tabs");
+      },
+    ));
+
     section.appendChild(controls.sectionTitle("Home"));
 
     section.appendChild(controls.numberRow(

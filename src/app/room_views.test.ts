@@ -6,6 +6,8 @@ import {
   GROUPS_VIEW_ID,
   HOME_VIEW_ID,
   buildViewSections,
+  formatTags,
+  parseTags,
   builtinView,
   matchesView,
   mergeManualOrder,
@@ -16,6 +18,8 @@ import {
   sortRooms,
   stripOrder,
   tagLabel,
+  viewIdFromOrderKey,
+  viewOrderKey,
   type RoomView,
   type ViewContext,
 } from "./room_views.js";
@@ -201,6 +205,16 @@ describe("mergeManualOrder", () => {
   });
 });
 
+describe("order keys", () => {
+  it("round-trip a view ID through a section key that holds colons", () => {
+    expect(viewIdFromOrderKey(viewOrderKey("__view_ab", "space:!s:server"))).toBe("__view_ab");
+  });
+
+  it("are not mistaken for a space's key", () => {
+    expect(viewIdFromOrderKey("!space:server")).toBeNull();
+  });
+});
+
 describe("parseViews / serializeViews", () => {
   it("an account that never saved gets the built-ins in their default order", () => {
     expect(parseViews(null).map((v) => v.id)).toEqual(BUILTIN_VIEWS.map((v) => v.id));
@@ -251,6 +265,13 @@ describe("helpers", () => {
     expect(normalizeTag("low priority")).toBe("m.lowpriority");
     expect(normalizeTag("com.example.x")).toBe("com.example.x");
     expect(normalizeTag("  ")).toBe("");
+  });
+
+  it("formats and parses a tag field, round-tripping the spec tags", () => {
+    const tags = ["m.favourite", "u.work", "m.lowpriority"];
+    expect(formatTags(tags)).toBe("Favourites, work, Low priority");
+    expect(parseTags(formatTags(tags))).toEqual(tags);
+    expect(parseTags(" work , ,work,fav")).toEqual(["u.work", "m.favourite"]);
   });
 
   it("labels tags", () => {

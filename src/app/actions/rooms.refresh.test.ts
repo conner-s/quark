@@ -31,6 +31,9 @@ const { AppState } = await import("../state.js");
 const { RoomList } = await import("../../ui/RoomList.js");
 const ipc = await import("../../ipc/index.js");
 const { showError } = await import("../../ui/NotificationToast.js");
+const { newView, parseViews, serializeViews } = await import("../room_views.js");
+const { initViewStore } = await import("../view_store.js");
+type RoomView = import("../room_views.js").RoomView;
 
 function room(id: string): RoomInfo {
   return {
@@ -188,6 +191,59 @@ describe("reordering a space", () => {
     roomList.setRooms([{ id: "!a:x", name: "a" }]);
     await moveRoomInSpace("!a:x", 1);
     expect(showError).toHaveBeenCalledWith(expect.stringContaining("inside a space"));
+  });
+});
+
+describe("tabs", () => {
+  const setRoomViews = vi.fn(async () => {});
+  const tab = (over: Partial<RoomView>): RoomView => ({ ...newView("Mine", []), ...over });
+
+  beforeEach(async () => {
+    // The refresh merges with the last membership it published; start clean.
+    AppState.set("spaceMembers", null);
+    initViewStore({ getRoomViews: async () => serializeViews(AppState.get("roomViews")), setRoomViews }, vi.fn());
+    vi.mocked(ipc.getRooms).mockResolvedValue([room("!a:x"), room("!b:x"), room("!c:x")]);
+    vi.mocked(ipc.getSpaceChildren).mockResolvedValue([child("!a:x"), child("!b:x")]);
+  });
+
+  async function open(view: RoomView): Promise<void> {
+    AppState.patch({ roomViews: [...parseViews(null), view], currentSpaceId: view.id });
+    await refreshRooms();
+  }
+
+  it("lists a tab grouped by space, with the rooms in no space after", async () => {
+    await open(tab({ groupBy: "space", sort: "name" }));
+    const labels = [...roomList.getElement().querySelectorAll(".room-list__section-label")].map((l) => l.textContent);
+    expect(labels).toEqual(["Work", "Other rooms"]);
+    expect(listed()).toEqual(["!a:x", "!b:x", "!c:x"]);
+  });
+
+  it("reorders a hand-sorted tab into the tab's own order, never the space's", async () => {
+    await open(tab({ sort: "manual", order: ["!a:x", "!b:x", "!c:x"], groupBy: "space" }));
+    await moveRoomInSpace("!b:x", -1);
+    expect(listed()).toEqual(["!b:x", "!a:x", "!c:x"]);
+    const saved = AppState.get("roomViews").find((v) => v.id === AppState.get("currentSpaceId"))!;
+    expect(saved.order).toEqual(["!b:x", "!a:x", "!c:x"]);
+    expect(ipc.reorderSpaceChildren).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(setRoomViews).toHaveBeenCalled());
+  });
+
+  it("refuses to reorder a tab sorted any other way, even a section that lists a space", async () => {
+    await open(tab({ groupBy: "space", sort: "recent" }));
+    await moveRoomInSpace("!b:x", -1);
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining("sorted by hand"));
+    expect(ipc.reorderSpaceChildren).not.toHaveBeenCalled();
+  });
+
+  it("returns to the first tab when the open one is deleted elsewhere", async () => {
+    const mine = tab({});
+    await open(mine);
+    AppState.set("roomViews", parseViews(null));
+    AppState.set("currentSpaceId", mine.id);
+    AppState.set("homeViewActive", false);
+    await refreshRooms();
+    // Home is first; on a desktop-width test window it opens the canvas.
+    expect(AppState.get("currentSpaceId")).toBe("__home__");
   });
 });
 

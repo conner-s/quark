@@ -7,8 +7,9 @@
 // never lights the dot, but its mentions still count, exactly as on its row.
 
 import type { RoomInfo, SpaceChild } from "../ipc/types.js";
-import { PSEUDO_SPACES } from "./pseudo_spaces.js";
+import { matchesView, type RoomView } from "./room_views.js";
 import { AppState } from "./state.js";
+import { visibleViews } from "./view_store.js";
 
 export interface SpaceBadge {
   unread: boolean;
@@ -19,15 +20,19 @@ export interface SpaceBadgeInput {
   rooms: RoomInfo[];
   /** Top-level space ID → the room IDs its room list shows. */
   spaceMembers: Record<string, string[]>;
-  /** Rooms that belong to any space (drives the pseudo-space filters). */
+  /** Rooms that belong to any space (drives the tab filters). */
   spaceRoomIds: Set<string>;
+  /** The tabs to badge; hidden tabs have no icon to draw one on. */
+  views: RoomView[];
+  /** Top-level spaces in strip order (a tab listing chosen spaces needs it). */
+  spaces?: { id: string; name: string }[];
   /** The open room is exempt: its badge is cleared locally on open. */
   currentRoomId: string | null;
 }
 
-/** Badge state for every space and pseudo-space with something to show. */
+/** Badge state for every space and tab with something to show. */
 export function computeSpaceBadges(input: SpaceBadgeInput): Map<string, SpaceBadge> {
-  const { rooms, spaceMembers, spaceRoomIds, currentRoomId } = input;
+  const { rooms, spaceMembers, spaceRoomIds, currentRoomId, views } = input;
   const byId = new Map(rooms.map((r) => [r.room_id, r]));
   const out = new Map<string, SpaceBadge>();
 
@@ -45,8 +50,9 @@ export function computeSpaceBadges(input: SpaceBadgeInput): Map<string, SpaceBad
   for (const [spaceId, roomIds] of Object.entries(spaceMembers)) {
     fold(spaceId, roomIds.flatMap((id) => byId.get(id) ?? []));
   }
-  for (const ps of PSEUDO_SPACES) {
-    fold(ps.id, rooms.filter((r) => ps.filter(r, spaceRoomIds)));
+  const ctx = { spaceRoomIds, spaceMembers, spaces: input.spaces ?? [] };
+  for (const v of views) {
+    fold(v.id, rooms.filter((r) => matchesView(v, r, ctx)));
   }
   return out;
 }
@@ -206,7 +212,7 @@ export function publishSpaceMembers(
 export function bindSpaceBadges(strip: { setBadges(badges: Map<string, SpaceBadge>): void }): () => void {
   const update = () => {
     const spaceMembers = AppState.get("spaceMembers");
-    // Until membership is known the pseudo-space filters would count rooms
+    // Until membership is known the tab filters would count rooms
     // that belong to spaces — Home would flash a count it then drops.
     if (!spaceMembers) {
       strip.setBadges(new Map());
@@ -218,6 +224,8 @@ export function bindSpaceBadges(strip: { setBadges(badges: Map<string, SpaceBadg
         spaceMembers,
         spaceRoomIds: new Set(AppState.get("spaceRoomIds")),
         currentRoomId: AppState.get("currentRoomId"),
+        views: visibleViews(),
+        spaces: AppState.get("topLevelSpaces"),
       }),
     );
   };
@@ -226,6 +234,7 @@ export function bindSpaceBadges(strip: { setBadges(badges: Map<string, SpaceBadg
     AppState.on("spaceMembers", update),
     AppState.on("spaceRoomIds", update),
     AppState.on("currentRoomId", update),
+    AppState.on("roomViews", update),
   ];
   update();
   return () => unbinds.forEach((u) => u());

@@ -349,6 +349,16 @@ export function normalizeTag(input: string): string {
   return t.includes(".") ? t : `u.${t}`;
 }
 
+/** Tags as a text field shows them: `u.work`, `m.favourite` → `work, Favourites`. */
+export function formatTags(tags: string[]): string {
+  return tags.map(tagLabel).join(", ");
+}
+
+/** A comma-separated tag field back into tag names (see `normalizeTag`). */
+export function parseTags(text: string): string[] {
+  return [...new Set(text.split(",").map(normalizeTag).filter(Boolean))];
+}
+
 /** Favourites first, low priority last, every other tag by its label. */
 function compareTags(a: string, b: string): number {
   const rank = (t: string) => (t === FAVOURITE_TAG ? 0 : t === LOW_PRIORITY_TAG ? 2 : 1);
@@ -411,6 +421,25 @@ export function buildViewSections(view: RoomView, allRooms: RoomInfo[], ctx: Vie
 }
 
 // ── Hand ordering ────────────────────────────────────────────────────────────
+
+const ORDER_KEY_PREFIX = "view:";
+
+/**
+ * The room list's order key for one section of a hand-sorted view. Distinct
+ * from a space's order key (a room ID, `!…`), which is how a drop knows which
+ * order to write.
+ */
+export const viewOrderKey = (viewId: string, sectionKey: string): string =>
+  `${ORDER_KEY_PREFIX}${viewId}:${sectionKey}`;
+
+/** The view a section order key belongs to, or null for a space's key. */
+export function viewIdFromOrderKey(orderKey: string): string | null {
+  if (!orderKey.startsWith(ORDER_KEY_PREFIX)) return null;
+  const rest = orderKey.slice(ORDER_KEY_PREFIX.length);
+  const end = rest.indexOf(":");
+  // View IDs never contain a colon; section keys may (`space:!a:server`).
+  return end > 0 ? rest.slice(0, end) : null;
+}
 
 /**
  * The view's new `order` after one section was rearranged to `sectionIds`.

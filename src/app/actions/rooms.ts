@@ -26,7 +26,8 @@ import {
   setRoomDirect as ipcSetRoomDirect,
 } from "../../ipc/index.js";
 
-import { getPseudoSpace, sortByRecency } from "../pseudo_spaces.js";
+import { buildViewSections, isViewId, viewOrderKey, type RoomView } from "../room_views.js";
+import { defaultViewId, getView, loadViews, viewContext } from "../view_store.js";
 import { buildSpaceMembership, publishSpaceMembers, readSpaceListing } from "../space_badges.js";
 import { clearRoomNotificationsIpc } from "../../ipc/notifications.js";
 import { muteRoom, unmuteRoom } from "../notifications.js";
@@ -1063,9 +1064,10 @@ export async function selectSpace(
   AppState.set("currentSpaceId", spaceId);
   spaceStrip.setActiveSpace(spaceId);
 
-  // Home is the floating-DM canvas on desktop; every other selection (and
-  // Home on mobile, where the drawer flow stays) renders the room list.
-  if (spaceId === "__home__" && !isMobile()) {
+  // Home is the floating-DM canvas on desktop unless the user made it a list;
+  // every other selection (and Home on mobile, where the drawer flow stays)
+  // renders the room list.
+  if (getView(spaceId)?.canvas && !isMobile()) {
     await enterHomeView();
     return;
   }
@@ -1098,7 +1100,7 @@ export async function selectSpace(
  * Fill the room list for `spaceId` from the cached room list, in that space's
  * order, and return the listed room IDs.
  *
- * A pseudo-space filters and recency-sorts the cache. A real space lists its
+ * A tab (`room_views.ts`) filters, groups and sorts the cache. A real space lists its
  * joined children in `m.space.child` order; with subspaces, its own rooms come
  * first, unlabelled, then one labelled section per subspace. Every section
  * carries the space it lists (`RoomSection.spaceId`), which is what lets a
@@ -1112,13 +1114,11 @@ export async function renderSpaceView(
   getChildren: (spaceId: string) => Promise<SpaceChild[]> = getSpaceChildren,
 ): Promise<string[]> {
   const { roomList } = getComponents();
-  const pseudo = getPseudoSpace(spaceId);
-  if (pseudo) {
-    const allRooms = AppState.get("roomListCache");
-    const spaceRoomIds = new Set(AppState.get("spaceRoomIds"));
-    const filtered = sortByRecency(allRooms.filter((r) => pseudo.filter(r, spaceRoomIds)));
-    roomList.setRooms(filtered.map(roomInfoToEntry));
-    return filtered.map((r) => r.room_id);
+  if (isViewId(spaceId)) {
+    // A tab deleted (here or on another device) while selected lists as the
+    // default tab until the refresh that noticed moves the selection.
+    const view = getView(spaceId) ?? getView(defaultViewId());
+    return view ? renderView(view) : [];
   }
 
   // The backend already sorts by m.space.child order field (then by name).
@@ -1150,6 +1150,32 @@ export async function renderSpaceView(
 }
 
 /**
+ * Draw a tab's rooms into the room list and return the listed room IDs.
+ *
+ * An ungrouped tab that isn't sorted by hand is one flat list. Otherwise it is
+ * sections: labelled groups, and — when sorted by hand — sections the room
+ * list can reorder, keyed so a drop writes this tab's order. A section listing
+ * a space keeps that space for its label's menu, but `orderKey: null` stops a
+ * drag there from rewriting the space's own order.
+ */
+function renderView(view: RoomView): string[] {
+  const { roomList } = getComponents();
+  const sections = buildViewSections(view, AppState.get("roomListCache"), viewContext());
+  const manual = view.sort === "manual";
+  if (sections.length === 1 && !sections[0].label && !manual) {
+    roomList.setRooms(sections[0].rooms.map(roomInfoToEntry));
+  } else {
+    roomList.setSections(sections.map((s): RoomSection => ({
+      label: s.label,
+      rooms: s.rooms.map(roomInfoToEntry),
+      ...(s.spaceId ? { spaceId: s.spaceId } : {}),
+      orderKey: manual ? viewOrderKey(view.id, s.key) : null,
+    })));
+  }
+  return [...new Set(sections.flatMap((s) => s.rooms.map((r) => r.room_id)))];
+}
+
+/**
  * Re-render whichever room list is showing, keeping scroll position and — only
  * if it was already inside the list — keyboard focus.
  */
@@ -1158,7 +1184,7 @@ async function rerenderCurrentView(
 ): Promise<void> {
   if (AppState.get("homeViewActive")) return; // the Home canvas refreshes itself
   const { roomList } = getComponents();
-  const spaceId = AppState.get("currentSpaceId") ?? "__home__";
+  const spaceId = AppState.get("currentSpaceId") ?? defaultViewId();
   const focusedId = roomList.getFocusedRoomId();
   const scrollEl = roomList.getScrollElement();
   const scrollTop = scrollEl.scrollTop;
@@ -1383,7 +1409,7 @@ export async function setRoomDirectness(roomId: string, isDirect: boolean): Prom
       r.room_id === roomId ? { ...r, is_direct: isDirect } : r,
     ),
   );
-  resortPseudoSpaceView();
+  rerenderViewList();
 
   return isDirect;
 }
@@ -1441,10 +1467,10 @@ let _resortTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Bump a room's last-activity timestamp in the local cache from a live sync
- * event, and schedule a re-sort of the visible view when it's a pseudo-space
- * (Home / DMs / Groups — the recency-sorted views). Real spaces keep their
- * fixed m.space.child order and are never re-sorted. Debounced so a burst of
- * messages coalesces into one re-render.
+ * event, and schedule a re-render of the visible list when it's a tab, whose
+ * order may depend on activity. Real spaces keep their fixed m.space.child
+ * order and are never re-sorted. Debounced so a burst of messages coalesces
+ * into one re-render.
  */
 export function bumpRoomActivity(roomId: string, ts: number): void {
   const cache = AppState.get("roomListCache");
@@ -1457,36 +1483,36 @@ export function bumpRoomActivity(roomId: string, ts: number): void {
     cache.map((r) => (r.room_id === roomId ? { ...r, last_activity_ts: ts } : r)),
   );
 
-  if (!getPseudoSpace(AppState.get("currentSpaceId") ?? "__home__")) return;
+  if (!currentView()) return;
   if (_resortTimer) clearTimeout(_resortTimer);
   _resortTimer = setTimeout(() => {
     _resortTimer = null;
-    resortPseudoSpaceView();
+    rerenderViewList();
   }, 250);
 }
 
+/** The tab being viewed, if a tab rather than a space is selected. */
+function currentView(): RoomView | undefined {
+  return getView(AppState.get("currentSpaceId") ?? defaultViewId());
+}
+
 /**
- * Re-apply the current pseudo-space filter + recency sort to the visible room
+ * Re-apply the current tab's filter, grouping and sort to the visible room
  * list, preserving scroll position and keyboard focus (focus is only restored
  * when it was already inside the list, so it's never stolen from the compose
  * box or timeline).
  */
-export function resortPseudoSpaceView(): void {
+export function rerenderViewList(): void {
   const { roomList } = getComponents();
   // The Home canvas hides the room list and runs its own live updates.
   if (AppState.get("homeViewActive")) return;
-  const pseudo = getPseudoSpace(AppState.get("currentSpaceId") ?? "__home__");
-  if (!pseudo) return;
-
-  const spaceRoomIds = new Set(AppState.get("spaceRoomIds"));
-  const filtered = sortByRecency(
-    AppState.get("roomListCache").filter((r) => pseudo.filter(r, spaceRoomIds)),
-  );
+  const view = currentView();
+  if (!view) return;
 
   const focusedId = roomList.getFocusedRoomId();
   const scrollEl = roomList.getScrollElement();
   const scrollTop = scrollEl.scrollTop;
-  roomList.setRooms(filtered.map(roomInfoToEntry));
+  renderView(view);
   scrollEl.scrollTop = scrollTop;
   if (focusedId) roomList.focusRoom(focusedId);
 }
@@ -1534,6 +1560,7 @@ async function _doRefreshRooms(): Promise<void> {
       getRooms(),
       getUserSpaces().catch(() => [] as Awaited<ReturnType<typeof getUserSpaces>>),
       refreshInvites(),
+      loadViews(),
     ]);
     AppState.set("roomListCache", rooms);
 
@@ -1558,6 +1585,7 @@ async function _doRefreshRooms(): Promise<void> {
       id: s.room_id,
       name: s.name ?? s.room_id,
     }));
+    AppState.set("topLevelSpaces", spaceItems.map((s) => ({ id: s.id, name: s.name })));
     spaceStrip.setSpaces(spaceItems);
 
     // Resolve space avatar mxc:// URLs in the background. The strip keeps the
@@ -1582,14 +1610,17 @@ async function _doRefreshRooms(): Promise<void> {
       }
     }
 
-    // A space that is gone (left from another client) can't stay selected.
-    // "Gone" means not joined at all: a space created or accepted a moment ago
-    // is joined before sync has delivered its m.room.create, so it is missing
-    // from `userSpaces` (which needs the room type) but not from `rooms`.
+    // A space that is gone (left from another client) can't stay selected, nor
+    // can a tab deleted on another device. "Gone" means not joined at all: a
+    // space created or accepted a moment ago is joined before sync has
+    // delivered its m.room.create, so it is missing from `userSpaces` (which
+    // needs the room type) but not from `rooms`.
     const spaceId = AppState.get("currentSpaceId");
-    if (spaceId && !getPseudoSpace(spaceId) && !userSpaces.some((s) => s.room_id === spaceId)
-        && !rooms.some((r) => r.room_id === spaceId)) {
-      await selectSpace("__home__", { skipRoomRestore: true });
+    const gone = spaceId && (isViewId(spaceId)
+      ? !getView(spaceId)
+      : !userSpaces.some((s) => s.room_id === spaceId) && !rooms.some((r) => r.room_id === spaceId));
+    if (gone) {
+      await selectSpace(defaultViewId(), { skipRoomRestore: true });
     }
 
     // Likewise the open room: left, kicked or banned elsewhere.
