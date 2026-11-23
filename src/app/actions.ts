@@ -153,6 +153,20 @@ export {
   createRoomFromForm,
   applySpaceOrder,
   moveRoomInSpace,
+  applySectionOrder,
   canMoveRoom,
   roomForReorder,
 } from "./actions/space_edit.js";
+
+// Room-list tabs and room tags.
+export {
+  bindRoomViews,
+  openTabEditor,
+  createTab,
+  hideTab,
+  deleteTab,
+  applyViewOrder,
+  setTag,
+  roomTags,
+  knownTags,
+} from "./actions/views.js";

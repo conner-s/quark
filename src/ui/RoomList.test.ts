@@ -190,8 +190,8 @@ describe("RoomList", () => {
 
     it("finds the section a room is listed in", () => {
       roomList.setSections(sections());
-      expect(roomList.getSectionFor("!b:s")).toEqual({ spaceId: "!work:s", roomIds: ["!a:s", "!b:s", "!c:s"] });
-      expect(roomList.getSectionFor("!d:s")?.spaceId).toBe("!ops:s");
+      expect(roomList.getSectionFor("!b:s")).toEqual({ key: "!work:s", roomIds: ["!a:s", "!b:s", "!c:s"] });
+      expect(roomList.getSectionFor("!d:s")?.key).toBe("!ops:s");
       roomList.setRooms([{ id: "!x:s", name: "x" }]);
       expect(roomList.getSectionFor("!x:s")).toBeNull();
     });

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { SpaceStrip } from "./SpaceStrip.js";
+import { newView, parseViews, stripOrder } from "../app/room_views.js";
 
 const SPACE_ICON = "data:image/png;base64,SPACE";
 const SPACE_ID = "!s:server";
@@ -190,6 +191,43 @@ describe("SpaceStrip", () => {
       itemEl()?.querySelector("img")?.dispatchEvent(new Event("error"));
       expect(glyph()).toBe("W");
       expect(badgeEl()?.textContent).toBe("3");
+    });
+  });
+
+  describe("tabs", () => {
+    const ids = () =>
+      [...strip.getElement().querySelectorAll<HTMLElement>(".space-strip__item")].map((el) => el.dataset.spaceId);
+
+    it("draws the built-in tabs around the spaces before any are set", () => {
+      strip.setSpaces([{ id: SPACE_ID, name: "Space" }]);
+      expect(ids()).toEqual(["__home__", "__all__", SPACE_ID, "__dms__", "__groups__"]);
+    });
+
+    it("draws the tabs it is given, top ones above the spaces and bottom ones below", () => {
+      const work = { ...newView("Work", []), icon: "W" };
+      const views = parseViews(null).filter((v) => v.id !== "__all__");
+      strip.setSpaces([{ id: SPACE_ID, name: "Space" }]);
+      strip.setViews(stripOrder([...views, work]));
+      expect(ids()).toEqual(["__home__", work.id, SPACE_ID, "__dms__", "__groups__"]);
+      const el = strip.getElement().querySelector<HTMLElement>(`[data-space-id="${work.id}"]`)!;
+      expect(el.textContent).toBe("W");
+      expect(el.getAttribute("aria-label")).toBe("Work");
+    });
+
+    it("sends a right-click on a tab to the tab menu, and on a space to the space menu", () => {
+      const onTab = vi.fn();
+      const onSpace = vi.fn();
+      strip.onViewContextMenu(onTab);
+      strip.onContextMenu(onSpace);
+      strip.setSpaces([{ id: SPACE_ID, name: "Space" }]);
+      const click = (id: string) =>
+        strip.getElement().querySelector(`[data-space-id="${CSS.escape(id)}"]`)!
+          .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 5, clientY: 6 }));
+      click("__dms__");
+      click(SPACE_ID);
+      expect(onTab).toHaveBeenCalledWith("__dms__", 5, 6);
+      expect(onSpace).toHaveBeenCalledWith(SPACE_ID, 5, 6);
+      expect(onTab).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -31,6 +31,7 @@ import { MentionPreview } from "./MentionPreview.js";
 import { RoomDialog } from "./RoomDialog.js";
 import { InvitesDialog } from "./InvitesDialog.js";
 import { CreateRoomDialog } from "./CreateRoomDialog.js";
+import { TabsDialog } from "./TabsDialog.js";
 import { SpaceSettingsDialog } from "./SpaceSettingsDialog.js";
 import { DebugViewer } from "./DebugViewer.js";
 import { RevisionHistoryDialog } from "./RevisionHistoryDialog.js";
@@ -88,6 +89,7 @@ export interface AppComponents {
   roomDialog: RoomDialog;
   invitesDialog: InvitesDialog;
   createRoomDialog: CreateRoomDialog;
+  tabsDialog: TabsDialog;
   spaceSettingsDialog: SpaceSettingsDialog;
   debugViewer: DebugViewer;
   revisionHistoryDialog: RevisionHistoryDialog;
@@ -149,6 +151,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   const roomDialog = new RoomDialog();
   const invitesDialog = new InvitesDialog();
   const createRoomDialog = new CreateRoomDialog();
+  const tabsDialog = new TabsDialog();
   const spaceSettingsDialog = new SpaceSettingsDialog();
   const debugViewer = new DebugViewer();
   const revisionHistoryDialog = new RevisionHistoryDialog();
@@ -353,6 +356,7 @@ export function mountApp(container: HTMLElement): AppComponents {
   mountOverlay(roomDialog.getElement());
   mountOverlay(invitesDialog.getElement());
   mountOverlay(createRoomDialog.getElement());
+  mountOverlay(tabsDialog.getElement());
   mountOverlay(spaceSettingsDialog.getElement());
   mountOverlay(debugViewer.getElement());
   mountOverlay(revisionHistoryDialog.getElement());
@@ -390,6 +394,7 @@ export function mountApp(container: HTMLElement): AppComponents {
     roomDialog,
     invitesDialog,
     createRoomDialog,
+    tabsDialog,
     spaceSettingsDialog,
     debugViewer,
     revisionHistoryDialog,

@@ -69,11 +69,22 @@ import {
   declineInvite,
   openCreateRoom,
   createRoomFromForm,
-  applySpaceOrder,
+  applySectionOrder,
   moveRoomInSpace,
   canMoveRoom,
   roomForReorder,
+  bindRoomViews,
+  openTabEditor,
+  createTab,
+  hideTab,
+  deleteTab,
+  setTag,
+  roomTags,
+  knownTags,
 } from "./actions.js";
+import { currentTabId, resetTab, withCurrentTab } from "./actions/views.js";
+import { canMoveView, getView, moveView } from "./view_store.js";
+import { FAVOURITE_TAG, isBuiltinView } from "./room_views.js";
 import { AppState } from "./state.js";
 import { resolveComposeSubmit } from "./compose_submit.js";
 import { setupTypingNotices, typingNotifier } from "./typing.js";
@@ -410,6 +421,31 @@ export function dispatchAction(action: string, components: AppComponents): void 
       if (roomId) void moveRoomInSpace(roomId, action === "move-room-up" ? -1 : 1);
       break;
     }
+
+    case "move-tab-up":
+    case "move-tab-down":
+      withCurrentTab((id) => moveView(id, action === "move-tab-up" ? -1 : 1));
+      break;
+
+    case "open-tabs":
+      openTabEditor(currentTabId() ?? undefined);
+      break;
+
+    case "new-tab":
+      createTab();
+      break;
+
+    case "hide-tab":
+      withCurrentTab(hideTab);
+      break;
+
+    case "reset-tab":
+      withCurrentTab(resetTab);
+      break;
+
+    case "delete-tab":
+      withCurrentTab(deleteTab);
+      break;
 
     case "open-sticker-picker":
       modeManager.transition(Mode.Insert);
@@ -1290,6 +1326,13 @@ export function setupKeyboard(components: AppComponents): void {
       // Only inside a space's list, and only where there's somewhere to go.
       "move-room-up": canMoveRoom(roomId, -1) ? () => void moveRoomInSpace(roomId, -1) : undefined,
       "move-room-down": canMoveRoom(roomId, 1) ? () => void moveRoomInSpace(roomId, 1) : undefined,
+      // Exactly one of the pair applies, as with mute.
+      "favourite-room": roomTags(roomId).includes(FAVOURITE_TAG)
+        ? undefined
+        : () => void setTag(roomId, FAVOURITE_TAG, true),
+      "unfavourite-room": roomTags(roomId).includes(FAVOURITE_TAG)
+        ? () => void setTag(roomId, FAVOURITE_TAG, false)
+        : undefined,
     }), { title: room?.name ? `room · ${room.name}` : "room" });
   });
 
@@ -1332,6 +1375,27 @@ export function setupKeyboard(components: AppComponents): void {
     }), { title: "space" });
   });
 
+  // Right-click (or long press) on a room-list tab.
+  spaceStrip.onViewContextMenu((viewId, x, y) => {
+    const view = getView(viewId);
+    if (!view) return;
+    const builtin = isBuiltinView(viewId);
+    contextMenu.show(x, y, buildMenu("tab", currentAvailability(), {
+      "open-tabs": () => openTabEditor(viewId),
+      "hide-tab": () => hideTab(viewId),
+      "move-tab-up": canMoveView(viewId, -1) ? () => void moveView(viewId, -1) : undefined,
+      "move-tab-down": canMoveView(viewId, 1) ? () => void moveView(viewId, 1) : undefined,
+      "new-tab": () => createTab(),
+      "reset-tab": builtin ? () => resetTab(viewId) : undefined,
+      "delete-tab": builtin ? undefined : () => void deleteTab(viewId),
+    }), { title: `tab · ${view.label}` });
+  });
+
+  // The tabs dialog's delete asks first, like the menu's.
+  components.tabsDialog.onDelete((viewId) => void deleteTab(viewId));
+  components.tabsDialog.setKnownTags(knownTags);
+  bindRoomViews();
+
   // The room list header's `+`: new room / new space / directory.
   roomList.onCreateClick((x, y) => {
     contextMenu.show(x, y, buildMenu("create", currentAvailability(), {
@@ -1344,8 +1408,8 @@ export function setupKeyboard(components: AppComponents): void {
   // The `+` closing the space strip's list.
   spaceStrip.onCreateSpaceClick(() => void openCreateRoom({ kind: "space", parentSpaceId: null }));
 
-  // Drag-to-reorder within a space's section.
-  roomList.onReorder((spaceId, roomIds) => void applySpaceOrder(spaceId, roomIds));
+  // Drag-to-reorder within a space's section, or a hand-sorted tab's.
+  roomList.onReorder((orderKey, roomIds) => void applySectionOrder(orderKey, roomIds));
 
   // Invites: the status line's button and count, and the dialog's answers.
   const { statusBar, invitesDialog, createRoomDialog } = components;

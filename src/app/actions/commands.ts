@@ -63,6 +63,17 @@ import { openGifPicker } from "./gif.js";
 import { runUpdateCheck } from "../update_check.js";
 import { openInvites } from "./invites.js";
 import { openCreateRoom } from "./space_edit.js";
+import {
+  createTab,
+  currentTabId,
+  deleteTab,
+  hideTab,
+  openTabEditor,
+  resetTab,
+  setTag,
+  withCurrentTab,
+} from "./views.js";
+import { FAVOURITE_TAG } from "../room_views.js";
 
 /**
  * Commands that accept a room ID as their first argument, and so can run with
@@ -438,6 +449,45 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
       } catch (err) {
         showError(`Failed to set topic: ${err instanceof Error ? err.message : String(err)}`);
       }
+      break;
+    }
+
+    case "favourite-room":
+    case "unfavourite-room": {
+      await setTag(roomId, FAVOURITE_TAG, entry.id === "favourite-room");
+      break;
+    }
+
+    case "tag-room":
+    case "untag-room": {
+      const typed = parsed.args.join(" ");
+      if (!typed.trim()) return usageError(entry);
+      await setTag(roomId, typed, entry.id === "tag-room");
+      break;
+    }
+
+    case "open-tabs": {
+      openTabEditor(currentTabId() ?? undefined);
+      break;
+    }
+
+    case "new-tab": {
+      createTab(parsed.args.join(" ") || undefined);
+      break;
+    }
+
+    case "hide-tab": {
+      withCurrentTab(hideTab);
+      break;
+    }
+
+    case "reset-tab": {
+      withCurrentTab(resetTab);
+      break;
+    }
+
+    case "delete-tab": {
+      withCurrentTab(deleteTab);
       break;
     }
 

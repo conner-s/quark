@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { bumpRoomActivity, resortPseudoSpaceView } from "./rooms.js";
+import { bumpRoomActivity, rerenderViewList } from "./rooms.js";
 import { setComponents } from "./context.js";
 import { AppState } from "../state.js";
 import { RoomList } from "../../ui/RoomList.js";
@@ -44,7 +44,7 @@ beforeEach(() => {
     currentSpaceId: "__dms__",
     spaceRoomIds: [],
   });
-  resortPseudoSpaceView();
+  rerenderViewList();
 });
 
 afterEach(() => {

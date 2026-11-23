@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { RoomInfo, SpaceChild } from "../ipc/types.js";
 import { AppState } from "./state.js";
+import { parseViews } from "./room_views.js";
 import {
   bindSpaceBadges,
   buildSpaceMembership,
@@ -51,7 +52,7 @@ function badges(
   { currentRoomId = null as string | null, spaceRoomIds = null as Set<string> | null } = {},
 ) {
   const inSpaces = spaceRoomIds ?? new Set(Object.values(spaceMembers).flat());
-  return computeSpaceBadges({ rooms, spaceMembers, spaceRoomIds: inSpaces, currentRoomId });
+  return computeSpaceBadges({ rooms, spaceMembers, spaceRoomIds: inSpaces, currentRoomId, views: parseViews(null) });
 }
 
 describe("computeSpaceBadges", () => {

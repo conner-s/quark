@@ -1,7 +1,7 @@
 // Space selector strip — narrow vertical column of space icons
 
 import { isAnimatedUrl } from "../app/animated_urls.js";
-import { PSEUDO_SPACES, isPseudoSpace } from "../app/pseudo_spaces.js";
+import { isViewId, parseViews, stripOrder, type RoomView } from "../app/room_views.js";
 import { attachLongPress } from "../app/long_press.js";
 import { plusIcon } from "./icons.js";
 import { formatMentionCount, type SpaceBadge } from "../app/space_badges.js";
@@ -17,6 +17,9 @@ export interface SpaceItem {
 export class SpaceStrip {
   private _el: HTMLElement;
   private _items: SpaceItem[] = [];
+  /** The visible room-list tabs, in strip order (`view_store.visibleViews`);
+   *  the built-ins until `setViews` says otherwise. */
+  private _views: RoomView[] = stripOrder(parseViews(null));
   /**
    * Resolved space avatars, keyed by space ID.
    *
@@ -37,6 +40,7 @@ export class SpaceStrip {
   private _activeId: string | null = null;
   private _onSelect: ((id: string) => void) | null = null;
   private _onContextMenu: ((spaceId: string, x: number, y: number) => void) | null = null;
+  private _onViewContextMenu: ((viewId: string, x: number, y: number) => void) | null = null;
   private _onCreateSpace: (() => void) | null = null;
 
   constructor() {
@@ -45,17 +49,11 @@ export class SpaceStrip {
     this._el.setAttribute("role", "listbox");
     this._el.setAttribute("aria-label", "Spaces");
 
-    // Touch path to the space context menu (#99). Container-level, since items
-    // are rebuilt on every render. Pseudo-spaces (Home, DMs) have no menu, and
-    // carry no data-space-id-backed entry here for the same reason the
-    // right-click handler skips them.
+    // Touch path to the space and tab context menus (#99). Container-level,
+    // since items are rebuilt on every render.
     attachLongPress(this._el, {
-      resolve: (target) => {
-        const item = target.closest<HTMLElement>(".space-strip__item");
-        const id = item?.dataset.spaceId;
-        return id && !isPseudoSpace(id) ? id : null;
-      },
-      onLongPress: (spaceId, x, y) => this._onContextMenu?.(spaceId, x, y),
+      resolve: (target) => target.closest<HTMLElement>(".space-strip__item")?.dataset.spaceId ?? null,
+      onLongPress: (id, x, y) => this._openMenu(id, x, y),
     });
 
   }
@@ -75,6 +73,17 @@ export class SpaceStrip {
 
   onContextMenu(handler: (spaceId: string, x: number, y: number) => void): void {
     this._onContextMenu = handler;
+  }
+
+  /** Right-click (or long press) on a tab rather than a space. */
+  onViewContextMenu(handler: (viewId: string, x: number, y: number) => void): void {
+    this._onViewContextMenu = handler;
+  }
+
+  /** Replace the tabs drawn above and below the spaces. */
+  setViews(views: RoomView[]): void {
+    this._views = views;
+    this._render();
   }
 
   setSpaces(items: SpaceItem[]): void {
@@ -202,11 +211,8 @@ export class SpaceStrip {
   private _render(): void {
     this._el.innerHTML = "";
 
-    const topPseudos = PSEUDO_SPACES.filter((p) => p.position === "top");
-    const bottomPseudos = PSEUDO_SPACES.filter((p) => p.position === "bottom");
-
-    for (const ps of topPseudos) {
-      this._el.appendChild(this._createItem({ id: ps.id, name: ps.label }, ps.icon));
+    for (const v of this._views.filter((v) => v.position === "top")) {
+      this._el.appendChild(this._createItem({ id: v.id, name: v.label }, v.icon));
     }
 
     // The spaces, and the `+` that makes a new one, as one group between rules.
@@ -217,8 +223,8 @@ export class SpaceStrip {
     this._el.appendChild(this._createAddButton());
     this._el.appendChild(this._createDivider());
 
-    for (const ps of bottomPseudos) {
-      this._el.appendChild(this._createItem({ id: ps.id, name: ps.label }, ps.icon));
+    for (const v of this._views.filter((v) => v.position === "bottom")) {
+      this._el.appendChild(this._createItem({ id: v.id, name: v.label }, v.icon));
     }
 
     // Profile, settings and search used to be stacked here, at the foot of the
@@ -249,12 +255,10 @@ export class SpaceStrip {
     this._applyBadge(el);
 
     el.addEventListener("click", () => this._selectId(item.id));
-    if (!isPseudoSpace(item.id)) {
-      el.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        this._onContextMenu?.(item.id, e.clientX, e.clientY);
-      });
-    }
+    el.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      this._openMenu(item.id, e.clientX, e.clientY);
+    });
     el.addEventListener("focus", () => {
       // Dispatch a focusspace event so keyboard.ts can update activePanel
       this._el.dispatchEvent(new CustomEvent("quark:space-focused", { bubbles: true }));
@@ -319,6 +323,11 @@ export class SpaceStrip {
     divider.className = "space-strip__divider";
     divider.setAttribute("role", "separator");
     return divider;
+  }
+
+  private _openMenu(id: string, x: number, y: number): void {
+    if (isViewId(id)) this._onViewContextMenu?.(id, x, y);
+    else this._onContextMenu?.(id, x, y);
   }
 
   private _selectId(id: string): void {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { setRoomDirectness, convertRoomDirectness, resortPseudoSpaceView } from "./rooms.js";
+import { setRoomDirectness, convertRoomDirectness, rerenderViewList } from "./rooms.js";
 import { setComponents } from "./context.js";
 import { AppState } from "../state.js";
 import { RoomList } from "../../ui/RoomList.js";
@@ -64,7 +64,7 @@ beforeEach(() => {
     spaceRoomIds: [],
     homeViewActive: false,
   });
-  resortPseudoSpaceView();
+  rerenderViewList();
 });
 
 afterEach(() => {

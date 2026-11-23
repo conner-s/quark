@@ -1,7 +1,7 @@
 // Creating rooms and spaces, and reordering a space's rooms.
 
 import { AppState } from "../state.js";
-import { getPseudoSpace } from "../pseudo_spaces.js";
+import { isViewId, viewIdFromOrderKey } from "../room_views.js";
 import {
   createRoom,
   addSpaceChild,
@@ -12,13 +12,14 @@ import type { CreateRoomRequest, CreateKind } from "../../ui/CreateRoomDialog.js
 import { showError, showSuccess } from "../../ui/NotificationToast.js";
 import { getComponents } from "./context.js";
 import { refreshRooms, renderSpaceView, selectRoom, selectSpace } from "./rooms.js";
+import { applyViewOrder } from "./views.js";
 
 // ── Create ───────────────────────────────────────────────────────────────────
 
-/** The real (non-pseudo) space currently selected, if any. */
+/** The real space (not a tab) currently selected, if any. */
 function currentRealSpace(): string | null {
   const id = AppState.get("currentSpaceId");
-  return id && !getPseudoSpace(id) ? id : null;
+  return id && !isViewId(id) ? id : null;
 }
 
 /**
@@ -132,13 +133,23 @@ export function applySpaceOrder(spaceId: string, roomIds: string[]): Promise<voi
 }
 
 /**
- * Move a room one place up or down within its section of the space being
- * viewed. Does nothing in a pseudo-space (sorted by activity) or at either end.
+ * Put an orderable section's rooms in `roomIds` order: a space's section
+ * writes the space's order, a hand-sorted tab's section the tab's.
+ */
+export function applySectionOrder(orderKey: string, roomIds: string[]): Promise<void> {
+  const viewId = viewIdFromOrderKey(orderKey);
+  return viewId ? applyViewOrder(viewId, orderKey, roomIds) : applySpaceOrder(orderKey, roomIds);
+}
+
+/**
+ * Move a room one place up or down within its section of the space or
+ * hand-sorted tab being viewed. Does nothing in a tab sorted any other way, or
+ * at either end.
  */
 export function moveRoomInSpace(roomId: string, delta: -1 | 1): Promise<void> {
   const section = getComponents().roomList.getSectionFor(roomId);
   if (!section) {
-    showError("Rooms can only be reordered inside a space");
+    showError("Rooms can only be reordered inside a space, or in a tab sorted by hand");
     return Promise.resolve();
   }
   const ids = section.roomIds;
@@ -147,7 +158,7 @@ export function moveRoomInSpace(roomId: string, delta: -1 | 1): Promise<void> {
   if (from < 0 || to < 0 || to >= ids.length) return Promise.resolve();
   const next = [...ids];
   [next[from], next[to]] = [next[to], next[from]];
-  return applySpaceOrder(section.spaceId, next);
+  return applySectionOrder(section.key, next);
 }
 
 /** Whether `roomId` can move by `delta` in the list as shown. */

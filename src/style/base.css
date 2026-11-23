@@ -6663,6 +6663,178 @@ body.quark-mobile .create-room-dialog__actions .settings-dialog__btn {
   padding: 6px 16px;
 }
 
+/* ── Room-list tabs dialog ───────────────────────────────────────────────── */
+
+.tabs-dialog .settings-dialog__panel {
+  width: min(720px, calc(100vw - 40px));
+  max-height: min(620px, calc(100vh - 60px));
+}
+
+.tabs-dialog__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.tabs-dialog__side {
+  display: flex;
+  flex-direction: column;
+  width: 200px;
+  flex-shrink: 0;
+  border-right: var(--border-width) solid var(--border-color);
+}
+
+.tabs-dialog__list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 6px 0;
+}
+
+.tabs-dialog__group {
+  color: var(--roomlist-muted);
+  font-size: calc(var(--font-size) - 2px);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 10px 2px;
+}
+
+.tabs-dialog__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+  outline: none;
+}
+
+.tabs-dialog__item:hover {
+  background-color: var(--roomlist-active-bg);
+}
+
+.tabs-dialog__item:focus {
+  box-shadow: inset 0 0 0 var(--focus-width) var(--focus-color);
+}
+
+.tabs-dialog__item--selected {
+  background-color: var(--roomlist-active-bg);
+  color: var(--roomlist-active-fg);
+}
+
+.tabs-dialog__item--hidden .tabs-dialog__icon,
+.tabs-dialog__item--hidden .tabs-dialog__name {
+  opacity: 0.5;
+}
+
+.tabs-dialog__icon {
+  width: 1.5em;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.tabs-dialog__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabs-dialog__list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px;
+  border-top: var(--border-width) solid var(--border-color);
+}
+
+.tabs-dialog__list-actions .settings-dialog__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tabs-dialog__editor {
+  padding: 10px 14px;
+}
+
+.tabs-dialog__editor .settings-dialog__label {
+  min-width: 64px;
+}
+
+.tabs-dialog__editor .settings-dialog__text-input,
+.tabs-dialog__editor .settings-dialog__select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The row-wide input rule would stretch the icon box to the name's width. */
+.tabs-dialog__editor .settings-dialog__row input.tabs-dialog__icon-input {
+  flex: 0 0 3.5em;
+  width: 3.5em;
+  text-align: center;
+}
+
+/* A checkbox row inside a labelled row: drop its own padding. */
+.tabs-dialog__editor .settings-dialog__row .settings-dialog__row {
+  padding: 0;
+}
+
+.tabs-dialog__flags,
+.tabs-dialog__spaces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  min-width: 0;
+}
+
+/* `display: flex` on rows would otherwise beat the hidden attribute. */
+.tabs-dialog__editor [hidden] {
+  display: none;
+}
+
+.tabs-dialog__hint {
+  color: var(--roomlist-muted);
+}
+
+.tabs-dialog__actions {
+  justify-content: flex-end;
+  padding: 8px 0 0;
+}
+
+body.quark-mobile .tabs-dialog__body {
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+body.quark-mobile .tabs-dialog__side {
+  width: auto;
+  border-right: none;
+  border-bottom: var(--border-width) solid var(--border-color);
+}
+
+body.quark-mobile .tabs-dialog__list {
+  max-height: 40vh;
+}
+
+body.quark-mobile .tabs-dialog__item {
+  min-height: 40px;
+}
+
+body.quark-mobile .tabs-dialog__editor .settings-dialog__row {
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+body.quark-mobile .tabs-dialog__editor .settings-dialog__text-input,
+body.quark-mobile .tabs-dialog__editor .settings-dialog__select {
+  min-height: 40px;
+  /* iOS zooms into any control under 16px. */
+  font-size: max(16px, var(--font-size));
+}
+
+body.quark-mobile .tabs-dialog .settings-dialog__btn {
+  min-height: 44px;
+  padding: 6px 12px;
+}
+
 /* ── Quick navigation palette ─────────────────────────────────────────────── */
 
 .command-palette {

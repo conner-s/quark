@@ -22,9 +22,20 @@ export interface RoomSection {
   rooms: RoomEntry[];
   /**
    * The space whose children this section lists. Enables right-click → space
-   * settings on a labelled section, and reordering the section's rooms.
+   * settings on a labelled section.
    */
   spaceId?: string;
+  /**
+   * What reordering the section's rooms acts on: a space's ID (its
+   * `m.space.child` order), or a hand-sorted tab's section key. Defaults to
+   * `spaceId`; `null` (or neither) means the section can't be reordered.
+   */
+  orderKey?: string | null;
+}
+
+/** What reordering a section acts on, if it can be reordered at all. */
+function sectionKey(section: RoomSection): string | undefined {
+  return section.orderKey === undefined ? section.spaceId : (section.orderKey ?? undefined);
 }
 
 export class RoomList {
@@ -39,7 +50,7 @@ export class RoomList {
   private _onSectionContextMenu: ((spaceId: string, x: number, y: number) => void) | null = null;
   private _createBtnEl: HTMLButtonElement;
   private _onCreateClick: ((x: number, y: number) => void) | null = null;
-  private _onReorder: ((spaceId: string, roomIds: string[], movedRoomId: string) => void) | null = null;
+  private _onReorder: ((orderKey: string, roomIds: string[], movedRoomId: string) => void) | null = null;
 
   constructor() {
     this._el = document.createElement("div");
@@ -108,10 +119,10 @@ export class RoomList {
     // Drag a room within its space section to reorder it (mouse only).
     attachRoomDrag({
       container: this._scrollEl,
-      onDrop: (spaceId, roomId, beforeRoomId) => {
-        const ids = this._sectionIds(spaceId);
+      onDrop: (key, roomId, beforeRoomId) => {
+        const ids = this._sectionIds(key);
         const next = ids && reorderedIds(ids, roomId, beforeRoomId);
-        if (next) this._onReorder?.(spaceId, next, roomId);
+        if (next) this._onReorder?.(key, next, roomId);
       },
     });
   }
@@ -127,35 +138,36 @@ export class RoomList {
   }
 
   /** Wire drag-to-reorder: the section's new order, and the room that moved. */
-  onReorder(handler: (spaceId: string, roomIds: string[], movedRoomId: string) => void): void {
+  onReorder(handler: (orderKey: string, roomIds: string[], movedRoomId: string) => void): void {
     this._onReorder = handler;
   }
 
   /**
-   * The orderable section `roomId` is listed in — the space it belongs to and
-   * that section's rooms in order — or null in a pseudo-space, which sorts by
-   * activity and has no order to change. When a room is listed in more than
+   * The orderable section `roomId` is listed in — its order key (see
+   * `RoomSection.orderKey`) and that section's rooms in order — or null in a
+   * tab sorted by anything other than hand. When a room is listed in more than
    * one section, the one holding keyboard focus wins.
    */
-  getSectionFor(roomId: string): { spaceId: string; roomIds: string[] } | null {
+  getSectionFor(roomId: string): { key: string; roomIds: string[] } | null {
     const focused = document.activeElement;
     const focusedSection =
       focused instanceof HTMLElement && this._scrollEl.contains(focused) && focused.dataset.roomId === roomId
         ? focused.dataset.section
         : undefined;
     const section =
-      (focusedSection && this._sections?.find((s) => s.spaceId === focusedSection)) ||
-      this._sections?.find((s) => s.spaceId && s.rooms.some((r) => r.id === roomId));
-    if (!section?.spaceId) return null;
-    return { spaceId: section.spaceId, roomIds: section.rooms.map((r) => r.id) };
+      (focusedSection && this._sections?.find((s) => sectionKey(s) === focusedSection)) ||
+      this._sections?.find((s) => sectionKey(s) && s.rooms.some((r) => r.id === roomId));
+    const key = section && sectionKey(section);
+    if (!section || !key) return null;
+    return { key, roomIds: section.rooms.map((r) => r.id) };
   }
 
   /**
    * Re-order one section's rooms locally, ahead of the server confirming it,
    * keeping scroll position and keyboard focus.
    */
-  applySectionOrder(spaceId: string, roomIds: string[]): void {
-    const section = this._sections?.find((s) => s.spaceId === spaceId);
+  applySectionOrder(key: string, roomIds: string[]): void {
+    const section = this._sections?.find((s) => sectionKey(s) === key);
     if (!section) return;
     const byId = new Map(section.rooms.map((r) => [r.id, r]));
     const reordered = roomIds.flatMap((id) => {
@@ -168,7 +180,7 @@ export class RoomList {
     const scrollTop = this._scrollEl.scrollTop;
     this.setSections(this._sections!);
     this._scrollEl.scrollTop = scrollTop;
-    if (focusedId) this.focusRoom(focusedId, spaceId);
+    if (focusedId) this.focusRoom(focusedId, key);
   }
 
   /**
@@ -183,8 +195,8 @@ export class RoomList {
     }
   }
 
-  private _sectionIds(spaceId: string): string[] | null {
-    const section = this._sections?.find((s) => s.spaceId === spaceId);
+  private _sectionIds(key: string): string[] | null {
+    const section = this._sections?.find((s) => sectionKey(s) === key);
     return section ? section.rooms.map((r) => r.id) : null;
   }
 
@@ -290,7 +302,7 @@ export class RoomList {
           this._scrollEl.appendChild(label);
         }
         for (const room of section.rooms) {
-          this._scrollEl.appendChild(this._createItem(room, section.spaceId));
+          this._scrollEl.appendChild(this._createItem(room, sectionKey(section)));
         }
       }
     } else {
@@ -324,15 +336,15 @@ export class RoomList {
     this.updateRoomBadge(id, entry.unreadCount ?? 0, entry.mentionCount ?? 0);
   }
 
-  private _createItem(room: RoomEntry, sectionSpaceId?: string): HTMLElement {
+  private _createItem(room: RoomEntry, orderKey?: string): HTMLElement {
     const el = document.createElement("div");
     el.className = "room-list__item";
     el.setAttribute("role", "option");
     el.setAttribute("tabindex", "0");
     el.setAttribute("aria-label", room.name);
     el.dataset.roomId = room.id;
-    // Rows of a space's section can be dragged to reorder (room_list_drag.ts).
-    if (sectionSpaceId) el.dataset.section = sectionSpaceId;
+    // Rows of an orderable section can be dragged to reorder (room_list_drag.ts).
+    if (orderKey) el.dataset.section = orderKey;
 
     if (room.muted) {
       el.classList.add("room-list__item--muted");
@@ -398,13 +410,13 @@ export class RoomList {
 
   /**
    * Focus the list item for `id`, if present (without scrolling it into view).
-   * `sectionSpaceId` picks the row in that section when the room is listed in
+   * `orderKey` picks the row in that section when the room is listed in
    * more than one.
    */
-  focusRoom(id: string, sectionSpaceId?: string): void {
+  focusRoom(id: string, orderKey?: string): void {
     const sel = `[data-room-id="${CSS.escape(id)}"]`;
-    const inSection = sectionSpaceId
-      ? this._scrollEl.querySelector<HTMLElement>(`${sel}[data-section="${CSS.escape(sectionSpaceId)}"]`)
+    const inSection = orderKey
+      ? this._scrollEl.querySelector<HTMLElement>(`${sel}[data-section="${CSS.escape(orderKey)}"]`)
       : null;
     (inSection ?? this._scrollEl.querySelector<HTMLElement>(sel))?.focus({ preventScroll: true });
   }

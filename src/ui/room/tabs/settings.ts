@@ -14,7 +14,9 @@ import {
   getRoomStateEvents,
 } from "../../../ipc/room_settings.js";
 import { getRoomNickname } from "../../../ipc/rooms.js";
-import { applyLocalRoomMeta, setRoomDirectness, setOwnRoomNickname } from "../../../app/actions.js";
+import { applyLocalRoomMeta, setRoomDirectness, setOwnRoomNickname, knownTags, roomTags } from "../../../app/actions.js";
+import { replaceRoomTags } from "../../../app/actions/views.js";
+import { formatTags, parseTags, tagLabel } from "../../../app/room_views.js";
 import { commitSelectRow, commitTextRow } from "../../settings/commit_field.js";
 
 const JOIN_RULES: Array<[string, string]> = [
@@ -104,6 +106,29 @@ export const settingsTab: RoomTab = {
     void getRoomNickname(roomId)
       .then((current) => nick.setSavedValue(current ?? ""))
       .catch(() => { /* leave it empty; saving still works */ });
+
+    // ── Tags ─────────────────────────────────────────────────────────────
+    // Your own labels for the room (`m.tag`), which room-list tabs can filter
+    // and group by. The same as `:tag` / `:untag` and the menu's Favourite.
+    content.appendChild(controls.sectionTitle("Tags"));
+    const tagsHint = document.createElement("div");
+    tagsHint.className = "settings-dialog__hint";
+    const inUse = knownTags().map(tagLabel).join(", ");
+    tagsHint.textContent = `Comma-separated. Only you see them. In use: ${inUse}.`;
+    content.appendChild(tagsHint);
+    const tagsField = commitTextRow({
+      label: "tags",
+      value: formatTags(roomTags(roomId)),
+      placeholder: "e.g. work, favourites",
+      ariaLabel: "Room tags",
+      save: async (v) => {
+        await replaceRoomTags(roomId, parseTags(v));
+        // Show the tags as stored (`fav` → `Favourites`) once the field has
+        // taken the typed value as saved; doing it now would be overwritten.
+        setTimeout(() => tagsField.setSavedValue(formatTags(roomTags(roomId))), 0);
+      },
+    });
+    content.appendChild(tagsField.row);
 
     // ── Conversation type ────────────────────────────────────────────────
     // The `:converttodm` / `:converttoroom` pair as a single contextual button,
