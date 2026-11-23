@@ -58,9 +58,13 @@ const ROOM_LIST_STATE_TYPES: &[&str] = &[
 ];
 
 /// Global account data that re-files rooms: `m.direct` moves a room between
-/// the DMs and Group Rooms pseudo-spaces, and `m.push_rules` carries the mute
-/// flag the list draws.
-const ROOM_LIST_ACCOUNT_DATA: &[&str] = &["m.direct", "m.push_rules"];
+/// the DMs and Group Rooms tabs, `m.push_rules` carries the mute flag the list
+/// draws, and `tel.quark.room_views` is the tab definitions themselves.
+const ROOM_LIST_ACCOUNT_DATA: &[&str] = &["m.direct", "m.push_rules", crate::matrix::room_views::VIEWS_EVENT];
+
+/// Room account data that re-files a room: its tags, which tabs filter and
+/// group by.
+const ROOM_LIST_ROOM_ACCOUNT_DATA: &[&str] = &["m.tag"];
 
 /// The two fields of an event this module looks at, without deserializing the
 /// rest of it.
@@ -89,10 +93,18 @@ fn raw_is_room_list_event<T>(raw: &Raw<T>, own_user_id: &str) -> bool {
 }
 
 fn raw_is_room_list_account_data<T>(raw: &Raw<T>) -> bool {
+    raw_type_in(raw, ROOM_LIST_ACCOUNT_DATA)
+}
+
+fn raw_is_room_list_room_account_data<T>(raw: &Raw<T>) -> bool {
+    raw_type_in(raw, ROOM_LIST_ROOM_ACCOUNT_DATA)
+}
+
+fn raw_type_in<T>(raw: &Raw<T>, types: &[&str]) -> bool {
     raw.get_field::<String>("type")
         .ok()
         .flatten()
-        .is_some_and(|kind| ROOM_LIST_ACCOUNT_DATA.contains(&kind.as_str()))
+        .is_some_and(|kind| types.contains(&kind.as_str()))
 }
 
 /// Whether a sync response changes what the room list shows.
@@ -110,7 +122,8 @@ pub fn room_list_changed(response: &SyncResponse, own_user_id: &str) -> bool {
         return true;
     }
     rooms.join.values().any(|update| {
-        update.state.iter().any(|raw| raw_is_room_list_event(raw, own_user_id))
+        update.account_data.iter().any(raw_is_room_list_room_account_data)
+            || update.state.iter().any(|raw| raw_is_room_list_event(raw, own_user_id))
             || update
                 .timeline
                 .events
@@ -264,5 +277,18 @@ mod tests {
         let other: Raw<serde_json::Value> =
             Raw::new(&serde_json::json!({ "type": "im.ponies.user_emotes", "content": {} })).unwrap();
         assert!(!raw_is_room_list_account_data(&other));
+    }
+
+    #[test]
+    fn tab_definitions_and_room_tags_refile_rooms() {
+        let views: Raw<serde_json::Value> =
+            Raw::new(&serde_json::json!({ "type": "tel.quark.room_views", "content": {} })).unwrap();
+        assert!(raw_is_room_list_account_data(&views));
+        let tag: Raw<serde_json::Value> =
+            Raw::new(&serde_json::json!({ "type": "m.tag", "content": { "tags": {} } })).unwrap();
+        assert!(raw_is_room_list_room_account_data(&tag));
+        let read_marker: Raw<serde_json::Value> =
+            Raw::new(&serde_json::json!({ "type": "m.fully_read", "content": {} })).unwrap();
+        assert!(!raw_is_room_list_room_account_data(&read_marker));
     }
 }

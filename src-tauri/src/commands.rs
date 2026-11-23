@@ -504,6 +504,31 @@ pub async fn get_rooms(
     crate::matrix::rooms::get_rooms(&client, &recency).await
 }
 
+/// The account's room-list tab definitions (`tel.quark.room_views`), or null.
+#[tauri::command]
+pub async fn get_room_views(state: State<'_, MatrixState>) -> Result<serde_json::Value, String> {
+    let client = get_client(&state)?;
+    Ok(crate::matrix::room_views::get_room_views(&client).await)
+}
+
+#[tauri::command]
+pub async fn set_room_views(state: State<'_, MatrixState>, content: serde_json::Value) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::room_views::set_room_views(&client, &content).await
+}
+
+/// Add (`on`) or remove one `m.tag` on a room.
+#[tauri::command]
+pub async fn set_room_tag(
+    state: State<'_, MatrixState>,
+    room_id: String,
+    tag: String,
+    on: bool,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+    crate::matrix::room_views::set_room_tag(&client, &room_id, &tag, on).await
+}
+
 /// Resolve the existing DM room shared with `user_id` from the account's
 /// `m.direct` mapping, or `None` when there is none to open.
 ///
