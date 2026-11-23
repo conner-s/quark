@@ -31,6 +31,19 @@ export interface ViewStoreIpc {
 /** How long a write may wait for its echo before the store's copy wins. */
 export const ECHO_GRACE_MS = 60_000;
 
+/**
+ * JSON with object keys sorted, for comparing a write with its echo: the
+ * backend passes account data through `serde_json::Value`, which (without
+ * `preserve_order`) hands objects back with their keys sorted.
+ */
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(value ?? null, (_key, v: unknown) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  );
+}
+
 let _ipc: ViewStoreIpc | null = null;
 let _onError: (message: string) => void = () => {};
 let _pending: { json: string; at: number } | null = null;
@@ -67,6 +80,7 @@ export function viewContext(): ViewContext {
     spaceRoomIds: new Set(AppState.get("spaceRoomIds")),
     spaceMembers: AppState.get("spaceMembers"),
     spaces: AppState.get("topLevelSpaces"),
+    openRoomId: AppState.get("currentRoomId"),
   };
 }
 
@@ -80,7 +94,7 @@ export async function loadViews(): Promise<void> {
     console.warn("Failed to read room-list tabs:", err);
     return;
   }
-  const json = JSON.stringify(content ?? null);
+  const json = canonicalJson(content);
   if (_pending) {
     if (json === _pending.json) {
       _pending = null;
@@ -101,7 +115,7 @@ export function saveViews(next: RoomView[]): Promise<void> {
   const previous = allViews();
   AppState.set("roomViews", next);
   const content = serializeViews(next);
-  _pending = { json: JSON.stringify(content), at: _now() };
+  _pending = { json: canonicalJson(content), at: _now() };
   _writeChain = _writeChain.then(async () => {
     if (!_ipc) return;
     try {

@@ -107,6 +107,12 @@ describe("matchesView", () => {
     expect(matchesView(v, room("!d"), ctx())).toBe(false);
   });
 
+  it("unread-only keeps listing the open room once it has been read", () => {
+    const v = view({ unreadOnly: true });
+    expect(matchesView(v, room("!open"), ctx({ openRoomId: "!open" }))).toBe(true);
+    expect(matchesView(v, room("!other"), ctx({ openRoomId: "!open" }))).toBe(false);
+  });
+
   it("can hide muted rooms", () => {
     expect(matchesView(view({ hideMuted: true }), room("!a", { muted: true }), ctx())).toBe(false);
   });
