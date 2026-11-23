@@ -74,6 +74,24 @@ describe("view_store", () => {
     expect(allViews().find((v) => v.id === HOME_VIEW_ID)!.label).toBe("Base");
   });
 
+  it("recognises its echo with the keys in another order, and then takes later changes", async () => {
+    // What serde_json::Value hands back: every object's keys sorted.
+    const sortKeys = (v: unknown): unknown =>
+      Array.isArray(v) ? v.map(sortKeys)
+        : v && typeof v === "object"
+          ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys((v as Record<string, unknown>)[k])]))
+          : v;
+    ipc.setRoomViews.mockImplementation(async (content) => {
+      stored = sortKeys(content);
+    });
+    await updateView(HOME_VIEW_ID, { label: "Base" });
+    await loadViews(); // the echo: clears the pending write
+    const other = allViews().map((v) => (v.id === HOME_VIEW_ID ? { ...v, label: "Elsewhere" } : v));
+    stored = sortKeys(serializeViews(other));
+    await loadViews(); // another device's change, well inside the grace
+    expect(allViews().find((v) => v.id === HOME_VIEW_ID)!.label).toBe("Elsewhere");
+  });
+
   it("accepts the echo, and lets the store win once the grace runs out", async () => {
     ipc.setRoomViews.mockImplementation(async () => {});
     await updateView(HOME_VIEW_ID, { label: "Base" });

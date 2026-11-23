@@ -234,6 +234,11 @@ export interface ViewContext {
   spaceMembers: Record<string, string[]> | null;
   /** Top-level spaces in strip order, for grouping by space. */
   spaces: { id: string; name: string }[];
+  /**
+   * The open room. An unread-only tab keeps listing it: opening a room marks
+   * it read, and it would otherwise vanish from under the user.
+   */
+  openRoomId?: string | null;
 }
 
 const isDm = (r: RoomInfo): boolean => r.is_direct;
@@ -264,7 +269,8 @@ export function matchesView(view: RoomView, room: RoomInfo, ctx: ViewContext): b
   if (view.tags.length > 0 && !view.tags.some((t) => tags.includes(t))) return false;
   if (view.excludeTags.some((t) => tags.includes(t))) return false;
   if (view.hideMuted && room.muted) return false;
-  if (view.unreadOnly && !(room.notification_count > 0 || (room.unread_count > 0 && !room.muted))) return false;
+  const unread = room.notification_count > 0 || (room.unread_count > 0 && !room.muted);
+  if (view.unreadOnly && !unread && room.room_id !== ctx.openRoomId) return false;
   return true;
 }
 
