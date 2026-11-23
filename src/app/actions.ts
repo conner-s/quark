@@ -112,6 +112,7 @@ export {
   openSpaceSettings,
   openDebugViewer,
   openDebugViewerForEvent,
+  openInspector,
 } from "./actions/dialogs.js";
 
 // The emoji picker (compose and reaction contexts) and the GIF picker.

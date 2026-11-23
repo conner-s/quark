@@ -773,6 +773,14 @@ const ACTION_LITERALS = [
     command: { name: "debug", args: "[cache|$eventId]" },
   },
   {
+    // The Web Inspector, in a build that has one; Settings → General → Debug
+    // says which this is and, where it can, switches it on.
+    id: "open-devtools",
+    description: "Open the Web Inspector (developer tools)",
+    command: { name: "inspect", aliases: ["devtools"] },
+    chrome: ["settings"],
+  },
+  {
     id: "help",
     description: "Show commands and keybindings",
     command: { name: "help" },

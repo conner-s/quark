@@ -88,6 +88,12 @@ export interface UserColorsConfig {
   overrides: Record<string, string>;
 }
 
+/** `[debug]`: debugging aids. */
+export interface DebugConfig {
+  /** Offer the Web Inspector, in a build that has it (see `getDevtoolsSupport`). */
+  devtools: boolean;
+}
+
 export interface AppConfig {
   general: GeneralConfig;
   sync: SyncConfig;
@@ -98,6 +104,7 @@ export interface AppConfig {
   cache: CacheConfig;
   updater: UpdaterConfig;
   user_colors: UserColorsConfig;
+  debug: DebugConfig;
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
@@ -110,6 +117,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   cache: { image_memory_mb: 150, timeline_rooms: 30 },
   updater: { channel: "stable", auto_check: true },
   user_colors: { name: true, avatar: false, border: false, overrides: {} },
+  debug: { devtools: false },
 };
 
 export async function getAppConfig(): Promise<AppConfig> {
@@ -118,4 +126,20 @@ export async function getAppConfig(): Promise<AppConfig> {
 
 export async function setAppConfig(config: AppConfig): Promise<void> {
   return invoke<void>("set_app_config", { config });
+}
+
+/**
+ * What this build can do with the Web Inspector: `always` (a debug build),
+ * `toggle` (a release build with the `devtools` feature, on while
+ * `[debug] devtools` is), or `none`.
+ */
+export type DevtoolsSupport = "always" | "toggle" | "none";
+
+export async function getDevtoolsSupport(): Promise<DevtoolsSupport> {
+  return invoke<DevtoolsSupport>("get_devtools_support");
+}
+
+/** Open the Web Inspector. Rejects with why when the build or setting can't. */
+export async function openDevtools(): Promise<void> {
+  return invoke<void>("open_devtools");
 }

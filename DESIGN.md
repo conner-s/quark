@@ -1425,6 +1425,7 @@ handler is now a compile error, not a silent no-op.
 :createroom / :mkroom [name]                   Create a room (opens the dialog)
 :createspace / :mkspace [name]                 Create a space (opens the dialog)
 :debug [cache|$eventId]                        Open the debug viewer
+:inspect / :devtools                          Open the Web Inspector (see Debugging)
 :help                                          Show commands and keybindings
 :join <room-id|alias>                          Join a room or space
 :read [room-id]                                Mark this room as read
@@ -2770,6 +2771,9 @@ border = false                # draw the message box border in their color
 [user_colors.overrides]       # this device only; beats the color they published
 "@alice:example.org" = "#ff4466"   # #rgb or #rrggbb; invalid entries are dropped on load
 
+[debug]
+devtools = false              # offer the Web Inspector, in a build that has it (see Debugging)
+
 # Keybindings are configured in ~/.config/quark/quarkrc (see Keybinding Configuration)
 # NOT in this file — quarkrc uses vimrc-style syntax for full flexibility
 ```
@@ -2817,6 +2821,35 @@ Android updates ship through a **self-hosted F-Droid repository** at `https://qu
 The repo is assembled on every Pages deploy (`pages.yml`): CI downloads the newest published release's `*-android.apk` from GitHub Releases, then `fdroid update` (config in `fdroid/`) generates and signs the package index into the Pages artifact — no APK or index is ever committed to git. Two signing keys are involved: the APK key (`ANDROID_KEYSTORE_*` secrets, signs the app) and the repo key (`FDROID_KEYSTORE_*` secrets, signs the index; its certificate's SHA-256 is the pinned fingerprint users add). If the F-Droid secrets are absent the site deploys without `/fdroid/repo`. App listing metadata (name, description, license) lives in `fdroid/metadata/tel.quark.app.yml`.
 
 The landing page's download section has an Android card (`#android`) with the ways in: an `fdroid.link` link carrying the repo URL and pinned fingerprint (it opens the F-Droid app where one is installed), the repo page `fdroid update` generates at `/fdroid/repo/` (with its QR code, for adding from a desktop browser), the APK on GitHub Releases, and the URL and fingerprint as text for adding by hand. Its format line says the APK is 64-bit ARM (`arm64-v8a`) only, because `release.yml` builds `--target aarch64` — a 32-bit or x86 device finds no compatible app in the repo — so it changes whenever the build's targets do. On Android the hero's download button points at that card rather than at GitHub Releases; on iOS, which has no public build (GitHub Releases carries none), it reads "No iOS build yet" and jumps to the download section. The fingerprint is hardcoded in `docs/index.html`; it can only change if the repo key is rotated, which the key-custody note in `fdroid/config.yml` rules out.
+
+---
+
+## Debugging
+
+**The debug viewer** (`:debug`, a message's *View raw event*) shows a room's state
+events, one event's raw JSON, or the event cache, in every build.
+
+**The Web Inspector** (WebKit's developer tools) depends on the build:
+
+| Build | Inspector | Settings → General → Debug |
+| --- | --- | --- |
+| Debug (`pnpm tauri dev`) | always on | says so |
+| Release with the `devtools` feature, Linux | on while `[debug] devtools` is | a *Developer tools* checkbox |
+| Release with the `devtools` feature, macOS / Windows | always on | says so |
+| Release (installers, the default Nix package) | none | says how to get one |
+
+`devtools` is a feature of the `quark` crate (it enables Tauri's) and is never
+in a shipped installer. The Nix package builds it with `withDevtools = true`
+(`quark.override { withDevtools = true; }`). The Linux switch is WebKitGTK's
+`enable-developer-extras`, which is what puts *Inspect Element* in the
+webview's right-click menu (`src-tauri/src/devtools.rs`). Saving the setting
+applies at once, and turning it off closes an open inspector. `:inspect` (or
+*[open inspector]* under Debug) opens it on a build that allows it, and
+otherwise says why not. `:set devtools=true|false` sets it from `quarkrc`.
+
+Quark's own right-click menus (rooms, tabs, spaces, the strip, messages)
+replace the webview's, so *Inspect Element* shows only where Quark has no menu.
+Use `:inspect` and the inspector's element picker for the rest.
 
 ---
 

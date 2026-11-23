@@ -29,6 +29,7 @@ export function applySetOptions(cfg: AppConfig, sets: SetOption[]): AppConfig {
     // No `set` option touches it, but dropping it here would wipe the local
     // color overrides on the next config write.
     user_colors: { ...cfg.user_colors, overrides: { ...cfg.user_colors.overrides } },
+    debug: { ...cfg.debug },
   };
 
   for (const { name, value } of sets) {
@@ -65,6 +66,8 @@ export function applySetOptions(cfg: AppConfig, sets: SetOption[]): AppConfig {
       // updater
       case "update_channel": if (value === "stable" || value === "beta") updated.updater.channel = value; break;
       case "auto_update":    if (typeof value === "boolean") updated.updater.auto_check = value; break;
+      // debug
+      case "devtools":       if (typeof value === "boolean") updated.debug.devtools = value; break;
       default:
         console.warn(`[quarkrc] unknown set option: "${name}"`);
     }

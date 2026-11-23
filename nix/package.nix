@@ -41,6 +41,10 @@
   dbus,
   webkitgtk_4_1,
   xdg-utils,
+  # Build in the Web Inspector, off until Settings → General → Debug turns it
+  # on (the crate's `devtools` feature; DESIGN.md → Debugging). For a machine
+  # you debug on: `quark.override { withDevtools = true; }`.
+  withDevtools ? false,
 }:
 
 let
@@ -87,6 +91,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
 
   cargoLock.lockFile = ../src-tauri/Cargo.lock;
   cargoRoot = "src-tauri";
+  buildFeatures = lib.optionals withDevtools [ "devtools" ];
   buildAndTestSubdir = finalAttrs.cargoRoot;
 
   pnpmDeps = fetchPnpmDeps {

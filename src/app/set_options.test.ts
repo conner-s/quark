@@ -127,6 +127,12 @@ describe("applySetOptions — updater", () => {
     expect(out.updater.auto_check).toBe(false);
   });
 
+  it("toggles devtools, leaving the input untouched", () => {
+    const out = applySetOptions(DEFAULT_APP_CONFIG, [{ name: "devtools", value: true }]);
+    expect(out.debug.devtools).toBe(true);
+    expect(DEFAULT_APP_CONFIG.debug.devtools).toBe(false);
+  });
+
   it("preserves the updater section when other options change", () => {
     const base = { ...DEFAULT_APP_CONFIG, updater: { channel: "beta" as const, auto_check: false } };
     const out = applySetOptions(base, [{ name: "theme", value: "amber" }]);

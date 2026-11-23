@@ -65,6 +65,9 @@ let _mockRoomViews: unknown = null;
 /** Mock `[user_colors]` — kept across calls so a local override set from the
  *  profile popup survives the next `get_app_config`. */
 let _mockOwnColor: string | null = "#00aaff";
+/** `[debug]`, kept like the user colors so a saved toggle reads back. */
+let _mockDebug = { devtools: false };
+
 let _mockUserColors: { name: boolean; avatar: boolean; border: boolean; overrides: Record<string, string> } =
   { name: true, avatar: false, border: false, overrides: {} };
 
@@ -964,6 +967,7 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
         cache: { image_memory_mb: 150, timeline_rooms: 30 },
         updater: { channel: "stable", auto_check: true },
         user_colors: structuredClone(_mockUserColors),
+        debug: { ..._mockDebug },
       };
     case "request_user_colors": {
       // A few mock senders carry a color; everyone else has none. One is
@@ -1029,11 +1033,19 @@ export async function mockInvoke(cmd: string, args?: Record<string, unknown>): P
       // real backend only reports when the push rule genuinely didn't land.
       return { synced: true, warning: null };
     case "set_app_config": {
-      const cfg = args?.config as { user_colors?: typeof _mockUserColors } | undefined;
+      const cfg = args?.config as { user_colors?: typeof _mockUserColors; debug?: typeof _mockDebug } | undefined;
+      if (cfg?.debug) _mockDebug = { ...cfg.debug };
       // As in the backend, overrides are only set_user_color_override's.
       if (cfg?.user_colors) _mockUserColors = { ...structuredClone(cfg.user_colors), overrides: _mockUserColors.overrides };
       return null;
     }
+    // The browser has its own inspector; this stands in for a toggleable build.
+    case "get_devtools_support":
+      return "toggle";
+    case "open_devtools":
+      if (!_mockDebug.devtools) throw new Error("Developer tools are off. Turn them on in Settings → General → Debug.");
+      return null;
+
     case "set_notification_config":
     case "clear_media_cache":
     case "set_cache_size_limit":

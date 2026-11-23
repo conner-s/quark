@@ -4,6 +4,7 @@
 import { AppState } from "../state.js";
 
 import { showError } from "../../ui/NotificationToast.js";
+import { openDevtools } from "../../ipc/app_config.js";
 
 import { getComponents } from "./context.js";
 
@@ -94,4 +95,16 @@ export async function openDebugViewerForEvent(eventId: string): Promise<void> {
     return;
   }
   await openDebugViewer({ kind: "event", roomId, eventId });
+}
+
+/**
+ * Open the Web Inspector. The backend says why when it can't: a build without
+ * developer tools, or the Debug setting off.
+ */
+export async function openInspector(): Promise<void> {
+  try {
+    await openDevtools();
+  } catch (err) {
+    showError(err instanceof Error ? err.message : String(err));
+  }
 }

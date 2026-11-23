@@ -4602,6 +4602,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "webkit2gtk",
  "wiremock",
  "wl-clipboard-rs",
  "x11-clipboard",

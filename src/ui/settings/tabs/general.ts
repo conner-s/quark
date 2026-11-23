@@ -5,8 +5,8 @@
 // SettingsDialog._buildGeneralTab; behaviour is unchanged — the host now drives
 // it through SettingsTabContext (controls/close/dispatch) instead of `this`.
 
-import { getAppConfig, setAppConfig } from "../../../ipc/app_config.js";
-import type { AppConfig } from "../../../ipc/app_config.js";
+import { getAppConfig, getDevtoolsSupport, setAppConfig } from "../../../ipc/app_config.js";
+import type { AppConfig, DevtoolsSupport } from "../../../ipc/app_config.js";
 import { applyReadReceiptVisibility } from "../../../app/actions.js";
 import { AppState } from "../../../app/state.js";
 import { setUserColorToggles } from "../../../app/user_colors.js";
@@ -157,6 +157,37 @@ export const generalTab: SettingsTab = {
         ctx.dispatch("help");
       },
     ));
+
+    // Debug — the Web Inspector, where the build has one (src-tauri/src/devtools.rs).
+    section.appendChild(controls.sectionTitle("Debug"));
+    const support = await getDevtoolsSupport().catch((): DevtoolsSupport => "none");
+    const note = (text: string): HTMLElement => {
+      const el = document.createElement("div");
+      el.className = "settings-dialog__hint";
+      el.textContent = text;
+      return el;
+    };
+    if (support === "toggle") {
+      section.appendChild(controls.checkbox(
+        "Developer tools (right-click → Inspect Element, or :inspect)",
+        draft.debug.devtools,
+        (v) => { draft = { ...draft, debug: { ...draft.debug, devtools: v } }; },
+      ));
+    } else if (support === "always") {
+      section.appendChild(note("Developer tools are always on in this build: right-click → Inspect Element, or :inspect."));
+    } else {
+      section.appendChild(note("This build has no developer tools. Build it with the `devtools` feature (Nix: withDevtools = true) to turn them on here."));
+    }
+    if (support !== "none") {
+      section.appendChild(controls.dispatchButton(
+        "[open inspector]",
+        "Open the Web Inspector",
+        () => {
+          ctx.close();
+          ctx.dispatch("open-devtools");
+        },
+      ));
+    }
 
     // Save bar lives outside the content section so it aligns at the gutter
     // (not double-indented) and reads as a footer to the pane.
