@@ -413,7 +413,10 @@ body.quark-room-dragging * {
 .room-list__item--unread {
   color: var(--roomlist-unread);
   text-shadow: 0 0 4px color-mix(in srgb, var(--roomlist-unread) 15%, transparent);
-  animation: unread-pulse 2s ease-in-out infinite;
+  /* A few pulses, then still. A room can stay unread for hours, and an infinite
+     pulse kept an otherwise idle window producing frames the whole time. A
+     re-render of the list (new activity) starts the pulse again. */
+  animation: unread-pulse 2s ease-in-out 3;
 }
 
 .room-list__item--muted {
