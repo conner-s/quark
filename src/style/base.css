@@ -249,6 +249,12 @@ body.quark-modal-open .input-bar__field {
   border-radius: var(--icon-radius);
 }
 
+/* A shortcut tab's room avatar or profile picture is usually a photo, drawn
+   edge to edge like the room header's rather than letterboxed like a logo. */
+.space-strip__item--room .space-strip__icon {
+  object-fit: cover;
+}
+
 .space-strip__divider {
   width: 20px;
   height: var(--border-width);

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { SpaceStrip } from "./SpaceStrip.js";
-import { newView, parseViews, stripOrder } from "../app/room_views.js";
+import { newShortcutView, newView, parseViews, stripOrder } from "../app/room_views.js";
 
 const SPACE_ICON = "data:image/png;base64,SPACE";
 const SPACE_ID = "!s:server";
@@ -228,6 +228,34 @@ describe("SpaceStrip", () => {
       expect(onTab).toHaveBeenCalledWith("__dms__", 5, 6);
       expect(onSpace).toHaveBeenCalledWith(SPACE_ID, 5, 6);
       expect(onTab).toHaveBeenCalledTimes(1);
+    });
+
+    it("draws a shortcut tab's room avatar once it is known, and its icon until then", () => {
+      const dm = { ...newShortcutView({ room_id: "!dm:x", name: "Alice" }, []) };
+      strip.setSpaces([]);
+      strip.setViews([dm]);
+      const el = () => strip.getElement().querySelector<HTMLElement>(`[data-space-id="${dm.id}"]`)!;
+      expect(el().textContent).toBe("A");
+      expect(el().classList).toContain("space-strip__item--room");
+      strip.setRoomAvatar("!dm:x", "data:image/png;base64,AA==");
+      expect(el().querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,AA==");
+      expect(strip.hasRoomAvatar("!dm:x")).toBe(true);
+      // Kept across a re-render, and dropped once no tab opens the room.
+      strip.setSpaces([{ id: SPACE_ID, name: "Space" }]);
+      expect(el().querySelector("img")).not.toBeNull();
+      strip.setViews([{ ...dm, roomId: "!other:x" }]);
+      expect(el().querySelector("img")).toBeNull();
+      expect(strip.hasRoomAvatar("!dm:x")).toBe(false);
+    });
+
+    it("keeps a shortcut tab's icon when its picture is turned off", () => {
+      const dm = { ...newShortcutView({ room_id: "!dm:x", name: "Alice" }, []), avatar: false };
+      strip.setSpaces([]);
+      strip.setViews([dm]);
+      strip.setRoomAvatar("!dm:x", "data:image/png;base64,AA==");
+      const el = strip.getElement().querySelector<HTMLElement>(`[data-space-id="${dm.id}"]`)!;
+      expect(el.querySelector("img")).toBeNull();
+      expect(el.textContent).toBe("A");
     });
 
     it("gives a right-click off every icon the strip menu, not the webview's", () => {

@@ -70,6 +70,7 @@ import {
   groupTab,
   hideTab,
   openTabEditor,
+  pinRoomTab,
   resetTab,
   setTag,
   sortTab,
@@ -90,6 +91,7 @@ const ROOM_ARG_COMMANDS = new Set([
   "convert-to-room",
   "mute-room",
   "unmute-room",
+  "pin-room-tab",
 ]);
 
 /**
@@ -475,6 +477,11 @@ export async function executeCommand(parsed: ParsedCommand): Promise<void> {
 
     case "new-tab": {
       createTab(parsed.args.join(" ") || undefined);
+      break;
+    }
+
+    case "pin-room-tab": {
+      await pinRoomTab(roomId);
       break;
     }
 

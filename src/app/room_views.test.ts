@@ -11,7 +11,9 @@ import {
   builtinView,
   matchesView,
   mergeManualOrder,
+  newShortcutView,
   newView,
+  isShortcut,
   normalizeTag,
   parseViews,
   serializeViews,
@@ -303,5 +305,46 @@ describe("parseSort / parseGroupBy", () => {
     expect(parseGroupBy("tags")).toBe("tag");
     expect(parseGroupBy("off")).toBe("none");
     expect(parseGroupBy("nope")).toBeNull();
+  });
+});
+
+describe("shortcut tabs", () => {
+  const rooms = [room("!a"), room("!dm", { is_direct: true, name: "Alice" }), room("!b")];
+
+  it("list the one room they open, whatever their filters say", () => {
+    const v = view({ roomId: "!dm", dms: false, rooms: "none", unreadOnly: true, tags: ["u.work"] });
+    expect(ids(rooms.filter((r) => matchesView(v, r, ctx())))).toEqual(["!dm"]);
+  });
+
+  it("draw that room in one unlabelled section, however the tab groups", () => {
+    const sections = buildViewSections(view({ roomId: "!dm", groupBy: "kind" }), rooms, ctx());
+    expect(sections).toEqual([{ label: "", rooms: [rooms[1]], key: "all" }]);
+  });
+
+  it("are named after their room and draw its avatar", () => {
+    const v = newShortcutView({ room_id: "!dm", name: "Alice" }, []);
+    expect(v).toMatchObject({ label: "Alice", icon: "A", roomId: "!dm", avatar: true });
+    expect(isShortcut(v)).toBe(true);
+    expect(isShortcut(newView("Work", []))).toBe(false);
+  });
+
+  it("round-trip through account data, and lists don't write the fields", () => {
+    const v = { ...newShortcutView({ room_id: "!dm", name: "Alice" }, []), avatar: false };
+    const content = serializeViews([v, newView("Work", [v.id])]);
+    const stored = (content.views as Record<string, unknown>[]);
+    expect(stored[0]).toMatchObject({ room_id: "!dm", avatar: false });
+    expect(stored[1]).not.toHaveProperty("room_id");
+    expect(parseViews(content).find((p) => p.id === v.id)).toMatchObject({ roomId: "!dm", avatar: false });
+  });
+
+  it("never turn a built-in into a shortcut, and drop a room ID that isn't one", () => {
+    const parsed = parseViews({
+      views: [
+        { id: ALL_VIEW_ID, room_id: "!a" },
+        { id: "__view_x", room_id: "#alias:server" },
+      ],
+    });
+    expect(parsed.find((v) => v.id === ALL_VIEW_ID)?.roomId).toBeNull();
+    expect(parsed.find((v) => v.id === "__view_x")?.roomId).toBeNull();
   });
 });

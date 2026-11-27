@@ -113,4 +113,65 @@ describe("TabsDialog", () => {
     button("[↓]").click();
     expect(allViews().map((v) => v.id).slice(0, 2)).toEqual([ALL_VIEW_ID, HOME_VIEW_ID]);
   });
+
+  describe("shortcut tabs", () => {
+    const cache = [
+      { room_id: "!dm:x", name: "Alice", topic: null, avatar_url: null, unread_count: 0, notification_count: 0, is_direct: true, is_encrypted: true, member_count: 2 },
+      { room_id: "!dev:x", name: "Dev", topic: null, avatar_url: null, unread_count: 0, notification_count: 0, is_direct: false, is_encrypted: false, member_count: 9 },
+    ];
+    beforeEach(() => {
+      AppState.set("roomListCache", cache);
+      AppState.set("currentRoomId", "!dev:x");
+    });
+    afterEach(() => {
+      AppState.set("roomListCache", []);
+      AppState.set("currentRoomId", null);
+    });
+    const newTab = () => {
+      dlg.show();
+      button("[+ new]").click();
+      return allViews()[allViews().length - 1].id;
+    };
+
+    it("aren't offered on built-in tabs", () => {
+      dlg.show(ALL_VIEW_ID);
+      expect(root().querySelector("select[aria-label='Tab opens']")).toBeNull();
+    });
+
+    it("open the room being viewed, take its name, and trade the list rows for a room picker", () => {
+      const id = newTab();
+      selectEl("opens").focus();
+      change(selectEl("opens"), "room");
+      expect(getView(id)).toMatchObject({ roomId: "!dev:x", label: "Dev", icon: "D", avatar: true });
+      expect(input("Tab name").value).toBe("Dev");
+      expect(selectEl("room").value).toBe("!dev:x");
+      expect(root().textContent).toContain("show the room's avatar");
+      expect(root().textContent).not.toContain("direct messages");
+      expect(root().querySelector("select[aria-label='Tab opens']")).toBe(document.activeElement);
+    });
+
+    it("follow a new room's name only while the name is still the old room's", () => {
+      const id = newTab();
+      change(selectEl("opens"), "room");
+      change(selectEl("room"), "!dm:x");
+      expect(getView(id)).toMatchObject({ roomId: "!dm:x", label: "Alice" });
+      expect(root().textContent).toContain("show their profile picture");
+
+      change(input("Tab name"), "Bestie");
+      change(selectEl("room"), "!dev:x");
+      expect(getView(id)).toMatchObject({ roomId: "!dev:x", label: "Bestie" });
+    });
+
+    it("turn the picture off, and go back to being a list", () => {
+      const id = newTab();
+      change(selectEl("opens"), "room");
+      const pic = [...root().querySelectorAll<HTMLInputElement>(".tabs-dialog__editor input[type=checkbox]")].slice(-1)[0];
+      pic.checked = false;
+      change(pic);
+      expect(getView(id)?.avatar).toBe(false);
+      change(selectEl("opens"), "list");
+      expect(getView(id)?.roomId).toBeNull();
+      expect(root().textContent).toContain("direct messages");
+    });
+  });
 });
