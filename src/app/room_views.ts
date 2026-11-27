@@ -3,7 +3,8 @@
 //
 // A view is a filter over the local room cache plus how to group and sort what
 // it keeps. Home, All Rooms, Direct Messages and Group Rooms are built-in views
-// the user may edit or hide but not delete; the user can add their own. The
+// the user may edit or hide but not delete; the user can add their own,
+// including shortcut tabs that open one room or DM (`roomId`). The
 // whole set is stored as one global account-data event (`tel.quark.room_views`)
 // so it follows the account across devices. The backend treats that content as
 // opaque; this module owns its schema, and parses it defensively — another
@@ -80,6 +81,16 @@ export interface RoomView {
   sort: ViewSort;
   /** Room IDs in hand-made order, for `sort: "manual"`. */
   order: string[];
+  /**
+   * Custom tabs only: the one room (or DM) this tab opens. A shortcut tab
+   * lists that room alone and ignores every filter, grouping and sort above.
+   */
+  roomId: string | null;
+  /**
+   * With `roomId`: draw the room's avatar on the strip instead of `icon` — for
+   * a DM, the other person's profile picture. The icon stays the fallback.
+   */
+  avatar: boolean;
 }
 
 export const HOME_VIEW_ID = "__home__";
@@ -103,6 +114,8 @@ const BASE: Omit<RoomView, "id" | "label" | "icon" | "position"> = {
   groupBy: "none",
   sort: "recent",
   order: [],
+  roomId: null,
+  avatar: true,
 };
 
 // `m.direct` is the user's own declaration of what a DM is, so it is the whole
@@ -134,15 +147,29 @@ export const builtinView = (id: string): RoomView | undefined => {
 export const isViewId = (id: string): boolean => id.startsWith("__");
 
 /** A fresh custom view with the given label, listing everything. */
+/** What a tab made without a name is called. */
+export const NEW_TAB_LABEL = "New tab";
+
 export function newView(label: string, existingIds: Iterable<string>): RoomView {
   const taken = new Set(existingIds);
   let id: string;
   do {
     id = `__view_${Math.random().toString(36).slice(2, 10)}`;
   } while (taken.has(id));
-  const name = label.trim() || "New tab";
+  const name = label.trim() || NEW_TAB_LABEL;
   return { ...cloneView({ ...BASE, id, label: name, icon: defaultIcon(name), position: "top" }) };
 }
+
+/** A custom tab that opens `room`, named after it and drawn with its avatar. */
+export function newShortcutView(
+  room: { room_id: string; name: string | null },
+  existingIds: Iterable<string>,
+): RoomView {
+  return { ...newView(room.name ?? room.room_id, existingIds), roomId: room.room_id, avatar: true };
+}
+
+/** Whether a tab opens one room rather than listing several. */
+export const isShortcut = (v: RoomView): v is RoomView & { roomId: string } => v.roomId !== null;
 
 export function defaultIcon(label: string): string {
   return [...label.trim()][0]?.toUpperCase() ?? "?";
@@ -176,6 +203,7 @@ function parseView(raw: unknown): RoomView | null {
   if (typeof r.id !== "string" || !isViewId(r.id)) return null;
   const base = builtinView(r.id) ?? (r.id.startsWith("__view_") ? newViewWithId(r.id) : null);
   if (!base) return null; // an unknown built-in, from a newer build
+  const custom = !isBuiltinView(base.id);
   return {
     id: base.id,
     label: text(r.label, base.label, 64),
@@ -193,6 +221,8 @@ function parseView(raw: unknown): RoomView | null {
     groupBy: oneOf(GROUPS, r.group_by, base.groupBy),
     sort: oneOf(SORTS, r.sort, base.sort),
     order: strings(r.order, base.order),
+    roomId: custom && typeof r.room_id === "string" && r.room_id.startsWith("!") ? r.room_id : null,
+    avatar: bool(r.avatar, base.avatar),
   };
 }
 
@@ -251,6 +281,7 @@ export function serializeViews(views: RoomView[]): Record<string, unknown> {
       group_by: v.groupBy,
       sort: v.sort,
       order: v.order,
+      ...(v.roomId ? { room_id: v.roomId, avatar: v.avatar } : {}),
     })),
   };
 }
@@ -285,6 +316,7 @@ function inSpaces(roomId: string, spaceIds: string[], ctx: ViewContext): boolean
 }
 
 export function matchesView(view: RoomView, room: RoomInfo, ctx: ViewContext): boolean {
+  if (view.roomId !== null) return room.room_id === view.roomId;
   if (isDm(room)) {
     if (!view.dms) return false;
   } else {
@@ -414,6 +446,8 @@ function compareTags(a: string, b: string): number {
  */
 export function buildViewSections(view: RoomView, allRooms: RoomInfo[], ctx: ViewContext): ViewSection[] {
   const rooms = sortRooms(view, allRooms.filter((r) => matchesView(view, r, ctx)));
+  // A shortcut's one room needs no heading ("Direct messages" over a DM).
+  if (view.roomId !== null) return [{ label: "", rooms, key: "all" }];
   const sections: ViewSection[] = [];
   const add = (label: string, list: RoomInfo[], key: string, spaceId?: string) => {
     if (list.length > 0) sections.push({ label, rooms: list, key, ...(spaceId ? { spaceId } : {}) });

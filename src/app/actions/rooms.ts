@@ -1083,6 +1083,20 @@ export async function selectSpace(
     return;
   }
 
+  // A shortcut tab is a jump to its room, so it opens it — on mobile too,
+  // closing the drawer — and focuses the timeline rather than the list.
+  const shortcut = getView(spaceId)?.roomId;
+  if (shortcut) {
+    if (opts.skipRoomRestore) return;
+    if (orderedIds.includes(shortcut)) {
+      await selectRoom(shortcut);
+    } else {
+      clearActiveRoom();
+      showError(`You're not in ${getView(spaceId)?.label ?? "that room"} any more — point the tab at another room in :tabs`);
+    }
+    return;
+  }
+
   // Selecting a space is a "browse rooms" action: focus the room list, then load
   // the space's own chat into the timeline WITHOUT stealing that focus, so it
   // never lingers on a room from the space we just left. (#11)

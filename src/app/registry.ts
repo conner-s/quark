@@ -836,6 +836,15 @@ const ACTION_LITERALS = [
     menus: [{ surface: "tab", label: "New tab…", group: 3, order: 1 }, { surface: "strip", label: "New tab…", group: 1, order: 1 }],
   },
   {
+    // A shortcut tab: the room alone, opened by selecting the tab, drawn with
+    // its avatar (a DM's, the other person's picture).
+    id: "pin-room-tab",
+    description: "Put this room or DM on the strip as a tab that opens it",
+    requires: ["room"],
+    command: { name: "pintab", aliases: ["tabroom"], args: "[room-id]" },
+    menus: [{ surface: "room", label: "Add as tab", group: 3, order: 2.7 }],
+  },
+  {
     id: "hide-tab",
     description: "Hide the room-list tab (bring it back from :tabs)",
     requires: ["session"],

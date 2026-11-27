@@ -9,6 +9,9 @@
 //                    │ group  [by space ▾]   sort [by hand ▾]
 //   [↑] [↓] [+ new]  │                    [reset] / [delete]
 //
+// A custom tab also chooses what it opens: a list (the rows above), or one
+// room or DM — then a room picker and "picture" replace the list's rows.
+//
 // Every change saves as it is made (view_store.ts): selects and checkboxes at
 // once, text fields when they lose focus or on Enter, so typing a name is one
 // account-data write rather than one per key.
@@ -18,10 +21,12 @@ import { AppState } from "../app/state.js";
 import {
   GROUP_OPTIONS,
   HOME_VIEW_ID,
+  NEW_TAB_LABEL,
   SORT_OPTIONS,
   defaultIcon,
   formatTags,
   isBuiltinView,
+  isShortcut,
   newView,
   parseTags,
   tagLabel,
@@ -52,11 +57,46 @@ const POSITION_OPTIONS: [ViewPosition, string][] = [
   ["top", "above spaces"],
   ["bottom", "below spaces"],
 ];
+const OPENS_OPTIONS: [string, string][] = [
+  ["list", "a list of rooms"],
+  ["room", "one room or DM"],
+];
+
+/** What a tab turned into a shortcut opens first: the open room, else the first by name. */
+function defaultShortcutRoom(): string | null {
+  const rooms = AppState.get("roomListCache");
+  const open = AppState.get("currentRoomId");
+  if (open && rooms.some((r) => r.room_id === open)) return open;
+  const first = [...rooms].sort((a, b) => (a.name ?? a.room_id).localeCompare(b.name ?? b.room_id))[0];
+  return first?.room_id ?? null;
+}
+
+/**
+ * Point a tab at `roomId`. A name that was still the default, or the old
+ * room's, follows the room, and an icon that was still the name's initial
+ * follows the name; a name or icon the user picked is left alone.
+ */
+function shortcutPatch(viewId: string, roomId: string): Partial<Omit<RoomView, "id">> {
+  const view = getView(viewId);
+  const rooms = AppState.get("roomListCache");
+  const nameOf = (id: string | null) => {
+    const r = id ? rooms.find((x) => x.room_id === id) : undefined;
+    return r ? (r.name ?? r.room_id) : null;
+  };
+  const name = nameOf(roomId);
+  if (!view || !name) return { roomId };
+  const followLabel = view.label === NEW_TAB_LABEL || view.label === nameOf(view.roomId);
+  if (!followLabel) return { roomId };
+  const followIcon = view.icon === defaultIcon(view.label);
+  return { roomId, label: name, ...(followIcon ? { icon: defaultIcon(name) } : {}) };
+}
 
 export class TabsDialog extends DialogBase {
   private _listEl: HTMLElement;
   private _editorEl: HTMLElement;
   private _selectedId: string | null = null;
+  /** The room the editor's form was drawn for (null: a list tab's form). */
+  private _editorRoomId: string | null = null;
   private _unbind: (() => void) | null = null;
   private _upBtn: HTMLButtonElement;
   private _downBtn: HTMLButtonElement;
@@ -110,8 +150,12 @@ export class TabsDialog extends DialogBase {
     // landing mid-edit can't take the field being typed in.
     this._unbind = AppState.on("roomViews", () => {
       this._renderList();
-      if (this._selectedId && !getView(this._selectedId)) {
+      const selected = this._selectedId ? getView(this._selectedId) : undefined;
+      if (this._selectedId && !selected) {
         this._selectedId = allViews()[0]?.id ?? null;
+        this._renderEditor();
+      } else if (selected && selected.roomId !== this._editorRoomId) {
+        // Now opens a room, another room, or lists again: a different form.
         this._renderEditor();
       }
     });
@@ -211,9 +255,18 @@ export class TabsDialog extends DialogBase {
   // ── Editor ─────────────────────────────────────────────────────────────────
 
   private _renderEditor(): void {
+    // A redraw for the tab's new kind or room keeps the control that made it focused.
+    const active = document.activeElement as HTMLElement | null;
+    const refocus = active && this._editorEl.contains(active) ? active.getAttribute("aria-label") : null;
     this._editorEl.innerHTML = "";
     const view = this._selectedId ? getView(this._selectedId) : undefined;
+    this._editorRoomId = view?.roomId ?? null;
     if (!view) return;
+    this._fillEditor(view);
+    if (refocus) this._editorEl.querySelector<HTMLElement>(`[aria-label="${CSS.escape(refocus)}"]`)?.focus();
+  }
+
+  private _fillEditor(view: RoomView): void {
     const id = view.id;
     const save = (patch: Partial<Omit<RoomView, "id">>) => void updateView(id, patch);
 
@@ -252,6 +305,65 @@ export class TabsDialog extends DialogBase {
         this._labelled("desktop", this.makeCheckbox("open the DM canvas instead of a list", view.canvas, (canvas) => save({ canvas }))),
       );
     }
+
+    // A tab of your own can open one room or DM instead of listing.
+    if (!isBuiltinView(id)) {
+      // The editor redraws itself for the new kind (see `show`).
+      const opens = this.makeSelectRow("opens", view.roomId ? "room" : "list", OPENS_OPTIONS, (v) => {
+        if (v === "list") {
+          void updateView(id, { roomId: null });
+          return;
+        }
+        const target = defaultShortcutRoom();
+        if (target) void updateView(id, shortcutPatch(id, target));
+        else this._renderEditor(); // no room to open: stay a list
+      });
+      opens.querySelector("select")?.setAttribute("aria-label", "Tab opens");
+      this._editorEl.appendChild(opens);
+    }
+
+    if (isShortcut(view)) this._renderShortcutRows(view);
+    else this._renderListRows(view);
+
+    const actions = document.createElement("div");
+    actions.className = "settings-dialog__actions tabs-dialog__actions";
+    if (isBuiltinView(id)) {
+      actions.appendChild(this._button("[reset]", "Reset to how it ships", () => {
+        void resetView(id).then(() => this._renderEditor());
+      }));
+    } else {
+      const del = this._button("[delete]", "Delete this tab", () => this._onDelete?.(id));
+      del.classList.add("settings-dialog__btn--danger");
+      actions.appendChild(del);
+    }
+    this._editorEl.appendChild(actions);
+    this._syncMoveButtons();
+  }
+
+  /** A shortcut tab's rows: which room it opens, and whether the strip shows its picture. */
+  private _renderShortcutRows(view: RoomView & { roomId: string }): void {
+    const id = view.id;
+    const rooms = [...AppState.get("roomListCache")].sort((a, b) =>
+      (a.name ?? a.room_id).localeCompare(b.name ?? b.room_id));
+    const options: [string, string][] = rooms.map((r) => [r.room_id, `${r.name ?? r.room_id}${r.is_direct ? " · DM" : ""}`]);
+    if (!rooms.some((r) => r.room_id === view.roomId)) options.unshift([view.roomId, "(a room you're not in)"]);
+    const roomRow = this.makeSelectRow("room", view.roomId, options, (roomId) => {
+      void updateView(id, shortcutPatch(id, roomId));
+    });
+    roomRow.querySelector("select")?.setAttribute("aria-label", "Room this tab opens");
+    this._editorEl.appendChild(roomRow);
+
+    const isDm = rooms.find((r) => r.room_id === view.roomId)?.is_direct ?? false;
+    const label = isDm ? "show their profile picture on the strip" : "show the room's avatar on the strip";
+    this._editorEl.appendChild(
+      this._labelled("picture", this.makeCheckbox(label, view.avatar, (avatar) => void updateView(id, { avatar }))),
+    );
+  }
+
+  /** A list tab's rows: what it keeps, and how it groups and sorts it. */
+  private _renderListRows(view: RoomView): void {
+    const id = view.id;
+    const save = (patch: Partial<Omit<RoomView, "id">>) => void updateView(id, patch);
 
     // What it lists.
     this._editorEl.appendChild(this._labelled("shows", this.makeCheckbox("direct messages", view.dms, (dms) => save({ dms }))));
@@ -301,20 +413,6 @@ export class TabsDialog extends DialogBase {
     this._editorEl.appendChild(
       this.makeSelectRow("sort", view.sort, SORT_OPTIONS, (v) => save({ sort: v as ViewSort })),
     );
-
-    const actions = document.createElement("div");
-    actions.className = "settings-dialog__actions tabs-dialog__actions";
-    if (isBuiltinView(id)) {
-      actions.appendChild(this._button("[reset]", "Reset to how it ships", () => {
-        void resetView(id).then(() => this._renderEditor());
-      }));
-    } else {
-      const del = this._button("[delete]", "Delete this tab", () => this._onDelete?.(id));
-      del.classList.add("settings-dialog__btn--danger");
-      actions.appendChild(del);
-    }
-    this._editorEl.appendChild(actions);
-    this._syncMoveButtons();
   }
 
   private _onDelete: ((viewId: string) => void) | null = null;

@@ -38,6 +38,11 @@ export class SpaceStrip {
    * render path restores what has already been downloaded.
    */
   private _resolvedAvatars = new Map<string, string>();
+  /**
+   * Resolved avatars of the rooms shortcut tabs open, keyed by room ID (not
+   * tab ID), so re-pointing a tab at another room can't show the old picture.
+   */
+  private _roomAvatars = new Map<string, string>();
   /** Unread/mention state per space ID (#148); absent = nothing to show. */
   private _badges = new Map<string, SpaceBadge>();
   private _activeId: string | null = null;
@@ -101,7 +106,26 @@ export class SpaceStrip {
   /** Replace the tabs drawn above and below the spaces. */
   setViews(views: RoomView[]): void {
     this._views = views;
+    const used = new Set(views.map((v) => v.roomId));
+    for (const id of this._roomAvatars.keys()) {
+      if (!used.has(id)) this._roomAvatars.delete(id);
+    }
     this._render();
+  }
+
+  /** Whether the avatar of a room a shortcut tab opens is already drawn. */
+  hasRoomAvatar(roomId: string): boolean {
+    return this._roomAvatars.has(roomId);
+  }
+
+  /** Draw a room's avatar on every shortcut tab that opens it and wants it. */
+  setRoomAvatar(roomId: string, dataUrl: string): void {
+    this._roomAvatars.set(roomId, dataUrl);
+    for (const v of this._views) {
+      if (v.roomId !== roomId || !v.avatar) continue;
+      const item = this._el.querySelector<HTMLElement>(`[data-space-id="${CSS.escape(v.id)}"]`);
+      if (item) this._setItemImage(item, dataUrl);
+    }
   }
 
   setSpaces(items: SpaceItem[]): void {
@@ -186,7 +210,11 @@ export class SpaceStrip {
     this._resolvedAvatars.set(spaceId, dataUrl);
 
     const item = this._el.querySelector<HTMLElement>(`[data-space-id="${CSS.escape(spaceId)}"]`);
-    if (!item) return;
+    if (item) this._setItemImage(item, dataUrl);
+  }
+
+  /** Put an image on an item, in place of its letter or an older image. */
+  private _setItemImage(item: HTMLElement, dataUrl: string): void {
     const existing = item.querySelector("img");
     if (existing) {
       existing.src = dataUrl;
@@ -230,7 +258,7 @@ export class SpaceStrip {
     this._el.innerHTML = "";
 
     for (const v of this._views.filter((v) => v.position === "top")) {
-      this._el.appendChild(this._createItem({ id: v.id, name: v.label }, v.icon));
+      this._el.appendChild(this._createViewItem(v));
     }
 
     // The spaces, and the `+` that makes a new one, as one group between rules.
@@ -242,13 +270,21 @@ export class SpaceStrip {
     this._el.appendChild(this._createDivider());
 
     for (const v of this._views.filter((v) => v.position === "bottom")) {
-      this._el.appendChild(this._createItem({ id: v.id, name: v.label }, v.icon));
+      this._el.appendChild(this._createViewItem(v));
     }
 
     // Profile, settings and search used to be stacked here, at the foot of the
     // strip; they are in the status line now (StatusBar.ts).
 
     this._updateActive();
+  }
+
+  /** A tab's item: its icon, or for a shortcut tab the room's avatar once known. */
+  private _createViewItem(v: RoomView): HTMLElement {
+    const avatarUrl = v.roomId && v.avatar ? this._roomAvatars.get(v.roomId) : undefined;
+    const el = this._createItem({ id: v.id, name: v.label, ...(avatarUrl ? { avatarUrl } : {}) }, v.icon);
+    if (v.roomId) el.classList.add("space-strip__item--room");
+    return el;
   }
 
   private _createItem(item: SpaceItem, overrideLabel?: string): HTMLElement {

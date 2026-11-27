@@ -74,7 +74,7 @@ import {
   roomTags,
   knownTags,
 } from "./actions.js";
-import { bindRoomListHeader, currentTabId, resetTab, tabSortMenu, withCurrentTab } from "./actions/views.js";
+import { bindRoomListHeader, currentTabId, pinRoomTab, resetTab, tabSortMenu, withCurrentTab } from "./actions/views.js";
 import { canMoveView, defaultViewId, getView, moveView } from "./view_store.js";
 import { FAVOURITE_TAG, isBuiltinView } from "./room_views.js";
 import { AppState } from "./state.js";
@@ -1297,6 +1297,7 @@ export function setupKeyboard(components: AppComponents): void {
       "unfavourite-room": roomTags(roomId).includes(FAVOURITE_TAG)
         ? () => void setTag(roomId, FAVOURITE_TAG, false)
         : undefined,
+      "pin-room-tab": () => void pinRoomTab(roomId),
     }));
   });
 

@@ -12,6 +12,7 @@ import {
   isBuiltinView,
   matchesView,
   mergeManualOrder,
+  newShortcutView,
   newView,
   normalizeTag,
   parseGroupBy,
@@ -32,11 +33,12 @@ import {
   viewContext,
   visibleViews,
 } from "../view_store.js";
-import { setRoomTag } from "../../ipc/index.js";
+import { downloadMedia, getRoomMembers, setRoomTag } from "../../ipc/index.js";
+import type { RoomInfo } from "../../ipc/types.js";
 import { showError, showSuccess, showToast } from "../../ui/NotificationToast.js";
 import { askConfirm } from "../../ui/ConfirmDialog.js";
 import type { ContextMenuEntry } from "../../ui/ContextMenu.js";
-import { getComponents } from "./context.js";
+import { _dmUserByRoom, _mediaToBlobUrl, getComponents } from "./context.js";
 import { rerenderViewList, selectSpace } from "./rooms.js";
 
 /**
@@ -50,8 +52,14 @@ export function bindRoomViews(): () => void {
   void prepareViews();
   const { spaceStrip } = getComponents();
   spaceStrip.setViews(visibleViews());
-  return AppState.on("roomViews", () => {
+  resolveShortcutAvatars();
+  // Which room each shortcut tab opened before this change.
+  let shortcutRooms = new Map(allViews().map((v) => [v.id, v.roomId]));
+  const offViews = AppState.on("roomViews", () => {
     spaceStrip.setViews(visibleViews());
+    resolveShortcutAvatars();
+    const before = shortcutRooms;
+    shortcutRooms = new Map(allViews().map((v) => [v.id, v.roomId]));
     const id = AppState.get("currentSpaceId");
     const view = id ? getView(id) : undefined;
     if (!id || !view) {
@@ -69,8 +77,98 @@ export function bindRoomViews(): () => void {
       void selectSpace(id, { skipRoomRestore: true });
       return;
     }
+    // The tab being viewed now opens another room: go there.
+    if (view.roomId && view.roomId !== before.get(id)) {
+      void selectSpace(id);
+      return;
+    }
     rerenderViewList();
   });
+  // A room's avatar can arrive (or change) with any refresh.
+  const offRooms = AppState.on("roomListCache", resolveShortcutAvatars);
+  return () => {
+    offViews();
+    offRooms();
+  };
+}
+
+// ── Shortcut tabs ────────────────────────────────────────────────────────────
+
+/**
+ * Put a room (or DM) on the strip as its own tab, which opens it. A room that
+ * already has one gets that tab shown again rather than a second.
+ */
+export async function pinRoomTab(roomId: string): Promise<void> {
+  const room = AppState.get("roomListCache").find((r) => r.room_id === roomId);
+  if (!room) {
+    showError("That room isn't in your room list");
+    return;
+  }
+  const existing = allViews().find((v) => v.roomId === roomId);
+  if (existing) {
+    if (existing.hidden) await setViewHidden(existing.id, false);
+    showSuccess(`${existing.label} is already a tab`);
+    return;
+  }
+  const view = newShortcutView(room, allViews().map((v) => v.id));
+  await addView(view);
+  if (getView(view.id)) showSuccess(`Added ${view.label} to the strip`);
+}
+
+/**
+ * The avatar a shortcut tab draws for its room: a DM's other person's profile
+ * picture, falling back to the room's own avatar, and a room's avatar.
+ */
+async function shortcutAvatarMxc(room: RoomInfo): Promise<string | null> {
+  if (!room.is_direct) return room.avatar_url;
+  const members = await getRoomMembers(room.room_id);
+  const ownUserId = AppState.get("ownUserId");
+  const known = _dmUserByRoom.get(room.room_id);
+  const partner = members.find((m) => m.user_id === known)
+    ?? members.find((m) => m.user_id !== ownUserId);
+  return partner?.avatar_url ?? room.avatar_url;
+}
+
+/**
+ * The last avatar lookup per room, keyed by the room's `avatar_url` at the
+ * time. Without it a DM with no picture would be looked up again on every
+ * room-list write (one per incoming message); with it, only once its avatar
+ * changes, or once the strip has dropped a picture it found (the tab was
+ * deleted and the room pinned again).
+ */
+const _shortcutAvatarLookups = new Map<string, { avatarUrl: string | null; state: "pending" | "none" | "found" }>();
+
+/** Fetch the avatar of each shown shortcut tab's room that isn't drawn yet. */
+function resolveShortcutAvatars(): void {
+  const { spaceStrip } = getComponents();
+  const rooms = new Map(AppState.get("roomListCache").map((r) => [r.room_id, r]));
+  for (const v of visibleViews()) {
+    const room = v.roomId && v.avatar ? rooms.get(v.roomId) : undefined;
+    if (!room) continue;
+    const roomId = room.room_id;
+    const last = _shortcutAvatarLookups.get(roomId);
+    if (last && last.avatarUrl === room.avatar_url && (last.state !== "found" || spaceStrip.hasRoomAvatar(roomId))) {
+      continue;
+    }
+    const lookup = { avatarUrl: room.avatar_url, state: "pending" as "pending" | "none" | "found" };
+    _shortcutAvatarLookups.set(roomId, lookup);
+    void shortcutAvatarMxc(room)
+      .then(async (mxc) => {
+        if (!mxc) {
+          lookup.state = "none";
+          return;
+        }
+        const dl = await downloadMedia(mxc);
+        lookup.state = "found";
+        spaceStrip.setRoomAvatar(roomId, _mediaToBlobUrl(dl.mime_type, dl.data_base64));
+      })
+      .catch((err) => {
+        // Non-fatal: the tab keeps its icon. Forget the lookup so a later
+        // refresh tries again.
+        if (_shortcutAvatarLookups.get(roomId) === lookup) _shortcutAvatarLookups.delete(roomId);
+        console.warn(`Failed to resolve the avatar for tab room ${roomId}:`, err);
+      });
+  }
 }
 
 // ── The room list header ─────────────────────────────────────────────────────
@@ -93,7 +191,8 @@ export function bindRoomListHeader(): () => void {
     const id = AppState.get("currentSpaceId") ?? defaultViewId();
     const view = getView(id);
     roomList.setTitle(view ? view.label : spaceTitle(id));
-    roomList.setSortLabel(view ? SORT_SHORT[view.sort] : null);
+    // A shortcut tab's one room has nothing to sort.
+    roomList.setSortLabel(view && !view.roomId ? SORT_SHORT[view.sort] : null);
   };
   update();
   const unbind = [

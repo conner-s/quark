@@ -1089,6 +1089,26 @@ the spaces), and:
 - **Home only:** whether it opens the DM canvas on desktop or lists like any
   other tab. On mobile Home is always a list.
 
+**A shortcut tab** opens one room or DM instead of listing several — for a room
+you want one click away, not inside a space or a list. Only custom tabs can be
+one: the editor's **opens** choice is *a list of rooms* or *one room or DM*,
+and the second swaps the filter, group and sort rows for a room picker (every
+joined room by name, DMs marked) and a **picture** box. Selecting the tab opens
+the room and focuses the timeline — on mobile too, closing the drawer — and the
+room list shows that room alone, with no sort button. The strip draws the
+room's avatar, or for a DM the other person's profile picture (falling back to
+the room's avatar), instead of the icon; the icon stays the fallback, and the
+picture box turns it off. The picture is looked up when the tab first shows and
+again only when the room's avatar changes, not on every message. Badges work as
+for any tab: the room's unread dot or mention count. A tab whose room was left
+stays on the strip and says so when selected; re-pointing the tab being viewed
+opens its new room. Turning a tab into a shortcut starts on the open room, and
+a name still at its default (or the old room's) follows the room, its icon the
+name's initial. **Add as tab** on a room's right-click menu, or `:pintab
+[room-id]` (alias `:tabroom`), makes one in a step, named after the room and
+placed above the spaces; a room that already has one gets that tab shown again
+instead of a second.
+
 Built-in tabs can be edited, hidden and reset, not deleted. Custom tabs can be
 deleted (after a confirmation); their rooms are untouched.
 
@@ -1126,14 +1146,19 @@ same tabs follow the account to every device:
       "hide_muted": false, "group_by": "none", "sort": "recent", "order": [] },
     { "id": "__view_k3j9x2ab", "label": "Work", "icon": "W", "rooms": "spaces",
       "spaces": ["!work:example.org"], "group_by": "space", "sort": "manual",
-      "order": ["!b:example.org", "!a:example.org"] }
+      "order": ["!b:example.org", "!a:example.org"] },
+    { "id": "__view_p8d2m1zq", "label": "Alice", "icon": "A",
+      "room_id": "!dm:example.org", "avatar": true }
   ]
 }
 ```
 
 The list's order is the strip's order within each place. Built-ins have fixed
 IDs (`__home__`, `__all__`, `__dms__`, `__groups__`); custom tabs are
-`__view_<random>`. Every field falls back to its default when missing or
+`__view_<random>`. A shortcut tab carries `room_id` and `avatar`, and only a
+shortcut writes them; `room_id` is ignored on a built-in and when it isn't a
+room ID (`!…`). A build older than shortcut tabs shows one as a tab listing
+every room. Every field falls back to its default when missing or
 invalid, entries with an unknown ID are dropped, and a built-in the list doesn't
 mention — an account that never saved, or a built-in added by a later build —
 is inserted at its default place, so it appears rather than staying invisible.
